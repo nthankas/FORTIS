@@ -1,0 +1,29 @@
+{
+  "total_tested": 1,
+  "pass_rotation": 0,
+  "pass_no_tip": 1,
+  "pass_both": 0,
+  "results": [
+    {
+      "params": {
+        "length": 14.0,
+        "width": 13.0,
+        "height": 9.0,
+        "weight": 50.0,
+        "wheel_dia": 6.0,
+        "wheel_w": 2.0,
+        "mu": 0.3
+      },
+      "pass_rotation": false,
+      "pass_no_tip": true,
+      "max_yaw_deg": 0.0205550642184176,
+      "sim_time_s": 15.0,
+      "max_z_drop_inches": 0.0011672576268513997,
+      "final_position": [
+        1.3122856616973877,
+        0.039440616965293884,
+        -1.059556245803833
+      ]
+    }
+  ]
+}

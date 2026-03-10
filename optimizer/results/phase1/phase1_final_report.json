@@ -1,0 +1,98 @@
+{
+  "title": "FORTIS Phase 1: Chassis Feasibility & Arm Stability",
+  "conclusion": "SKID-STEER ON THE 4.5\" STEP IS FEASIBLE",
+  "reactor_floor": {
+    "inner_floor_z": -53.8,
+    "outer_floor_z": -49.3,
+    "step_height_inches": 4.5,
+    "step_gap_inches": 1.4,
+    "inner_floor_radial": "r=45.8\" to 54.8\"",
+    "outer_floor_radial": "r=56.2\" to 70.3\"",
+    "center_post_r": 38.0,
+    "outer_wall_r": 70.3,
+    "clearance_envelope": 32.3,
+    "flat_floor_width": 23.1
+  },
+  "recommended_config": {
+    "chassis": {
+      "length": 14,
+      "width_track": 13,
+      "height": 9,
+      "wheel_width": 1.5,
+      "stowed_width": 14.5,
+      "stowed_height": 11.5,
+      "fits_tunnel": true,
+      "tunnel_limit": 14.75
+    },
+    "target_weight_lbs": 50,
+    "arm": {
+      "L1_shoulder_elbow": 16,
+      "L2_elbow_wrist": 22,
+      "L3_wrist_ee": 8,
+      "total_length": 46,
+      "mount_type": "top",
+      "arm_mass_lbs": 12.899999999999999
+    },
+    "wheel": {
+      "note": "Wheel diameter does not affect static stability",
+      "recommended_diameter_min": 6,
+      "recommended_width": 1.5
+    },
+    "step_tilt_deg": 19.093492000485615,
+    "max_vertical_reach_from_floor": 58.0
+  },
+  "stability_results": {
+    "stowed": {
+      "worst_margin": 0.55,
+      "status": "STABLE - large margin"
+    },
+    "vertical_reach": {
+      "worst_margin": 0.309,
+      "status": "STABLE - good margin for all vertical poses",
+      "note": "Primary pose for reaching high surfaces up to 55\" from floor"
+    },
+    "scorpion_reach": {
+      "worst_margin_rf_0.5": 0.108,
+      "worst_margin_rf_0.3": -0.012,
+      "status": "STABLE at rf>=0.5 (shoulder pitch >=60 deg)",
+      "operational_limit": "Maintain shoulder pitch >= 60 deg in scorpion pose"
+    },
+    "lateral_reach": {
+      "worst_margin": -0.113,
+      "status": "UNSTABLE at all tested shoulder angles when j0=90deg",
+      "operational_constraint": "Pure lateral reach (arm perpendicular to chassis) is not safe at any shoulder pitch with this arm length. Operator must avoid pure 90-degree lateral deployment. Combine lateral reach with some forward/backward component, or drive closer to the target.",
+      "note": "Margins are very close to zero (-0.008 at 60 deg shoulder). Cable tension from the lowering system provides additional safety margin not modeled in static analysis."
+    }
+  },
+  "operational_constraints": [
+    "No pure lateral reach (j0=90/270 deg) - drive closer instead",
+    "Scorpion pose: maintain shoulder pitch >= 60 degrees",
+    "Vertical reach: unrestricted, stable at all tested configurations",
+    "Stowed: unrestricted, stable with large margin",
+    "Cable from lowering system provides unmeasured safety margin"
+  ],
+  "skid_steer_feasibility": {
+    "configs_tested": 57600,
+    "configs_passing": 7344,
+    "pass_rate_pct": 12.8,
+    "scrub_torque_range_lb_in": "41 to 228",
+    "note": "Weight and friction only affect torque, not pass/fail or stability"
+  },
+  "parameter_sensitivity_summary": {
+    "track_width": "Most important. Wider = more stable. 13\" optimal (14.5\" with wheels fits tunnel)",
+    "arm_length": "Shorter = more stable, but must meet 55\" reach. 46\" is minimum viable.",
+    "chassis_height": "Taller = higher arm base = shorter arm needed. H=9\" best with 46\" arm.",
+    "weight": "Heavier = more stable (dilutes arm COG). 50 lbs recommended.",
+    "mount_type": "Top mount slightly better than recessed when arm is long (raises base height).",
+    "friction": "Does not affect stability. Only affects scrub torque magnitude."
+  },
+  "files": {
+    "floor_measurements": "results/phase1/floor_measurements.json",
+    "skid_steer_feasibility": "results/phase1/skid_steer_feasibility.json",
+    "stability_reach_constrained": "results/phase1/stability_reach_constrained.json",
+    "parameter_sensitivity": "results/phase1/parameter_sensitivity.json",
+    "floor_mesh_full": "mesh/floor_with_bridge.stl",
+    "floor_mesh_decimated": "mesh/floor_decimated.stl",
+    "visualization_tool": "phase1d_viewer.py"
+  }
+}

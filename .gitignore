@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.venv/
+
+# Large binary files (keep in local Optimizer/ directory, not in git)
+*.stl
+*.obj
+*.fbx
+
+# Build artifacts
+*.egg-info/
+dist/
+build/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+
+# Temporary simulation output
+*.tmp
+*.bak
+build_output.txt
+test_output.txt
