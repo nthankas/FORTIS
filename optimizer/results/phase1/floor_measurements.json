@@ -1,0 +1,47 @@
+{
+  "units": "inches",
+  "coordinate_system": "Z=up, XY=horizontal, torus centered at origin",
+  "inner_floor": {
+    "z_level": -53.8,
+    "r_min": 45.8,
+    "r_max": 54.8,
+    "width_radial": 9.0,
+    "position": "closer to center post (inner)"
+  },
+  "outer_floor": {
+    "z_level": -49.3,
+    "r_min": 56.2,
+    "r_max": 70.3,
+    "width_radial": 14.099999999999994,
+    "position": "closer to outer wall"
+  },
+  "step": {
+    "height": 4.5,
+    "gap_radial": 1.4000000000000057,
+    "bridged": true,
+    "step_r_center": 55.5,
+    "note": "4.5in vertical drop, 1.4in horizontal gap, bridged with ramp"
+  },
+  "center_post": {
+    "inner_wall_r": 38.0,
+    "note": "Vertical/curved wall, collision boundary"
+  },
+  "outer_wall": {
+    "start_r": 70.3,
+    "slope_approx_deg": 45,
+    "note": "Angled wall sloping upward, collision boundary"
+  },
+  "total_flat_floor_width": 23.099999999999994,
+  "clearance_envelope": {
+    "inner_boundary_r": 38.0,
+    "outer_boundary_r": 70.3,
+    "total_radial_clearance": 32.3,
+    "note": "Robot must not collide with walls during rotation"
+  },
+  "mesh_files": {
+    "floor_with_bridge": "mesh/floor_with_bridge.stl",
+    "floor_decimated": "mesh/floor_decimated.stl",
+    "floor_surface_only": "mesh/floor_surface_only.stl",
+    "bridge_only": "mesh/bridge_only.stl"
+  }
+}
