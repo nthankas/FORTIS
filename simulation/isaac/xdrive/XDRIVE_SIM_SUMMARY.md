@@ -49,4 +49,4 @@ E:\FORTIS\IsaacSim\python.bat <script.py> --headless
 
 ## Reactor Environment
 
-`D-IIIDTokamak_sim.usd` -- triangle mesh collision applied via Physics API Editor in the Isaac Sim GUI. Do not regenerate this file programmatically.
+`diiid_reactor.usd` -- triangle mesh collision applied via Physics API Editor in the Isaac Sim GUI. Do not regenerate this file programmatically.
