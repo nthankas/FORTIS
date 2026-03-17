@@ -8,7 +8,7 @@ import numpy as np
 os.environ["PYTHONIOENCODING"] = "utf-8"
 
 XDRIVE_DIR = os.path.dirname(os.path.abspath(__file__))
-REACTOR_USD = os.path.join(XDRIVE_DIR, "D-IIIDTokamak_fresh.usd")
+REACTOR_USD = os.path.join(XDRIVE_DIR, "diiid_reactor.usd")
 
 from isaacsim import SimulationApp
 app = SimulationApp({"headless": True, "width": 1280, "height": 720})
