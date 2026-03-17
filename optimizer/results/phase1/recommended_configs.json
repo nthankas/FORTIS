@@ -1,0 +1,1106 @@
+{
+  "reach_constraint": "arm must reach 55.0\" from inner floor",
+  "total_passing_with_reach": 0,
+  "top_50_by_tipping_margin": [
+    {
+      "worst_margin": -0.11264444149631678,
+      "worst_pose": "lateral_j0=90_rf=0.3",
+      "worst_chassis_yaw": 90,
+      "chassis": {
+        "length": 14,
+        "width": 13,
+        "height": 9,
+        "weight": 50,
+        "mu": 0.3
+      },
+      "arm": {
+        "L1": 16,
+        "L2": 22,
+        "L3": 8,
+        "mount_type": "top",
+        "total_length": 46,
+        "total_mass": 12.899999999999999
+      },
+      "max_reach": 58.0,
+      "base_height": 12.0
+    },
+    {
+      "worst_margin": -0.11622537251385814,
+      "worst_pose": "lateral_j0=90_rf=0.3",
+      "worst_chassis_yaw": 90,
+      "chassis": {
+        "length": 14,
+        "width": 13,
+        "height": 7,
+        "weight": 50,
+        "mu": 0.3
+      },
+      "arm": {
+        "L1": 18,
+        "L2": 22,
+        "L3": 8,
+        "mount_type": "top",
+        "total_length": 48,
+        "total_mass": 13.2
+      },
+      "max_reach": 58.0,
+      "base_height": 10.0
+    },
+    {
+      "worst_margin": -0.11622537251385814,
+      "worst_pose": "lateral_j0=90_rf=0.3",
+      "worst_chassis_yaw": 90,
+      "chassis": {
+        "length": 14,
+        "width": 13,
+        "height": 7,
+        "weight": 50,
+        "mu": 0.5
+      },
+      "arm": {
+        "L1": 18,
+        "L2": 22,
+        "L3": 8,
+        "mount_type": "top",
+        "total_length": 48,
+        "total_mass": 13.2
+      },
+      "max_reach": 58.0,
+      "base_height": 10.0
+    },
+    {
+      "worst_margin": -0.1188322127602117,
+      "worst_pose": "lateral_j0=90_rf=0.3",
+      "worst_chassis_yaw": 90,
+      "chassis": {
+        "length": 14,
+        "width": 13,
+        "height": 9,
+        "weight": 50,
+        "mu": 0.3
+      },
+      "arm": {
+        "L1": 18,
+        "L2": 20,
+        "L3": 8,
+        "mount_type": "top",
+        "total_length": 46,
+        "total_mass": 12.899999999999999
+      },
+      "max_reach": 58.0,
+      "base_height": 12.0
+    },
+    {
+      "worst_margin": -0.1210171824462739,
+      "worst_pose": "lateral_j0=90_rf=0.3",
+      "worst_chassis_yaw": 90,
+      "chassis": {
+        "length": 14,
+        "width": 13,
+        "height": 5,
+        "weight": 50,
+        "mu": 0.3
+      },
+      "arm": {
+        "L1": 20,
+        "L2": 22,
+        "L3": 8,
+        "mount_type": "top",
+        "total_length": 50,
+        "total_mass": 13.5
+      },
+      "max_reach": 58.0,
+      "base_height": 8.0
+    },
+    {
+      "worst_margin": -0.12241314377775307,
+      "worst_pose": "lateral_j0=90_rf=0.3",
+      "worst_chassis_yaw": 90,
+      "chassis": {
+        "length": 14,
+        "width": 13,
+        "height": 7,
+        "weight": 50,
+        "mu": 0.3
+      },
+      "arm": {
+        "L1": 20,
+        "L2": 20,
+        "L3": 8,
+        "mount_type": "top",
+        "total_length": 48,
+        "total_mass": 13.2
+      },
+      "max_reach": 58.0,
+      "base_height": 10.0
+    },
+    {
+      "worst_margin": -0.12241314377775307,
+      "worst_pose": "lateral_j0=90_rf=0.3",
+      "worst_chassis_yaw": 90,
+      "chassis": {
+        "length": 14,
+        "width": 13,
+        "height": 7,
+        "weight": 50,
+        "mu": 0.5
+      },
+      "arm": {
+        "L1": 20,
+        "L2": 20,
+        "L3": 8,
+        "mount_type": "top",
+        "total_length": 48,
+        "total_mass": 13.2
+      },
+      "max_reach": 58.0,
+      "base_height": 10.0
+    },
+    {
+      "worst_margin": -0.12508242914478165,
+      "worst_pose": "lateral_j0=90_rf=0.3",
+      "worst_chassis_yaw": 90,
+      "chassis": {
+        "length": 14,
+        "width": 13,
+        "height": 9,
+        "weight": 50,
+        "mu": 0.3
+      },
+      "arm": {
+        "L1": 20,
+        "L2": 18,
+        "L3": 8,
+        "mount_type": "top",
+        "total_length": 46,
+        "total_mass": 12.899999999999999
+      },
+      "max_reach": 58.0,
+      "base_height": 12.0
+    },
+    {
+      "worst_margin": -0.12591082022334632,
+      "worst_pose": "lateral_j0=90_rf=0.3",
+      "worst_chassis_yaw": 90,
+      "chassis": {
+        "length": 12,
+        "width": 13,
+        "height": 7,
+        "weight": 50,
+        "mu": 0.3
+      },
+      "arm": {
+        "L1": 18,
+        "L2": 22,
+        "L3": 8,
+        "mount_type": "top",
+        "total_length": 48,
+        "total_mass": 13.2
+      },
+      "max_reach": 58.0,
+      "base_height": 10.0
+    },
+    {
+      "worst_margin": -0.12649308149011063,
+      "worst_pose": "lateral_j0=90_rf=0.3",
+      "worst_chassis_yaw": 90,
+      "chassis": {
+        "length": 14,
+        "width": 13,
+        "height": 9,
+        "weight": 50,
+        "mu": 0.3
+      },
+      "arm": {
+        "L1": 18,
+        "L2": 22,
+        "L3": 6,
+        "mount_type": "top",
+        "total_length": 46,
+        "total_mass": 12.899999999999999
+      },
+      "max_reach": 58.0,
+      "base_height": 12.0
+    },
+    {
+      "worst_margin": -0.12709550817520976,
+      "worst_pose": "lateral_j0=90_rf=0.3",
+      "worst_chassis_yaw": 90,
+      "chassis": {
+        "length": 14,
+        "width": 13,
+        "height": 8,
+        "weight": 50,
+        "mu": 0.3
+      },
+      "arm": {
+        "L1": 18,
+        "L2": 22,
+        "L3": 8,
+        "mount_type": "recessed",
+        "total_length": 48,
+        "total_mass": 13.2
+      },
+      "max_reach": 57.5,
+      "base_height": 9.5
+    },
+    {
+      "worst_margin": -0.12720495371016993,
+      "worst_pose": "lateral_j0=90_rf=0.3",
+      "worst_chassis_yaw": 90,
+      "chassis": {
+        "length": 14,
+        "width": 13,
+        "height": 5,
+        "weight": 50,
+        "mu": 0.3
+      },
+      "arm": {
+        "L1": 22,
+        "L2": 20,
+        "L3": 8,
+        "mount_type": "top",
+        "total_length": 50,
+        "total_mass": 13.5
+      },
+      "max_reach": 58.0,
+      "base_height": 8.0
+    },
+    {
+      "worst_margin": -0.1286633601623252,
+      "worst_pose": "lateral_j0=90_rf=0.3",
+      "worst_chassis_yaw": 90,
+      "chassis": {
+        "length": 14,
+        "width": 13,
+        "height": 7,
+        "weight": 50,
+        "mu": 0.3
+      },
+      "arm": {
+        "L1": 22,
+        "L2": 18,
+        "L3": 8,
+        "mount_type": "top",
+        "total_length": 48,
+        "total_mass": 13.2
+      },
+      "max_reach": 58.0,
+      "base_height": 10.0
+    },
+    {
+      "worst_margin": -0.1286633601623252,
+      "worst_pose": "lateral_j0=90_rf=0.3",
+      "worst_chassis_yaw": 90,
+      "chassis": {
+        "length": 14,
+        "width": 13,
+        "height": 7,
+        "weight": 50,
+        "mu": 0.5
+      },
+      "arm": {
+        "L1": 22,
+        "L2": 18,
+        "L3": 8,
+        "mount_type": "top",
+        "total_length": 48,
+        "total_mass": 13.2
+      },
+      "max_reach": 58.0,
+      "base_height": 10.0
+    },
+    {
+      "worst_margin": -0.130074012507652,
+      "worst_pose": "lateral_j0=90_rf=0.3",
+      "worst_chassis_yaw": 90,
+      "chassis": {
+        "length": 14,
+        "width": 13,
+        "height": 7,
+        "weight": 50,
+        "mu": 0.3
+      },
+      "arm": {
+        "L1": 20,
+        "L2": 22,
+        "L3": 6,
+        "mount_type": "top",
+        "total_length": 48,
+        "total_mass": 13.2
+      },
+      "max_reach": 58.0,
+      "base_height": 10.0
+    },
+    {
+      "worst_margin": -0.130074012507652,
+      "worst_pose": "lateral_j0=90_rf=0.3",
+      "worst_chassis_yaw": 90,
+      "chassis": {
+        "length": 14,
+        "width": 13,
+        "height": 7,
+        "weight": 50,
+        "mu": 0.5
+      },
+      "arm": {
+        "L1": 20,
+        "L2": 22,
+        "L3": 6,
+        "mount_type": "top",
+        "total_length": 48,
+        "total_mass": 13.2
+      },
+      "max_reach": 58.0,
+      "base_height": 10.0
+    },
+    {
+      "worst_margin": -0.13139509065003097,
+      "worst_pose": "lateral_j0=90_rf=0.3",
+      "worst_chassis_yaw": 90,
+      "chassis": {
+        "length": 14,
+        "width": 13,
+        "height": 9,
+        "weight": 50,
+        "mu": 0.3
+      },
+      "arm": {
+        "L1": 22,
+        "L2": 16,
+        "L3": 8,
+        "mount_type": "top",
+        "total_length": 46,
+        "total_mass": 12.899999999999999
+      },
+      "max_reach": 58.0,
+      "base_height": 12.0
+    },
+    {
+      "worst_margin": -0.13158536989480313,
+      "worst_pose": "lateral_j0=90_rf=0.3",
+      "worst_chassis_yaw": 90,
+      "chassis": {
+        "length": 14,
+        "width": 13,
+        "height": 6,
+        "weight": 50,
+        "mu": 0.3
+      },
+      "arm": {
+        "L1": 20,
+        "L2": 22,
+        "L3": 8,
+        "mount_type": "recessed",
+        "total_length": 50,
+        "total_mass": 13.5
+      },
+      "max_reach": 57.5,
+      "base_height": 7.5
+    },
+    {
+      "worst_margin": -0.13261423909256584,
+      "worst_pose": "lateral_j0=90_rf=0.3",
+      "worst_chassis_yaw": 90,
+      "chassis": {
+        "length": 12,
+        "width": 13,
+        "height": 7,
+        "weight": 50,
+        "mu": 0.3
+      },
+      "arm": {
+        "L1": 20,
+        "L2": 20,
+        "L3": 8,
+        "mount_type": "top",
+        "total_length": 48,
+        "total_mass": 13.2
+      },
+      "max_reach": 58.0,
+      "base_height": 10.0
+    },
+    {
+      "worst_margin": -0.13274329787467948,
+      "worst_pose": "lateral_j0=90_rf=0.3",
+      "worst_chassis_yaw": 90,
+      "chassis": {
+        "length": 14,
+        "width": 13,
+        "height": 9,
+        "weight": 50,
+        "mu": 0.3
+      },
+      "arm": {
+        "L1": 20,
+        "L2": 20,
+        "L3": 6,
+        "mount_type": "top",
+        "total_length": 46,
+        "total_mass": 12.899999999999999
+      },
+      "max_reach": 58.0,
+      "base_height": 12.0
+    },
+    {
+      "worst_margin": -0.13328327943910467,
+      "worst_pose": "lateral_j0=90_rf=0.3",
+      "worst_chassis_yaw": 90,
+      "chassis": {
+        "length": 14,
+        "width": 13,
+        "height": 8,
+        "weight": 50,
+        "mu": 0.3
+      },
+      "arm": {
+        "L1": 20,
+        "L2": 20,
+        "L3": 8,
+        "mount_type": "recessed",
+        "total_length": 48,
+        "total_mass": 13.2
+      },
+      "max_reach": 57.5,
+      "base_height": 9.5
+    },
+    {
+      "worst_margin": -0.13345517009473767,
+      "worst_pose": "lateral_j0=90_rf=0.3",
+      "worst_chassis_yaw": 90,
+      "chassis": {
+        "length": 14,
+        "width": 13,
+        "height": 5,
+        "weight": 50,
+        "mu": 0.3
+      },
+      "arm": {
+        "L1": 24,
+        "L2": 18,
+        "L3": 8,
+        "mount_type": "top",
+        "total_length": 50,
+        "total_mass": 13.5
+      },
+      "max_reach": 58.0,
+      "base_height": 8.0
+    },
+    {
+      "worst_margin": -0.13486582244006776,
+      "worst_pose": "lateral_j0=90_rf=0.3",
+      "worst_chassis_yaw": 90,
+      "chassis": {
+        "length": 14,
+        "width": 13,
+        "height": 5,
+        "weight": 50,
+        "mu": 0.3
+      },
+      "arm": {
+        "L1": 22,
+        "L2": 22,
+        "L3": 6,
+        "mount_type": "top",
+        "total_length": 50,
+        "total_mass": 13.5
+      },
+      "max_reach": 58.0,
+      "base_height": 8.0
+    },
+    {
+      "worst_margin": -0.13497602166757233,
+      "worst_pose": "lateral_j0=90_rf=0.3",
+      "worst_chassis_yaw": 90,
+      "chassis": {
+        "length": 14,
+        "width": 13,
+        "height": 7,
+        "weight": 50,
+        "mu": 0.3
+      },
+      "arm": {
+        "L1": 24,
+        "L2": 16,
+        "L3": 8,
+        "mount_type": "top",
+        "total_length": 48,
+        "total_mass": 13.2
+      },
+      "max_reach": 58.0,
+      "base_height": 10.0
+    },
+    {
+      "worst_margin": -0.13497602166757233,
+      "worst_pose": "lateral_j0=90_rf=0.3",
+      "worst_chassis_yaw": 90,
+      "chassis": {
+        "length": 14,
+        "width": 13,
+        "height": 7,
+        "weight": 50,
+        "mu": 0.5
+      },
+      "arm": {
+        "L1": 24,
+        "L2": 16,
+        "L3": 8,
+        "mount_type": "top",
+        "total_length": 48,
+        "total_mass": 13.2
+      },
+      "max_reach": 58.0,
+      "base_height": 10.0
+    },
+    {
+      "worst_margin": -0.13632422889222412,
+      "worst_pose": "lateral_j0=90_rf=0.3",
+      "worst_chassis_yaw": 90,
+      "chassis": {
+        "length": 14,
+        "width": 13,
+        "height": 7,
+        "weight": 50,
+        "mu": 0.3
+      },
+      "arm": {
+        "L1": 22,
+        "L2": 20,
+        "L3": 6,
+        "mount_type": "top",
+        "total_length": 48,
+        "total_mass": 13.2
+      },
+      "max_reach": 58.0,
+      "base_height": 10.0
+    },
+    {
+      "worst_margin": -0.13632422889222412,
+      "worst_pose": "lateral_j0=90_rf=0.3",
+      "worst_chassis_yaw": 90,
+      "chassis": {
+        "length": 14,
+        "width": 13,
+        "height": 7,
+        "weight": 50,
+        "mu": 0.5
+      },
+      "arm": {
+        "L1": 22,
+        "L2": 20,
+        "L3": 6,
+        "mount_type": "top",
+        "total_length": 48,
+        "total_mass": 13.2
+      },
+      "max_reach": 58.0,
+      "base_height": 10.0
+    },
+    {
+      "worst_margin": -0.13777019727594983,
+      "worst_pose": "lateral_j0=90_rf=0.3",
+      "worst_chassis_yaw": 90,
+      "chassis": {
+        "length": 14,
+        "width": 13,
+        "height": 9,
+        "weight": 50,
+        "mu": 0.3
+      },
+      "arm": {
+        "L1": 24,
+        "L2": 14,
+        "L3": 8,
+        "mount_type": "top",
+        "total_length": 46,
+        "total_mass": 12.899999999999999
+      },
+      "max_reach": 58.0,
+      "base_height": 12.0
+    },
+    {
+      "worst_margin": -0.13777314115869915,
+      "worst_pose": "lateral_j0=90_rf=0.3",
+      "worst_chassis_yaw": 90,
+      "chassis": {
+        "length": 14,
+        "width": 13,
+        "height": 6,
+        "weight": 50,
+        "mu": 0.3
+      },
+      "arm": {
+        "L1": 22,
+        "L2": 20,
+        "L3": 8,
+        "mount_type": "recessed",
+        "total_length": 50,
+        "total_mass": 13.5
+      },
+      "max_reach": 57.5,
+      "base_height": 7.5
+    },
+    {
+      "worst_margin": -0.1390559593799266,
+      "worst_pose": "lateral_j0=90_rf=0.3",
+      "worst_chassis_yaw": 90,
+      "chassis": {
+        "length": 14,
+        "width": 13,
+        "height": 9,
+        "weight": 50,
+        "mu": 0.3
+      },
+      "arm": {
+        "L1": 22,
+        "L2": 18,
+        "L3": 6,
+        "mount_type": "top",
+        "total_length": 46,
+        "total_mass": 12.899999999999999
+      },
+      "max_reach": 58.0,
+      "base_height": 12.0
+    },
+    {
+      "worst_margin": -0.1395334958236779,
+      "worst_pose": "lateral_j0=90_rf=0.3",
+      "worst_chassis_yaw": 90,
+      "chassis": {
+        "length": 14,
+        "width": 13,
+        "height": 8,
+        "weight": 50,
+        "mu": 0.3
+      },
+      "arm": {
+        "L1": 22,
+        "L2": 18,
+        "L3": 8,
+        "mount_type": "recessed",
+        "total_length": 48,
+        "total_mass": 13.2
+      },
+      "max_reach": 57.5,
+      "base_height": 9.5
+    },
+    {
+      "worst_margin": -0.1397678315999881,
+      "worst_pose": "lateral_j0=90_rf=0.3",
+      "worst_chassis_yaw": 90,
+      "chassis": {
+        "length": 14,
+        "width": 13,
+        "height": 5,
+        "weight": 50,
+        "mu": 0.3
+      },
+      "arm": {
+        "L1": 26,
+        "L2": 16,
+        "L3": 8,
+        "mount_type": "top",
+        "total_length": 50,
+        "total_mass": 13.5
+      },
+      "max_reach": 58.0,
+      "base_height": 8.0
+    },
+    {
+      "worst_margin": -0.14042771048628294,
+      "worst_pose": "lateral_j0=90_rf=0.3",
+      "worst_chassis_yaw": 90,
+      "chassis": {
+        "length": 14,
+        "width": 13,
+        "height": 9,
+        "weight": 50,
+        "mu": 0.3
+      },
+      "arm": {
+        "L1": 20,
+        "L2": 22,
+        "L3": 4,
+        "mount_type": "top",
+        "total_length": 46,
+        "total_mass": 12.899999999999999
+      },
+      "max_reach": 58.0,
+      "base_height": 12.0
+    },
+    {
+      "worst_margin": -0.14091351354995632,
+      "worst_pose": "lateral_j0=90_rf=0.3",
+      "worst_chassis_yaw": 90,
+      "chassis": {
+        "length": 12,
+        "width": 13,
+        "height": 7,
+        "weight": 50,
+        "mu": 0.3
+      },
+      "arm": {
+        "L1": 20,
+        "L2": 22,
+        "L3": 6,
+        "mount_type": "top",
+        "total_length": 48,
+        "total_mass": 13.2
+      },
+      "max_reach": 58.0,
+      "base_height": 10.0
+    },
+    {
+      "worst_margin": -0.1409441481690036,
+      "worst_pose": "lateral_j0=90_rf=0.3",
+      "worst_chassis_yaw": 90,
+      "chassis": {
+        "length": 14,
+        "width": 13,
+        "height": 8,
+        "weight": 50,
+        "mu": 0.3
+      },
+      "arm": {
+        "L1": 20,
+        "L2": 22,
+        "L3": 6,
+        "mount_type": "recessed",
+        "total_length": 48,
+        "total_mass": 13.2
+      },
+      "max_reach": 57.5,
+      "base_height": 9.5
+    },
+    {
+      "worst_margin": -0.1411160388246366,
+      "worst_pose": "lateral_j0=90_rf=0.3",
+      "worst_chassis_yaw": 90,
+      "chassis": {
+        "length": 14,
+        "width": 13,
+        "height": 5,
+        "weight": 50,
+        "mu": 0.3
+      },
+      "arm": {
+        "L1": 24,
+        "L2": 20,
+        "L3": 6,
+        "mount_type": "top",
+        "total_length": 50,
+        "total_mass": 13.5
+      },
+      "max_reach": 58.0,
+      "base_height": 8.0
+    },
+    {
+      "worst_margin": -0.1413511282934912,
+      "worst_pose": "lateral_j0=90_rf=0.3",
+      "worst_chassis_yaw": 90,
+      "chassis": {
+        "length": 14,
+        "width": 13,
+        "height": 7,
+        "weight": 50,
+        "mu": 0.3
+      },
+      "arm": {
+        "L1": 26,
+        "L2": 14,
+        "L3": 8,
+        "mount_type": "top",
+        "total_length": 48,
+        "total_mass": 13.2
+      },
+      "max_reach": 58.0,
+      "base_height": 10.0
+    },
+    {
+      "worst_margin": -0.1413511282934912,
+      "worst_pose": "lateral_j0=90_rf=0.3",
+      "worst_chassis_yaw": 90,
+      "chassis": {
+        "length": 14,
+        "width": 13,
+        "height": 7,
+        "weight": 50,
+        "mu": 0.5
+      },
+      "arm": {
+        "L1": 26,
+        "L2": 14,
+        "L3": 8,
+        "mount_type": "top",
+        "total_length": 48,
+        "total_mass": 13.2
+      },
+      "max_reach": 58.0,
+      "base_height": 10.0
+    },
+    {
+      "worst_margin": -0.14182636188133557,
+      "worst_pose": "scorpion_j0=180_rf=0.3",
+      "worst_chassis_yaw": 0,
+      "chassis": {
+        "length": 12,
+        "width": 13,
+        "height": 7,
+        "weight": 50,
+        "mu": 0.3
+      },
+      "arm": {
+        "L1": 22,
+        "L2": 18,
+        "L3": 8,
+        "mount_type": "top",
+        "total_length": 48,
+        "total_mass": 13.2
+      },
+      "max_reach": 58.0,
+      "base_height": 10.0
+    },
+    {
+      "worst_margin": -0.14263689039746907,
+      "worst_pose": "lateral_j0=90_rf=0.3",
+      "worst_chassis_yaw": 90,
+      "chassis": {
+        "length": 14,
+        "width": 13,
+        "height": 7,
+        "weight": 50,
+        "mu": 0.3
+      },
+      "arm": {
+        "L1": 24,
+        "L2": 18,
+        "L3": 6,
+        "mount_type": "top",
+        "total_length": 48,
+        "total_mass": 13.2
+      },
+      "max_reach": 58.0,
+      "base_height": 10.0
+    },
+    {
+      "worst_margin": -0.14263689039746907,
+      "worst_pose": "lateral_j0=90_rf=0.3",
+      "worst_chassis_yaw": 90,
+      "chassis": {
+        "length": 14,
+        "width": 13,
+        "height": 7,
+        "weight": 50,
+        "mu": 0.5
+      },
+      "arm": {
+        "L1": 24,
+        "L2": 18,
+        "L3": 6,
+        "mount_type": "top",
+        "total_length": 48,
+        "total_mass": 13.2
+      },
+      "max_reach": 58.0,
+      "base_height": 10.0
+    },
+    {
+      "worst_margin": -0.1440086415038243,
+      "worst_pose": "lateral_j0=90_rf=0.3",
+      "worst_chassis_yaw": 90,
+      "chassis": {
+        "length": 14,
+        "width": 13,
+        "height": 7,
+        "weight": 50,
+        "mu": 0.3
+      },
+      "arm": {
+        "L1": 22,
+        "L2": 22,
+        "L3": 4,
+        "mount_type": "top",
+        "total_length": 48,
+        "total_mass": 13.2
+      },
+      "max_reach": 58.0,
+      "base_height": 10.0
+    },
+    {
+      "worst_margin": -0.1440086415038243,
+      "worst_pose": "lateral_j0=90_rf=0.3",
+      "worst_chassis_yaw": 90,
+      "chassis": {
+        "length": 14,
+        "width": 13,
+        "height": 7,
+        "weight": 50,
+        "mu": 0.5
+      },
+      "arm": {
+        "L1": 22,
+        "L2": 22,
+        "L3": 4,
+        "mount_type": "top",
+        "total_length": 48,
+        "total_mass": 13.2
+      },
+      "max_reach": 58.0,
+      "base_height": 10.0
+    },
+    {
+      "worst_margin": -0.1440233575432702,
+      "worst_pose": "lateral_j0=90_rf=0.3",
+      "worst_chassis_yaw": 90,
+      "chassis": {
+        "length": 14,
+        "width": 13,
+        "height": 6,
+        "weight": 50,
+        "mu": 0.3
+      },
+      "arm": {
+        "L1": 24,
+        "L2": 18,
+        "L3": 8,
+        "mount_type": "recessed",
+        "total_length": 50,
+        "total_mass": 13.5
+      },
+      "max_reach": 57.5,
+      "base_height": 7.5
+    },
+    {
+      "worst_margin": -0.14543106600584657,
+      "worst_pose": "lateral_j0=90_rf=0.3",
+      "worst_chassis_yaw": 90,
+      "chassis": {
+        "length": 14,
+        "width": 13,
+        "height": 9,
+        "weight": 50,
+        "mu": 0.3
+      },
+      "arm": {
+        "L1": 24,
+        "L2": 16,
+        "L3": 6,
+        "mount_type": "top",
+        "total_length": 46,
+        "total_mass": 12.899999999999999
+      },
+      "max_reach": 58.0,
+      "base_height": 12.0
+    },
+    {
+      "worst_margin": -0.1454340098885981,
+      "worst_pose": "lateral_j0=90_rf=0.3",
+      "worst_chassis_yaw": 90,
+      "chassis": {
+        "length": 14,
+        "width": 13,
+        "height": 6,
+        "weight": 50,
+        "mu": 0.3
+      },
+      "arm": {
+        "L1": 22,
+        "L2": 22,
+        "L3": 6,
+        "mount_type": "recessed",
+        "total_length": 50,
+        "total_mass": 13.5
+      },
+      "max_reach": 57.5,
+      "base_height": 7.5
+    },
+    {
+      "worst_margin": -0.14584615732892287,
+      "worst_pose": "lateral_j0=90_rf=0.3",
+      "worst_chassis_yaw": 90,
+      "chassis": {
+        "length": 14,
+        "width": 13,
+        "height": 8,
+        "weight": 50,
+        "mu": 0.3
+      },
+      "arm": {
+        "L1": 24,
+        "L2": 16,
+        "L3": 8,
+        "mount_type": "recessed",
+        "total_length": 48,
+        "total_mass": 13.2
+      },
+      "max_reach": 57.5,
+      "base_height": 9.5
+    },
+    {
+      "worst_margin": -0.14674037199153117,
+      "worst_pose": "lateral_j0=90_rf=0.3",
+      "worst_chassis_yaw": 90,
+      "chassis": {
+        "length": 14,
+        "width": 13,
+        "height": 9,
+        "weight": 50,
+        "mu": 0.3
+      },
+      "arm": {
+        "L1": 22,
+        "L2": 20,
+        "L3": 4,
+        "mount_type": "top",
+        "total_length": 46,
+        "total_mass": 12.899999999999999
+      },
+      "max_reach": 58.0,
+      "base_height": 12.0
+    },
+    {
+      "worst_margin": -0.14702409022101376,
+      "worst_pose": "lateral_j0=90_rf=0.3",
+      "worst_chassis_yaw": 90,
+      "chassis": {
+        "length": 14,
+        "width": 13,
+        "height": 8,
+        "weight": 50,
+        "mu": 0.3
+      },
+      "arm": {
+        "L1": 18,
+        "L2": 22,
+        "L3": 8,
+        "mount_type": "top",
+        "total_length": 48,
+        "total_mass": 13.2
+      },
+      "max_reach": 59.0,
+      "base_height": 11.0
+    },
+    {
+      "worst_margin": -0.14719436455357465,
+      "worst_pose": "lateral_j0=90_rf=0.3",
+      "worst_chassis_yaw": 90,
+      "chassis": {
+        "length": 14,
+        "width": 13,
+        "height": 8,
+        "weight": 50,
+        "mu": 0.3
+      },
+      "arm": {
+        "L1": 22,
+        "L2": 20,
+        "L3": 6,
+        "mount_type": "recessed",
+        "total_length": 48,
+        "total_mass": 13.2
+      },
+      "max_reach": 57.5,
+      "base_height": 9.5
+    }
+  ]
+}

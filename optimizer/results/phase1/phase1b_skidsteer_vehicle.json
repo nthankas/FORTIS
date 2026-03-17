@@ -1,0 +1,30 @@
+{
+  "results": [
+    {
+      "scene": "reactor",
+      "config": {
+        "tire_r": 3.0,
+        "length": 14.0,
+        "width": 13.0,
+        "height": 9.0,
+        "weight": 50.0,
+        "drive_vel": 10.0,
+        "mu": 0.5
+      },
+      "circle": {
+        "test": "circle",
+        "orbit_deg": -820.7,
+        "max_zdrop_in": 0.97,
+        "max_tilt_deg": 51.5,
+        "tipped": true,
+        "full_circle": true,
+        "time_to_circle_s": 27.0,
+        "drive_vel": 10.0,
+        "duration_s": 60.0
+      },
+      "rotation_diagonal_in": 19.1,
+      "floor_width_in": 32.3,
+      "clearance_ok": true
+    }
+  ]
+}
