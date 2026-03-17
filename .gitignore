@@ -30,13 +30,6 @@ desktop.ini
 build_output.txt
 test_output.txt
 
-# AI tooling config
-.claude/
-CLAUDE.md
-
-# Isaac Sim USD scenes (binary, regenerated from OnShape imports)
-*.usd
-
 # Simulation result dumps
 simulation/isaac/xdrive/*_results.json
 simulation/isaac/xdrive/logs/

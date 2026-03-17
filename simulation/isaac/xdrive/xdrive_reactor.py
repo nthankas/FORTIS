@@ -2,7 +2,7 @@
 FORTIS X-drive inside the DIII-D reactor.
 
 Same robot build as xdrive_o3dyn.py, spawned on the outer floor near the step.
-Reactor geometry loaded from D-IIIDTokamak_sim.usd (triangle mesh collision
+Reactor geometry loaded from diiid_reactor.usd (triangle mesh collision
 applied via Physics API Editor in GUI -- don't regenerate that file).
 
 Usage: IsaacSim\\python.bat xdrive_reactor.py --gui
@@ -145,7 +145,7 @@ def build_physics_scene(stage):
     px.CreateTimeStepsPerSecondAttr(PHYSICS_HZ)
 
 
-REACTOR_SIM_USD = os.path.join(os.path.dirname(os.path.abspath(__file__)), "D-IIIDTokamak_sim.usd")
+REACTOR_SIM_USD = os.path.join(os.path.dirname(os.path.abspath(__file__)), "diiid_reactor.usd")
 
 
 def load_reactor(stage):

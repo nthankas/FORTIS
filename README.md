@@ -5,21 +5,12 @@ Remotely operated inspection robot for the DIII-D tokamak fusion reactor at Gene
 ## Project Structure
 
 ```
-simulation/
-    isaac/
-        xdrive/                 # X-drive simulation (current, Phase 3)
-        phase1/                 # Phase 1: parametric chassis optimization
-        phase2/                 # Phase 2: skid-steer evaluation (rejected)
-        scenes/                 # USD reactor geometry
-        fortis_config.py        # Shared floor geometry constants
-    urdf/                       # Robot URDF description
-optimizer/
-    results/phase1/             # Chassis optimization results (JSON)
-    results/phase2/             # Step sweep results
-    turn_calculator.py          # Standalone turn feasibility calculator
-control/                        # Robot control software (future)
-firmware/                       # ESP32 firmware (future)
-docs/                           # Analysis documents
+simulation/isaac/
+    xdrive/                         # Active: X-drive omni wheel simulation
+    skid_steer_rejection/           # Archived: proves skid-steer can't work
+control/                            # Robot control software (future)
+firmware/                           # ESP32 firmware (future)
+inverse_kinetmatic_solver.py        # CoppeliaSim IK solver (reference)
 ```
 
 ## Drive System
@@ -30,32 +21,34 @@ docs/                           # Analysis documents
 - **Motors**: REV NEO Brushless + 5:1 MAXPlanetary (13 Nm at wheel)
 - **Friction**: Rubber on graphite, mu = 0.3 to 0.5
 
+## Why X-Drive (not Skid-Steer)
+
+The robot straddles a 4.5" step between the inner and outer reactor floor. Skid-steer
+point turns while straddling this step were tested in simulation -- only 3 of 60
+configurations completed the turn (5% pass rate), all with dangerous tilt and drift.
+See `simulation/isaac/skid_steer_rejection/ANALYSIS.md` for the full writeup.
+
 ## Reactor Environment
 
 - **Access tunnel**: 15.75" x 15.75"
 - **R0 port**: 22" x 35.5" opening
 - **Floor**: Two surfaces separated by a 4.5" step; robot straddles the step
-- **Slope**: Interior wall ~35 degrees — robot cannot drive on it, tether carries weight
+- **Slope**: Interior wall ~35 degrees -- robot cannot drive on it, tether carries weight
 
 ## Running Simulations
 
 Requires NVIDIA Isaac Sim 5.1.
 
 ```bash
-E:\FORTIS\IsaacSim\python.bat simulation/isaac/xdrive/xdrive_o3dyn.py --gui
-E:\FORTIS\IsaacSim\python.bat simulation/isaac/xdrive/xdrive_reactor.py --gui
-```
+# Flat ground driving
+IsaacSim\python.bat simulation/isaac/xdrive/xdrive_o3dyn.py --gui
 
-Standalone tools (no Isaac Sim needed):
-```bash
-python optimizer/turn_calculator.py --search
+# Inside reactor
+IsaacSim\python.bat simulation/isaac/xdrive/xdrive_reactor.py --gui
+
+# R0 port entry maneuver
+IsaacSim\python.bat simulation/isaac/xdrive/xdrive_r0_entry_v2.py --gui
+
+# Analytical clearance sweep (no Isaac Sim needed)
 python simulation/isaac/xdrive/clearance_sweep.py
 ```
-
-## Phase Summary
-
-| Phase | Status | Outcome |
-|-------|--------|---------|
-| 1. Parametric optimization | Complete | Identified floor geometry, stability envelope |
-| 2. Skid-steer evaluation | Rejected | Cannot cross 4.5" step (5% pass rate on turns) |
-| 3. X-drive simulation | Active | Omni drive validated, motor sizing confirmed |
