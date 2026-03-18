@@ -75,7 +75,7 @@ TUNNEL_SIZE = 14.75    # usable tunnel dimension in inches
 CHASSIS_HEIGHT = 5.0   # inches (fixed)
 CHAMFER_SIZE = 1.0     # inches -- 45-degree ramp at step top edge
 
-REACTOR_USD = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "scenes", "reactor.usd"))
+REACTOR_USD = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "xdrive", "diiid_reactor.usd"))
 RESULTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "results")
 
 # ---------------------------------------------------------------------------
