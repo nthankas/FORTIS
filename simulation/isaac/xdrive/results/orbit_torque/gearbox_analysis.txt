@@ -1,0 +1,61 @@
+FORTIS X-Drive Gearbox Selection Analysis
+==========================================
+Date: 2026-04-01
+Based on: Orbit torque sweep simulation (1.0-2.0 m/s, 40 lb robot, mu=0.5)
+
+Motor: REV NEO 2.0 Brushless
+  Stall torque: 1.4 Nm
+  Free speed: 5676 RPM (594.4 rad/s)
+
+MAXPlanetary Efficiency: ~90% per stage
+
+Simulation Torque Requirements (from orbit_torque sweep):
+  Mean torque (worst case, 2.0 m/s): 4.4 Nm
+  P95 torque (worst case, 2.0 m/s): 14.6 Nm
+  P99 torque (worst case, 2.0 m/s): 23.0 Nm
+  Peak torque: 42-75 Nm (sub-ms PhysX collision spikes, not realistic)
+
+  Note: Peak spikes are artifacts of the sphere-roller collision model
+  in Isaac Sim. Almost all spikes occur on FR wheel. Real AndyMark 8"
+  Dualie omni wheels will not produce these transient impulses.
+
+Max wheel speed needed:
+  At 1.0 m/s orbit: ~8.1 rad/s (77 RPM)
+  At 1.5 m/s orbit: ~12.1 rad/s (116 RPM)
+  At 2.0 m/s orbit: ~16.1 rad/s (154 RPM)
+  With 50% margin for speed control: 24.2 rad/s (231 RPM) at 2.0 m/s
+
+Gearbox                Torque   MaxSpd      P95      P99     Mean    Speed
+                         (Nm)  (rad/s)   margin   margin   margin   (2m/s)
+------------------------------------------------------------------------------------
+3:1 (1-stage)             3.8    198.1     0.26x     0.16x     0.9x     YES
+4:1 (1-stage)             5.0    148.6     0.35x     0.22x     1.1x     YES
+5:1 (1-stage)             6.3    118.9     0.43x     0.27x     1.4x     YES
+9:1 (1-stage)            11.3     66.0     0.78x     0.49x     2.6x     YES
+9:1 (2-stage)            10.2     66.0     0.70x     0.44x     2.3x     YES
+12:1 (2-stage)           13.6     49.5     0.93x     0.59x     3.1x     YES
+15:1 (2-stage)           17.0     39.6     1.17x     0.74x     3.9x     YES
+16:1 (2-stage)           18.1     37.1     1.24x     0.79x     4.1x     YES
+20:1 (2-stage)           22.7     29.7     1.55x     0.99x     5.2x     YES
+25:1 (2-stage)           28.4     23.8     1.94x     1.23x     6.4x      NO*
+27:1 (3-stage)           27.6     22.0     1.89x     1.20x     6.3x      NO
+36:1 (3-stage)           36.7     16.5     2.52x     1.60x     8.4x      NO
+45:1 (3-stage)           45.9     13.2     3.15x     2.00x    10.4x      NO
+
+* 25:1 max speed of 23.8 rad/s supports up to ~1.5 m/s orbit with margin.
+
+SELECTED: 25:1 Bundle (5:1 + 5:1, REV-21-2103 x2)
+  Available torque: 28.4 Nm
+  P95 margin: 1.94x
+  P99 margin: 1.23x
+  Mean margin: 6.4x
+  Max wheel speed: 23.8 rad/s (227 RPM)
+  Max practical orbit speed: ~1.5 m/s
+  Stages: 2 (90% x 90% = 81% efficiency)
+
+Rationale:
+  - Nearly 2x margin on P95 torque provides comfortable overhead
+  - 1.23x margin on P99 covers all but the most extreme transient spikes
+  - Max speed of ~1.5 m/s is acceptable for reactor inspection operations
+  - 2-stage design keeps gearbox compact (vs 3-stage options)
+  - 6.4x margin on mean torque ensures thermal headroom for sustained operation
