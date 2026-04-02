@@ -26,9 +26,18 @@ parser.add_argument("--reactor", action="store_true",
                     help="Load diiid_reactor.usd and spawn on outer floor")
 parser.add_argument("--tunnel", action="store_true",
                     help="Spawn in the access tunnel (implies --reactor)")
+parser.add_argument("--contact", action="store_true",
+                    help="Enable chassis-reactor contact reporting (log scrape points)")
+parser.add_argument("--drive-speed", type=float, default=0.2,
+                    help="Forward drive speed for contact test in m/s (default 0.2)")
+parser.add_argument("--drive-time", type=float, default=15.0,
+                    help="How long to drive forward in seconds (default 15)")
 args, _ = parser.parse_known_args()
 if args.tunnel:
     args.reactor = True  # tunnel implies reactor
+if args.contact:
+    args.tunnel = True
+    args.reactor = True
 headless = args.headless or not args.gui
 
 from isaacsim import SimulationApp
@@ -716,6 +725,50 @@ def xdrive_ik(vx, vy, omega):
 
 
 # ============================================================================
+# Contact reporting
+# ============================================================================
+
+def read_chassis_contacts(cs, chassis_path, reactor_prefix="/World/Reactor"):
+    """Read raw contact data for chassis touching the reactor mesh."""
+    raw = cs.get_rigid_body_raw_data(chassis_path)
+    contacts = []
+    for c in raw:
+        b0 = cs.decode_body_name(int(c["body0"]))
+        b1 = cs.decode_body_name(int(c["body1"]))
+        other = b1 if chassis_path in b0 else b0
+        if not other.startswith(reactor_prefix):
+            continue
+        pos = (float(c["position"]["x"]), float(c["position"]["y"]), float(c["position"]["z"]))
+        nrm = (float(c["normal"]["x"]), float(c["normal"]["y"]), float(c["normal"]["z"]))
+        imp = (float(c["impulse"]["x"]), float(c["impulse"]["y"]), float(c["impulse"]["z"]))
+        contacts.append({"position": pos, "normal": nrm, "impulse": imp, "other": other})
+    return contacts
+
+
+def get_chassis_orientation(stage, chassis_path):
+    """Get yaw, pitch, roll of chassis in degrees."""
+    prim = stage.GetPrimAtPath(chassis_path)
+    mat = UsdGeom.Xformable(prim).ComputeLocalToWorldTransform(Usd.TimeCode.Default())
+    yaw = math.degrees(math.atan2(mat[1][0], mat[0][0]))
+    pitch = math.degrees(math.atan2(-mat[2][0], math.sqrt(mat[2][1]**2 + mat[2][2]**2)))
+    roll = math.degrees(math.atan2(mat[2][1], mat[2][2]))
+    return yaw, pitch, roll
+
+
+def world_to_chassis_local(pos_world, chassis_pos, yaw_rad):
+    """Convert world contact point to chassis-local frame (2D, XY only)."""
+    dx = pos_world[0] - chassis_pos[0]
+    dy = pos_world[1] - chassis_pos[1]
+    dz = pos_world[2] - chassis_pos[2]
+    # Rotate into chassis frame (undo yaw)
+    cos_y = math.cos(-yaw_rad)
+    sin_y = math.sin(-yaw_rad)
+    lx = dx * cos_y - dy * sin_y
+    ly = dx * sin_y + dy * cos_y
+    return lx, ly, dz
+
+
+# ============================================================================
 # State reporting
 # ============================================================================
 
@@ -841,6 +894,24 @@ for _ in range(20):
     app.update()
 
 world = World(stage_units_in_meters=1.0)
+
+# --- Contact reporting setup (before timeline play) ---
+contact_sensor = None
+contact_log = []
+if args.contact:
+    from isaacsim.sensors.physics import _sensor as _contact_sensor
+    chassis_prim = stage.GetPrimAtPath(chassis_path)
+    if not chassis_prim.HasAPI(PhysxSchema.PhysxContactReportAPI):
+        cr_api = PhysxSchema.PhysxContactReportAPI.Apply(chassis_prim)
+    else:
+        cr_api = PhysxSchema.PhysxContactReportAPI(chassis_prim)
+    cr_api.CreateThresholdAttr().Set(0)
+    # Prevent chassis from sleeping (sleep suppresses contact events)
+    prb = PhysxSchema.PhysxRigidBodyAPI.Apply(chassis_prim)
+    prb.CreateSleepThresholdAttr(0.0)
+    contact_sensor = _contact_sensor.acquire_contact_sensor_interface()
+    print("Contact reporting ENABLED on chassis", flush=True)
+
 omni.timeline.get_timeline_interface().play()
 for _ in range(10):
     app.update()
@@ -901,6 +972,220 @@ for i in range(2 * PHYSICS_HZ):
 
 print_state(art, stage, chassis_path, 0)
 
+# ============================================================================
+# Contact test mode: drive forward through R0, log all chassis-reactor contacts
+# ============================================================================
+if args.contact:
+    import json
+    render = not headless
+    drive_speed = args.drive_speed
+    drive_time = args.drive_time
+    total_frames = int(drive_time * PHYSICS_HZ)
+
+    # In tunnel mode, robot faces +Y (yaw=90). "Forward" in chassis frame = +X local.
+    # The IK takes vx=forward, vy=strafe in chassis frame.
+    print(f"\n{'='*60}", flush=True)
+    print(f"CONTACT TEST: drive forward at {drive_speed} m/s for {drive_time}s", flush=True)
+    print(f"  Total frames: {total_frames} at {PHYSICS_HZ}Hz", flush=True)
+    print(f"{'='*60}\n", flush=True)
+
+    tv = xdrive_ik(drive_speed, 0, 0)
+    va = np.zeros(ndof)
+    for ii, di in enumerate(drive_dof_indices):
+        va[di] = tv[ii]
+
+    contact_count = 0
+    for frame in range(total_frames):
+        if art.is_physics_handle_valid():
+            art.set_joint_velocity_targets(va.reshape(1, -1))
+        world.step(render=render)
+
+        # Poll contacts
+        contacts = read_chassis_contacts(contact_sensor, chassis_path)
+        if contacts:
+            s = get_state(art, stage, chassis_path)
+            if s:
+                p = s["pos"]
+                yaw, pitch, roll = get_chassis_orientation(stage, chassis_path)
+                yaw_rad = math.radians(yaw)
+                t = frame / PHYSICS_HZ
+                for ct in contacts:
+                    imp = ct["impulse"]
+                    imp_mag = math.sqrt(imp[0]**2 + imp[1]**2 + imp[2]**2)
+                    force_n = imp_mag * PHYSICS_HZ
+                    lx, ly, lz = world_to_chassis_local(ct["position"], p, yaw_rad)
+                    entry = {
+                        "time": round(t, 4),
+                        "frame": frame,
+                        "world_pos": [round(x, 5) for x in ct["position"]],
+                        "local_pos": [round(lx, 5), round(ly, 5), round(lz, 5)],
+                        "normal": [round(x, 4) for x in ct["normal"]],
+                        "force_N": round(force_n, 2),
+                        "chassis_pos": [round(float(p[0]), 5), round(float(p[1]), 5), round(float(p[2]), 5)],
+                        "chassis_ypr": [round(yaw, 2), round(pitch, 2), round(roll, 2)],
+                        "reactor_prim": ct["other"],
+                    }
+                    contact_log.append(entry)
+                    contact_count += 1
+
+        # Status every second
+        if frame % PHYSICS_HZ == 0:
+            s = get_state(art, stage, chassis_path)
+            if s:
+                p = s["pos"]
+                yaw, pitch, roll = get_chassis_orientation(stage, chassis_path)
+                ct_this_sec = sum(1 for e in contact_log if e["time"] >= frame/PHYSICS_HZ - 1)
+                print(f"[{frame/PHYSICS_HZ:.0f}s] pos=({p[0]/IN:.1f},{p[1]/IN:.1f},{p[2]/IN:.1f})\" "
+                      f"ypr=({yaw:.1f},{pitch:.1f},{roll:.1f}) "
+                      f"contacts_total={contact_count} last_sec={ct_this_sec}", flush=True)
+
+    # Save results
+    results_dir = os.path.join(BASE_DIR, "results")
+    os.makedirs(results_dir, exist_ok=True)
+    results = {
+        "test": "r0_entry_contact",
+        "params": {
+            "drive_speed_mps": drive_speed,
+            "drive_time_s": drive_time,
+            "belly_height_in": args.belly,
+            "physics_hz": PHYSICS_HZ,
+            "chassis_dims_in": [CHASSIS_L/IN, CHASSIS_W/IN, CHASSIS_H/IN],
+            "wheel_radius_mm": TARGET_DIA_MM / 2.0,
+        },
+        "summary": {
+            "total_contacts": len(contact_log),
+            "total_frames": total_frames,
+            "frames_with_contact": len(set(e["frame"] for e in contact_log)),
+        },
+        "contacts": contact_log,
+    }
+
+    # Add summary stats if there were contacts
+    if contact_log:
+        forces = [e["force_N"] for e in contact_log]
+        local_xs = [e["local_pos"][0] for e in contact_log]
+        local_ys = [e["local_pos"][1] for e in contact_log]
+        pitches = [e["chassis_ypr"][1] for e in contact_log]
+        results["summary"]["peak_force_N"] = round(max(forces), 2)
+        results["summary"]["mean_force_N"] = round(sum(forces)/len(forces), 2)
+        results["summary"]["first_contact_time_s"] = contact_log[0]["time"]
+        results["summary"]["last_contact_time_s"] = contact_log[-1]["time"]
+        results["summary"]["local_x_range"] = [round(min(local_xs)/IN, 2), round(max(local_xs)/IN, 2)]
+        results["summary"]["local_y_range"] = [round(min(local_ys)/IN, 2), round(max(local_ys)/IN, 2)]
+        results["summary"]["pitch_range_deg"] = [round(min(pitches), 1), round(max(pitches), 1)]
+
+    out_path = os.path.join(results_dir, "r0_contact_report.json")
+    with open(out_path, "w") as f:
+        json.dump(results, f, indent=2)
+
+    print(f"\n{'='*60}", flush=True)
+    print(f"CONTACT REPORT SAVED: {out_path}", flush=True)
+    print(f"  Total contact events: {len(contact_log)}", flush=True)
+    print(f"  Frames with contact: {results['summary']['frames_with_contact']} / {total_frames}", flush=True)
+    if contact_log:
+        print(f"  Peak force: {results['summary']['peak_force_N']:.1f} N", flush=True)
+        print(f"  First contact at t={results['summary']['first_contact_time_s']:.2f}s", flush=True)
+        print(f"  Chassis local X range: {results['summary']['local_x_range']} in", flush=True)
+        print(f"  Chassis local Y range: {results['summary']['local_y_range']} in", flush=True)
+        print(f"  Pitch range: {results['summary']['pitch_range_deg']} deg", flush=True)
+    else:
+        print("  NO chassis-reactor contacts detected!", flush=True)
+    print(f"{'='*60}", flush=True)
+
+    # Generate visualization
+    if contact_log:
+        try:
+            import matplotlib
+            matplotlib.use("Agg")
+            import matplotlib.pyplot as plt
+            from matplotlib.patches import FancyBboxPatch, Rectangle
+            from matplotlib.collections import PathCollection
+
+            fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+            fig.suptitle(f"R0 Entry Contact Analysis — belly={args.belly}\" speed={drive_speed}m/s",
+                         fontsize=14, fontweight="bold")
+
+            # 1. Top-down chassis outline with contact heatmap (local frame)
+            ax = axes[0, 0]
+            lx_in = [e["local_pos"][0]/IN for e in contact_log]
+            ly_in = [e["local_pos"][1]/IN for e in contact_log]
+            forces_plot = [e["force_N"] for e in contact_log]
+            sc = ax.scatter(lx_in, ly_in, c=forces_plot, cmap="hot", s=4, alpha=0.5)
+            plt.colorbar(sc, ax=ax, label="Force (N)")
+            # Draw chassis outline
+            chl = CHASSIS_L / 2.0 / IN
+            chw = CHASSIS_W / 2.0 / IN
+            cc = CHAMFER_CUT / IN
+            oct_x = [chl, chl, chl-cc, -(chl-cc), -chl, -chl, -(chl-cc), chl-cc, chl]
+            oct_y = [-(chw-cc), chw-cc, chw, chw, chw-cc, -(chw-cc), -chw, -chw, -(chw-cc)]
+            ax.plot(oct_x, oct_y, 'b-', linewidth=2, label="Chassis outline")
+            ax.set_xlabel("Local X (in) — +X = forward")
+            ax.set_ylabel("Local Y (in)")
+            ax.set_title("Contact Points on Chassis (top-down)")
+            ax.set_aspect("equal")
+            ax.legend(fontsize=8)
+            ax.grid(True, alpha=0.3)
+
+            # 2. Side view: local X vs local Z
+            ax = axes[0, 1]
+            lz_in = [e["local_pos"][2]/IN for e in contact_log]
+            sc2 = ax.scatter(lx_in, lz_in, c=forces_plot, cmap="hot", s=4, alpha=0.5)
+            plt.colorbar(sc2, ax=ax, label="Force (N)")
+            # Draw chassis side profile
+            half_h = CHASSIS_H / 2.0 / IN
+            belly_h = BELLY_HEIGHT / IN
+            ml = MOTOR_MOUNT_LEN / IN
+            af = ARCH_FLAT_WIDTH / 2.0 / IN
+            re = chl - ml
+            ax.plot([-chl, -re, -af, af, re, chl], [-half_h]*2 + [-half_h+belly_h]*2 + [-half_h]*2,
+                    'b-', linewidth=2, label="Belly profile")
+            ax.axhline(-half_h, color='gray', linestyle='--', alpha=0.5)
+            ax.axhline(half_h, color='gray', linestyle='--', alpha=0.5)
+            ax.set_xlabel("Local X (in) — +X = forward")
+            ax.set_ylabel("Local Z (in)")
+            ax.set_title("Contact Points (side view)")
+            ax.legend(fontsize=8)
+            ax.grid(True, alpha=0.3)
+
+            # 3. Timeline: pitch + contact force over time
+            ax = axes[1, 0]
+            times = [e["time"] for e in contact_log]
+            ax.scatter(times, forces_plot, c="red", s=2, alpha=0.3, label="Contact force")
+            ax.set_xlabel("Time (s)")
+            ax.set_ylabel("Force (N)", color="red")
+            ax.tick_params(axis="y", labelcolor="red")
+            ax2 = ax.twinx()
+            ax2.scatter(times, [e["chassis_ypr"][1] for e in contact_log],
+                       c="blue", s=2, alpha=0.3, label="Pitch")
+            ax2.set_ylabel("Pitch (deg)", color="blue")
+            ax2.tick_params(axis="y", labelcolor="blue")
+            ax.set_title("Contact Force & Pitch vs Time")
+            ax.grid(True, alpha=0.3)
+
+            # 4. World-space contact positions (bird's eye)
+            ax = axes[1, 1]
+            wx = [e["world_pos"][0]/IN for e in contact_log]
+            wy = [e["world_pos"][1]/IN for e in contact_log]
+            sc4 = ax.scatter(wx, wy, c=times, cmap="viridis", s=4, alpha=0.5)
+            plt.colorbar(sc4, ax=ax, label="Time (s)")
+            ax.set_xlabel("World X (in)")
+            ax.set_ylabel("World Y (in)")
+            ax.set_title("Contact Points in World (bird's eye)")
+            ax.set_aspect("equal")
+            ax.grid(True, alpha=0.3)
+
+            plt.tight_layout()
+            plot_path = os.path.join(results_dir, "r0_contact_report.png")
+            fig.savefig(plot_path, dpi=150)
+            plt.close(fig)
+            print(f"Plot saved: {plot_path}", flush=True)
+        except Exception as ex:
+            print(f"WARNING: Could not generate plot: {ex}", flush=True)
+
+    omni.timeline.get_timeline_interface().stop()
+    app.close()
+    sys.exit(0)
+
 if headless:
     for test_name, tvx, tvy, tw in [
         ("forward", 0.2, 0, 0),
@@ -936,6 +1221,8 @@ print("\nControls:", flush=True)
 print("  Arrows = translate  |  Q/E = rotate  |  +/- = speed", flush=True)
 print("  O = orbit toggle  |  9/0 = orbit radius", flush=True)
 print("  R = reset  |  P = print state  |  Space = stop", flush=True)
+if contact_sensor:
+    print("  Contact reporting active — scrape events logged to console", flush=True)
 
 frame = 0
 while app.is_running():
@@ -961,7 +1248,8 @@ while app.is_running():
         art.initialize()
         for _ in range(10): world.step(render=True)
         art.switch_control_mode("velocity", joint_indices=np.arange(ndof))
-        print("RESET", flush=True)
+        contact_log.clear()
+        print("RESET (contact log cleared)", flush=True)
         continue
 
     tv = xdrive_ik(vx, vy, w)
@@ -971,6 +1259,22 @@ while app.is_running():
     art.set_joint_velocity_targets(va.reshape(1, -1))
     world.step(render=True)
     frame += 1
+
+    # Log contacts in GUI mode too
+    if contact_sensor:
+        contacts = read_chassis_contacts(contact_sensor, chassis_path)
+        if contacts:
+            s = get_state(art, stage, chassis_path)
+            if s:
+                p = s["pos"]
+                yaw, pitch, roll = get_chassis_orientation(stage, chassis_path)
+                for ct in contacts:
+                    imp = ct["impulse"]
+                    force_n = math.sqrt(imp[0]**2 + imp[1]**2 + imp[2]**2) * PHYSICS_HZ
+                    if frame % 30 == 0:  # don't spam console every frame
+                        print(f"  SCRAPE frame={frame} force={force_n:.1f}N "
+                              f"at world=({ct['position'][0]/IN:.1f},{ct['position'][1]/IN:.1f},"
+                              f"{ct['position'][2]/IN:.1f})\" pitch={pitch:.1f}deg", flush=True)
 
     if kb.pstate:
         kb.pstate = False
