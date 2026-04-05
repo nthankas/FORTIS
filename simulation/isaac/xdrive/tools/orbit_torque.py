@@ -20,10 +20,17 @@ import os, sys, math, argparse, csv, json
 
 os.environ["PYTHONIOENCODING"] = "utf-8"
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-RESULTS_DIR = os.path.join(BASE_DIR, "results", "orbit_torque")
+# --- xdrive path bootstrap (reorg 2026-04-04) ---
+# orbit_torque.py lives at xdrive/tools/; assets, lib, results at xdrive root.
+BASE_DIR    = os.path.dirname(os.path.abspath(__file__))   # xdrive/tools/
+XDRIVE_ROOT = os.path.abspath(os.path.join(BASE_DIR, ".."))
+ASSETS_DIR  = os.path.join(XDRIVE_ROOT, "assets")
+RESULTS_DIR = os.path.join(XDRIVE_ROOT, "results", "orbit_torque")
+sys.path.insert(0, os.path.join(XDRIVE_ROOT, "lib"))
+# --- end bootstrap ---
+# Walks up from xdrive/tools -> xdrive -> isaac -> simulation -> FORTIS -> Projects -> Capstone
 ISAAC_PYTHON = os.path.normpath(os.path.join(
-    BASE_DIR, "..", "..", "..", "..", "..", "IsaacSim", "python.bat"))
+    BASE_DIR, "..", "..", "..", "..", "..", "..", "IsaacSim", "python.bat"))
 
 SPEEDS = [0.1, 0.15, 0.2, 0.25, 0.3]
 
@@ -228,8 +235,8 @@ import sim_config as cfg
 # ============================================================================
 IN = 0.0254
 MM = 0.001
-OMNIWHEEL_USD = os.path.join(BASE_DIR, "omniwheels.usd")
-REACTOR_USD = os.path.join(BASE_DIR, "diiid_reactor.usd")
+OMNIWHEEL_USD = os.path.join(ASSETS_DIR, "omniwheels.usd")
+REACTOR_USD = os.path.join(ASSETS_DIR, "diiid_reactor.usd")
 
 # Chassis geometry (from xdrive_realwheel.py)
 CHASSIS_L = 15.354 * IN
