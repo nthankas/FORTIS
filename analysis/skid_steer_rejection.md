@@ -120,6 +120,6 @@ The only region of parameter space that works is R=3.5", W=2.0", TW=8" — the a
 
 | File | Description |
 |------|-------------|
-| `simulation/isaac/skid_steer_rejection/step_sweep.py` | Isaac Sim parametric sweep script |
-| `simulation/isaac/skid_steer_rejection/build_robot.py` | Parametric robot builder |
-| `simulation/isaac/skid_steer_rejection/ANALYSIS.md` | Detailed results table |
+| `simulation/isaac/skid_steer_design/step_sweep.py` | Isaac Sim parametric sweep script |
+| `simulation/isaac/skid_steer_design/build_robot.py` | Parametric robot builder |
+| `simulation/isaac/skid_steer_design/ANALYSIS.md` | Detailed results table |

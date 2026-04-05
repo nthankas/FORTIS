@@ -1,0 +1,39 @@
+{
+  "geometry": {
+    "chassis_LxWxH": "15.0x9.0x5.5",
+    "chamfer": 3.0,
+    "wheelbase": 12.879,
+    "wheel_radius": 4.0,
+    "wheel_drop_current": 2.0,
+    "step_height": 4.5,
+    "tilt_deg": 20.45
+  },
+  "current_arch": {
+    "arch_height": 2.5,
+    "flat_width": 5.0,
+    "motor_mount_len": 1.5,
+    "orbit_clearance": 3.39,
+    "min_crossing_clearance": -1.18,
+    "crossing_collision": true
+  },
+  "orbit_only_optimal": {
+    "arch_height": 0.25,
+    "flat_width": 0.0,
+    "motor_mount_len": 1.5,
+    "clearance_at_center": 1.282,
+    "min_clearance": 0.505,
+    "vol_lost_in3": 13.5
+  },
+  "crossing_optimal": {
+    "wheel_drop": 3.5,
+    "arch_height": 2.25,
+    "flat_width": 5.0,
+    "motor_mount_len": 0.5,
+    "min_clearance": 0.518,
+    "stowed_height": 10.25
+  },
+  "no_arch_option": {
+    "wheel_drop_needed": 3.793,
+    "stowed_height": 10.54
+  }
+}

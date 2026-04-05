@@ -5,10 +5,13 @@ Measurements from CAD (OnShape) and Rotacaster specs. Units: meters (SI).
 import os
 import numpy as np
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+# After the reorg, sim_config lives at xdrive/lib/ and assets at xdrive/assets/.
+_LIB_DIR = os.path.dirname(os.path.abspath(__file__))
+_XDRIVE_ROOT = os.path.abspath(os.path.join(_LIB_DIR, ".."))
+_ASSETS_DIR = os.path.join(_XDRIVE_ROOT, "assets")
 
 # Active reactor USD -- has triangle mesh collision applied via GUI
-REACTOR_SIM_USD = os.path.join(BASE_DIR, "diiid_reactor.usd")
+REACTOR_SIM_USD = os.path.join(_ASSETS_DIR, "diiid_reactor.usd")
 
 # ---- Wheel (AndyMark 8" Dualie Plastic am-0463, 203mm) ----
 # Simulation still uses 180mm (Rotacaster) geometry for the sphere rollers.

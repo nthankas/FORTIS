@@ -7,8 +7,9 @@ import os, sys, math
 import numpy as np
 os.environ["PYTHONIOENCODING"] = "utf-8"
 
-XDRIVE_DIR = os.path.dirname(os.path.abspath(__file__))
-REACTOR_USD = os.path.join(XDRIVE_DIR, "diiid_reactor.usd")
+_TOOLS_DIR = os.path.dirname(os.path.abspath(__file__))
+XDRIVE_ROOT = os.path.abspath(os.path.join(_TOOLS_DIR, ".."))
+REACTOR_USD = os.path.join(XDRIVE_ROOT, "assets", "diiid_reactor.usd")
 
 from isaacsim import SimulationApp
 app = SimulationApp({"headless": True, "width": 1280, "height": 720})
