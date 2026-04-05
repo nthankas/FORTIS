@@ -34,3 +34,6 @@ test_output.txt
 simulation/isaac/xdrive/*_results.json
 simulation/isaac/xdrive/logs/
 simulation/isaac/xdrive/plots/
+
+# Large per-script result dumps (kept locally, not in git)
+simulation/isaac/xdrive/results/xdrive_realwheel/r0_contact_report.json

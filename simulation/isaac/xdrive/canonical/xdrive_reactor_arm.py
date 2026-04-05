@@ -1,14 +1,21 @@
 """
-FORTIS X-drive with REAL omni wheel meshes from Kaya omniwheels.usd.
+FORTIS Sim3 phase 1: X-drive chassis + 4-DOF arm in the DIII-D reactor.
 
-Each roller is a separate rigid body with a free-spinning revolute joint
-to the hub -- no sphere approximation. Convex hull collision on each
-roller barrel gives physically accurate anisotropic friction.
+Built on xdrive_realwheel.py (canonical arched chassis + real Kaya omni wheel
+meshes, see Projects/FORTIS/STATE.md). Adds Carlos's 4-DOF arm rigidly
+mounted on a forward bracket at BASE_X_OFFSET = +9", stowed in a VERTICAL
+zigzag above the mount so every link sits at world r ~53.6" (safely between
+the central column at r=38" and the step at r=55.5"). Phase 1 goal is visual
+verification + keyboard joint control; no stability sweep yet.
 
-GPU physics at 360Hz.
+Sources of truth:
+- Chassis / wheel model: xdrive_realwheel.py (DO NOT re-import xdrive_reactor.py)
+- Arm link dimensions: ../inverse_kinetmatic_solver.py DH_PARAMS (Carlos,
+  CoppeliaSim). Numbers are copied, the module is NOT imported.
+- Arm mass / motor / gearbox: arm_spec.md beside this file. All-NEMA-17 +
+  Cricket Drive MK II 25:1 variant; gearbox rated torque 12 Nm = DriveAPI maxForce.
 
-Usage: IsaacSim\\python.bat xdrive_realwheel.py --gui
-       IsaacSim\\python.bat xdrive_realwheel.py --gui --belly 2.5
+Usage: IsaacSim\\python.bat xdrive_reactor_arm.py --gui
 """
 import os, sys, math, argparse
 import numpy as np
@@ -22,22 +29,7 @@ parser.add_argument("--belly", type=float, default=2.5,
                     help="Belly height above ground in inches (default 2.5)")
 parser.add_argument("--hz", type=int, default=360,
                     help="Physics Hz (360-480, default 360)")
-parser.add_argument("--reactor", action="store_true",
-                    help="Load diiid_reactor.usd and spawn on outer floor")
-parser.add_argument("--tunnel", action="store_true",
-                    help="Spawn in the access tunnel (implies --reactor)")
-parser.add_argument("--contact", action="store_true",
-                    help="Enable chassis-reactor contact reporting (log scrape points)")
-parser.add_argument("--drive-speed", type=float, default=0.2,
-                    help="Forward drive speed for contact test in m/s (default 0.2)")
-parser.add_argument("--drive-time", type=float, default=15.0,
-                    help="How long to drive forward in seconds (default 15)")
 args, _ = parser.parse_known_args()
-if args.tunnel:
-    args.reactor = True  # tunnel implies reactor
-if args.contact:
-    args.tunnel = True
-    args.reactor = True
 headless = args.headless or not args.gui
 
 from isaacsim import SimulationApp
@@ -56,8 +48,13 @@ from isaacsim.core.prims import Articulation
 # ============================================================================
 IN = 0.0254
 MM = 0.001
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-OMNIWHEEL_USD = os.path.join(BASE_DIR, "omniwheels.usd")
+# --- xdrive path bootstrap (reorg 2026-04-04) ---
+XDRIVE_ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+ASSETS_DIR  = os.path.join(XDRIVE_ROOT, "assets")
+RESULTS_ROOT = os.path.join(XDRIVE_ROOT, "results")
+sys.path.insert(0, os.path.join(XDRIVE_ROOT, "lib"))
+# --- end bootstrap ---
+OMNIWHEEL_USD = os.path.join(ASSETS_DIR, "omniwheels.usd")
 
 # Chassis: straight-edge rectangular body
 CHASSIS_L = 15.354 * IN     # front-to-back (X)
@@ -75,7 +72,7 @@ BELLY_HEIGHT = args.belly * IN  # how high the belly center is raised above chas
 ARCH_FLAT_WIDTH = 3.0 * IN  # flat section at the raised belly center
 
 # Reactor USD
-REACTOR_USD = os.path.join(BASE_DIR, "diiid_reactor.usd")
+REACTOR_USD = os.path.join(ASSETS_DIR, "diiid_reactor.usd")
 
 # Wheel target dimensions (AndyMark 8" Dualie)
 TARGET_DIA_MM = 203.0
@@ -109,6 +106,62 @@ DRIVE_MAX_FORCE = 200.0
 # Drive
 DRIVE_SPEED = 0.2
 ROTATE_SPEED = 0.5
+
+# ============================================================================
+# Arm constants (Sim3 phase 1)
+# ============================================================================
+# Link lengths from inverse_kinetmatic_solver.py DH_PARAMS (Carlos).
+# Row 0 d = 0.1270 (J1 vertical stack), row 1 r = 0.5761 (L2 shoulder link),
+# row 2 r = 0.5000 (L3 elbow link), row 3 r = 0.1500 (L4 wrist link). The
+# 0.0250 row-0 r (lateral offset) is absorbed into the J1 base body geometry.
+L_J1 = 0.1270   #  5.00"  J1 vertical base stack (chassis top -> J2 pivot)
+L_L2 = 0.5761   # 22.68"  shoulder link (J2 pivot -> J3 pivot)
+L_L3 = 0.5000   # 19.69"  elbow link    (J3 pivot -> J4 pivot)
+L_L4 = 0.1500   #  5.91"  wrist link    (J4 pivot -> camera tip)
+
+# Arm mount on chassis: BACK edge, chassis centerline, on top.
+# The arm stows flat on top of the chassis (folded/parallel to chassis top).
+# L2 is longer than the chassis (22.68" vs 15.35"), so mounting J1 at the back
+# edge lets L2 extend forward across the top and cantilever past the front by
+# ~7.3". Mounting at the back keeps the stowed CG over the rear wheels and
+# puts the J1 yaw motor out of the way of the forward-facing camera workspace.
+# Chassis +X side points toward the reactor center at spawn (yaw = 90 deg),
+# so chassis -X = back of chassis = away from the center column.
+ARM_MOUNT_X = -CHASSIS_L / 2.0         # -7.68" = back edge of chassis
+ARM_MOUNT_Y = 0.0
+ARM_MOUNT_Z = CHASSIS_H / 2.0          # chassis top = +3.55"
+
+# All-NEMA-17 lumped masses from arm_spec.md (CF links, Cricket MK II 25:1).
+M_J1_BASE     = 0.630   # J1 motor + gearbox + vertical stack hardware
+M_J2_SHOULDER = 0.652   # J2 motor + gearbox + half L2 CF link
+M_J3_ELBOW    = 0.666   # J3 motor + gearbox + half L2+L3 CF links
+M_L4_LINK     = 0.653   # J4 motor + gearbox + L4 CF link (camera added separately)
+M_CAMERA      = 0.445   # Orbbec Gemini 2 at L4 tip
+
+# DriveAPI (USD native units: deg for positions, Nm/deg, Nm*s/deg, Nm).
+# maxForce = 12 Nm matches the Cricket Drive MK II 25:1 rated gearbox torque
+# (spec doc); motor stall would give 13.9 Nm but the gearbox is the limiting
+# component. All four arm joints share the same motor+gearbox, so identical.
+ARM_STIFFNESS_NM_PER_DEG = 1000.0
+ARM_DAMPING_NMS_PER_DEG  = 100.0
+ARM_MAX_FORCE_NM         = 12.0
+
+# Joint limits in degrees.
+ARM_LIMITS_DEG = {
+    "ArmJ1": (-180.0, 180.0),   # base yaw, full rotation
+    "ArmJ2": ( -20.0, 110.0),   # shoulder pitch; upper clamp keeps J2 below horizontal
+    "ArmJ3": (-170.0, 170.0),   # elbow fold
+    "ArmJ4": (-180.0, 180.0),   # wrist
+}
+
+# Visual box cross-section for arm links (cosmetic; no collision in phase 1).
+LINK_BOX_W = 0.040  # 40 mm wide  (Y in body frame)
+LINK_BOX_T = 0.025  # 25 mm thick (cross-section thickness)
+# Z stack between parallel folded links in the stowed pose. Represents the
+# real mechanical offset between stacked motor brackets + CF tubes when the
+# arm is folded flat on top of the chassis. Also ensures the joint pivot
+# axes for J3/J4 sit above the link they rotate about (motor bracket height).
+VIS_Z_STACK = 0.045  # 45 mm = 1.77"
 
 # Chassis geometry
 SL = CHASSIS_L / 2.0
@@ -565,6 +618,288 @@ def build_omniwheel(stage, wheel_path, src_parts, src_center, wheel_mat, wname):
     return hub_path
 
 
+# ============================================================================
+# Arm build helpers (Sim3 phase 1, vertical stowed zigzag)
+# ============================================================================
+
+def _apply_mass_box_vertical(prim, mass, com_z, length_z):
+    """MassAPI for a uniform box aligned along +Z.
+
+    Body frame: +Z is the link long axis. Box extents are
+    (LINK_BOX_T, LINK_BOX_W, length_z); COM at (0, 0, com_z).
+    """
+    mapi = UsdPhysics.MassAPI.Apply(prim)
+    mapi.CreateMassAttr(float(mass))
+    mapi.CreateCenterOfMassAttr(Gf.Vec3f(0.0, 0.0, float(com_z)))
+    Lx, Ly, Lz = LINK_BOX_T, LINK_BOX_W, float(length_z)
+    Ixx = mass / 12.0 * (Ly * Ly + Lz * Lz)
+    Iyy = mass / 12.0 * (Lx * Lx + Lz * Lz)
+    Izz = mass / 12.0 * (Lx * Lx + Ly * Ly)
+    mapi.CreateDiagonalInertiaAttr(Gf.Vec3f(Ixx, Iyy, Izz))
+    # Isaac 5.1 asset validator requires principalAxes.
+    mapi.CreatePrincipalAxesAttr(Gf.Quatf(1.0, 0.0, 0.0, 0.0))
+
+
+def _apply_mass_box_horizontal_x(prim, mass, length_x, dir_sign):
+    """MassAPI for a uniform box aligned along body-local +/- X axis.
+
+    Used for the horizontal stowed arm links (L2, L3). The body box extents
+    are (length_x, LINK_BOX_W, LINK_BOX_T) with the link extending from the
+    body origin along +X (dir_sign = +1) or -X (dir_sign = -1). COM sits at
+    the link midpoint.
+    """
+    mapi = UsdPhysics.MassAPI.Apply(prim)
+    mapi.CreateMassAttr(float(mass))
+    com_x = dir_sign * length_x / 2.0
+    mapi.CreateCenterOfMassAttr(Gf.Vec3f(float(com_x), 0.0, 0.0))
+    Lx, Ly, Lz = float(length_x), LINK_BOX_W, LINK_BOX_T
+    Ixx = mass / 12.0 * (Ly * Ly + Lz * Lz)
+    Iyy = mass / 12.0 * (Lx * Lx + Lz * Lz)
+    Izz = mass / 12.0 * (Lx * Lx + Ly * Ly)
+    mapi.CreateDiagonalInertiaAttr(Gf.Vec3f(Ixx, Iyy, Izz))
+    mapi.CreatePrincipalAxesAttr(Gf.Quatf(1.0, 0.0, 0.0, 0.0))
+
+
+def _apply_mass_link_plus_tip_x(prim, link_mass, tip_mass, link_length, link_dir_sign):
+    """Uniform link box along +/- X with a point mass at the link tip.
+
+    Used for the wrist body (L4 + Orbbec camera at the tip). link_dir_sign
+    = +1 means the link extends in body-local +X; -1 means -X.
+    """
+    total = link_mass + tip_mass
+    link_cx = link_dir_sign * link_length / 2.0
+    tip_cx  = link_dir_sign * link_length
+    com_x   = (link_mass * link_cx + tip_mass * tip_cx) / total
+
+    mapi = UsdPhysics.MassAPI.Apply(prim)
+    mapi.CreateMassAttr(float(total))
+    mapi.CreateCenterOfMassAttr(Gf.Vec3f(float(com_x), 0.0, 0.0))
+
+    Lx, Ly, Lz = float(link_length), LINK_BOX_W, LINK_BOX_T
+    Ixx_link_own = link_mass / 12.0 * (Ly * Ly + Lz * Lz)
+    Iyy_link_own = link_mass / 12.0 * (Lx * Lx + Lz * Lz)
+    Izz_link_own = link_mass / 12.0 * (Lx * Lx + Ly * Ly)
+    d_link = link_cx - com_x
+    Iyy_link = Iyy_link_own + link_mass * d_link * d_link
+    Izz_link = Izz_link_own + link_mass * d_link * d_link
+    d_tip = tip_cx - com_x
+    Iyy_tip = tip_mass * d_tip * d_tip
+    Izz_tip = tip_mass * d_tip * d_tip
+
+    Ixx_tot = Ixx_link_own  # point mass on the X axis contributes zero Ixx
+    Iyy_tot = Iyy_link + Iyy_tip
+    Izz_tot = Izz_link + Izz_tip
+    mapi.CreateDiagonalInertiaAttr(Gf.Vec3f(Ixx_tot, Iyy_tot, Izz_tot))
+    mapi.CreatePrincipalAxesAttr(Gf.Quatf(1.0, 0.0, 0.0, 0.0))
+
+
+def _apply_mass_link_plus_tip_z(prim, link_mass, tip_mass, link_length, link_dir_sign):
+    """Uniform link box along +/- Z with a point mass at the link tip.
+
+    link_dir_sign = +1 means the link extends in body-local +Z; -1 means -Z.
+    Used for the wrist body (link + Orbbec camera at the tip).
+    """
+    total = link_mass + tip_mass
+    link_cz = link_dir_sign * link_length / 2.0
+    tip_cz  = link_dir_sign * link_length
+    com_z   = (link_mass * link_cz + tip_mass * tip_cz) / total
+
+    mapi = UsdPhysics.MassAPI.Apply(prim)
+    mapi.CreateMassAttr(float(total))
+    mapi.CreateCenterOfMassAttr(Gf.Vec3f(0.0, 0.0, float(com_z)))
+
+    Lx, Ly, Lz = LINK_BOX_T, LINK_BOX_W, float(link_length)
+    Ixx_link_own = link_mass / 12.0 * (Ly * Ly + Lz * Lz)
+    Iyy_link_own = link_mass / 12.0 * (Lx * Lx + Lz * Lz)
+    Izz_link_own = link_mass / 12.0 * (Lx * Lx + Ly * Ly)
+    # Parallel axis shift from (0, 0, link_cz) to composite COM at (0, 0, com_z).
+    d_link = link_cz - com_z
+    Ixx_link = Ixx_link_own + link_mass * d_link * d_link
+    Iyy_link = Iyy_link_own + link_mass * d_link * d_link
+    # Point-mass tip at (0, 0, tip_cz), parallel axis to composite COM.
+    d_tip = tip_cz - com_z
+    Ixx_tip = tip_mass * d_tip * d_tip
+    Iyy_tip = tip_mass * d_tip * d_tip
+
+    Ixx_tot = Ixx_link + Ixx_tip
+    Iyy_tot = Iyy_link + Iyy_tip
+    Izz_tot = Izz_link_own  # point mass + box rotation about z axis is just the box
+    mapi.CreateDiagonalInertiaAttr(Gf.Vec3f(Ixx_tot, Iyy_tot, Izz_tot))
+    mapi.CreatePrincipalAxesAttr(Gf.Quatf(1.0, 0.0, 0.0, 0.0))
+
+
+def _add_arm_link_visual(stage, path, center, size, color):
+    """Cosmetic box (no collision) for an arm link."""
+    cube = UsdGeom.Cube.Define(stage, path)
+    cube.GetSizeAttr().Set(1.0)
+    xf = UsdGeom.Xformable(cube.GetPrim())
+    xf.ClearXformOpOrder()
+    xf.AddTranslateOp().Set(Gf.Vec3d(*center))
+    xf.AddScaleOp().Set(Gf.Vec3d(*size))
+    cube.GetDisplayColorAttr().Set(Vt.Vec3fArray([Gf.Vec3f(*color)]))
+
+
+def _add_arm_joint(stage, joint_path, body0, body1, localPos0, axis, limit_deg):
+    """Revolute joint + position-mode DriveAPI. Child localPos1 = origin."""
+    joint = UsdPhysics.RevoluteJoint.Define(stage, joint_path)
+    joint.CreateBody0Rel().SetTargets([Sdf.Path(body0)])
+    joint.CreateBody1Rel().SetTargets([Sdf.Path(body1)])
+    joint.CreateLocalPos0Attr().Set(Gf.Vec3f(*localPos0))
+    joint.CreateLocalPos1Attr().Set(Gf.Vec3f(0.0, 0.0, 0.0))
+    joint.CreateLocalRot0Attr().Set(Gf.Quatf(1, 0, 0, 0))
+    joint.CreateLocalRot1Attr().Set(Gf.Quatf(1, 0, 0, 0))
+    joint.CreateAxisAttr(axis)
+    lo, hi = limit_deg
+    joint.CreateLowerLimitAttr(float(lo))
+    joint.CreateUpperLimitAttr(float(hi))
+
+    drive = UsdPhysics.DriveAPI.Apply(joint.GetPrim(), "angular")
+    drive.CreateStiffnessAttr(ARM_STIFFNESS_NM_PER_DEG)
+    drive.CreateDampingAttr(ARM_DAMPING_NMS_PER_DEG)
+    drive.CreateMaxForceAttr(ARM_MAX_FORCE_NM)
+    drive.CreateTargetPositionAttr(0.0)
+
+
+def build_arm(stage, robot_path, chassis_path):
+    """Build the 4-DOF arm as additional rigid bodies in the chassis articulation.
+
+    Flat stowed pose at q = (0, 0, 0, 0): arm lays folded on top of the chassis
+    with the yaw base at the back edge of the chassis and the links stacked
+    parallel to the chassis top surface.
+
+      - J1_base     : vertical 5" motor stack from chassis top  (link +Z)
+      - J2_shoulder : L2 22.68" horizontal, +X toward chassis front (link +X)
+      - J3_elbow    : L3 19.69" horizontal, folded -X toward back  (link -X)
+      - J4_wrist+cam: L4  5.91" horizontal, folded +X back forward (link +X)
+
+    L2/L3/L4 are co-located in Y but stacked in Z by VIS_Z_STACK (~1.8") per
+    link to represent the motor bracket offsets between folded links.
+
+    Joint pivots in CHASSIS frame (verification):
+      J1:  (ARM_MOUNT_X,                         0, ARM_MOUNT_Z                    )
+      J2:  (ARM_MOUNT_X,                         0, ARM_MOUNT_Z + L_J1             )   top of J1
+      J3:  (ARM_MOUNT_X + L_L2,                  0, ARM_MOUNT_Z + L_J1 +   VIS     )   L2 tip + bracket
+      J4:  (ARM_MOUNT_X + L_L2 - L_L3,           0, ARM_MOUNT_Z + L_J1 + 2 VIS     )   L3 tip + bracket
+      tip: (ARM_MOUNT_X + L_L2 - L_L3 + L_L4,    0, ARM_MOUNT_Z + L_J1 + 2 VIS     )   camera
+
+    Returns the list of arm joint DOF names in creation order.
+    """
+    j1_base = robot_path + "/ArmJ1base"
+    j2_shd  = robot_path + "/ArmJ2shoulder"
+    j3_elb  = robot_path + "/ArmJ3elbow"
+    j4_wrs  = robot_path + "/ArmJ4wrist"
+
+    z_top_j1  = ARM_MOUNT_Z + L_J1                  # J2 pivot height
+    z_l3_body = z_top_j1 + VIS_Z_STACK              # L3 body plane (bracket above L2)
+    z_l4_body = z_top_j1 + 2.0 * VIS_Z_STACK        # L4 body plane (bracket above L3)
+
+    # ---- Body 1: J1 base (vertical 5" motor stack, link along +Z) ----
+    UsdGeom.Xform.Define(stage, j1_base)
+    p1 = stage.GetPrimAtPath(j1_base)
+    xf1 = UsdGeom.Xformable(p1); xf1.ClearXformOpOrder()
+    xf1.AddTranslateOp().Set(Gf.Vec3d(ARM_MOUNT_X, ARM_MOUNT_Y, ARM_MOUNT_Z))
+    UsdPhysics.RigidBodyAPI.Apply(p1)
+    PhysxSchema.PhysxRigidBodyAPI.Apply(p1).CreateMaxDepenetrationVelocityAttr(1.0)
+    _apply_mass_box_vertical(p1, mass=M_J1_BASE,
+                             com_z=L_J1 / 2.0, length_z=L_J1)
+    _add_arm_link_visual(stage, j1_base + "/vis",
+                         center=(0.0, 0.0, L_J1 / 2.0),
+                         size=(0.050, 0.050, L_J1),
+                         color=(0.55, 0.55, 0.60))
+
+    # ---- Body 2: J2 shoulder (L2 22.68", horizontal link along +X) ----
+    UsdGeom.Xform.Define(stage, j2_shd)
+    p2 = stage.GetPrimAtPath(j2_shd)
+    xf2 = UsdGeom.Xformable(p2); xf2.ClearXformOpOrder()
+    xf2.AddTranslateOp().Set(Gf.Vec3d(ARM_MOUNT_X, ARM_MOUNT_Y, z_top_j1))
+    UsdPhysics.RigidBodyAPI.Apply(p2)
+    PhysxSchema.PhysxRigidBodyAPI.Apply(p2).CreateMaxDepenetrationVelocityAttr(1.0)
+    _apply_mass_box_horizontal_x(p2, mass=M_J2_SHOULDER,
+                                 length_x=L_L2, dir_sign=+1)
+    _add_arm_link_visual(stage, j2_shd + "/vis",
+                         center=(+L_L2 / 2.0, 0.0, 0.0),
+                         size=(L_L2, LINK_BOX_W, LINK_BOX_T),
+                         color=(0.85, 0.30, 0.25))
+
+    # ---- Body 3: J3 elbow (L3 19.69", horizontal link along -X, stacked above L2) ----
+    UsdGeom.Xform.Define(stage, j3_elb)
+    p3 = stage.GetPrimAtPath(j3_elb)
+    xf3 = UsdGeom.Xformable(p3); xf3.ClearXformOpOrder()
+    xf3.AddTranslateOp().Set(Gf.Vec3d(
+        ARM_MOUNT_X + L_L2, ARM_MOUNT_Y, z_l3_body))
+    UsdPhysics.RigidBodyAPI.Apply(p3)
+    PhysxSchema.PhysxRigidBodyAPI.Apply(p3).CreateMaxDepenetrationVelocityAttr(1.0)
+    _apply_mass_box_horizontal_x(p3, mass=M_J3_ELBOW,
+                                 length_x=L_L3, dir_sign=-1)
+    _add_arm_link_visual(stage, j3_elb + "/vis",
+                         center=(-L_L3 / 2.0, 0.0, 0.0),
+                         size=(L_L3, LINK_BOX_W, LINK_BOX_T),
+                         color=(0.25, 0.75, 0.30))
+
+    # ---- Body 4: J4 wrist + camera (L4 5.91", horizontal +X, stacked above L3) ----
+    UsdGeom.Xform.Define(stage, j4_wrs)
+    p4 = stage.GetPrimAtPath(j4_wrs)
+    xf4 = UsdGeom.Xformable(p4); xf4.ClearXformOpOrder()
+    xf4.AddTranslateOp().Set(Gf.Vec3d(
+        ARM_MOUNT_X + L_L2 - L_L3, ARM_MOUNT_Y, z_l4_body))
+    UsdPhysics.RigidBodyAPI.Apply(p4)
+    PhysxSchema.PhysxRigidBodyAPI.Apply(p4).CreateMaxDepenetrationVelocityAttr(1.0)
+    _apply_mass_link_plus_tip_x(p4,
+                                link_mass=M_L4_LINK,
+                                tip_mass=M_CAMERA,
+                                link_length=L_L4,
+                                link_dir_sign=+1)
+    _add_arm_link_visual(stage, j4_wrs + "/vis",
+                         center=(+L_L4 / 2.0, 0.0, 0.0),
+                         size=(L_L4, LINK_BOX_W, LINK_BOX_T),
+                         color=(0.25, 0.30, 0.85))
+    # Camera visual (sphere at L4 tip; mass already lumped into the wrist body).
+    cam = UsdGeom.Sphere.Define(stage, j4_wrs + "/camera")
+    cam.GetRadiusAttr().Set(0.030)
+    cxf = UsdGeom.Xformable(cam.GetPrim()); cxf.ClearXformOpOrder()
+    cxf.AddTranslateOp().Set(Gf.Vec3d(L_L4, 0.0, 0.0))
+    cam.GetDisplayColorAttr().Set(Vt.Vec3fArray([Gf.Vec3f(0.05, 0.05, 0.05)]))
+
+    # ---- Joints ----
+    # J1: chassis -> J1base, axis Z (yaw). Pivot at the mount point on chassis top.
+    _add_arm_joint(stage, robot_path + "/ArmJ1",
+                   body0=chassis_path, body1=j1_base,
+                   localPos0=(ARM_MOUNT_X, ARM_MOUNT_Y, ARM_MOUNT_Z),
+                   axis="Z", limit_deg=ARM_LIMITS_DEG["ArmJ1"])
+
+    # J2: J1base -> J2shoulder, axis Y (shoulder pitch). Pivot at top of J1.
+    _add_arm_joint(stage, robot_path + "/ArmJ2",
+                   body0=j1_base, body1=j2_shd,
+                   localPos0=(0.0, 0.0, L_J1),
+                   axis="Y", limit_deg=ARM_LIMITS_DEG["ArmJ2"])
+
+    # J3: J2shoulder -> J3elbow, axis Y (elbow pitch). Pivot at L2 tip, offset
+    # up by VIS_Z_STACK to model the motor bracket that holds L3 above L2.
+    _add_arm_joint(stage, robot_path + "/ArmJ3",
+                   body0=j2_shd, body1=j3_elb,
+                   localPos0=(L_L2, 0.0, VIS_Z_STACK),
+                   axis="Y", limit_deg=ARM_LIMITS_DEG["ArmJ3"])
+
+    # J4: J3elbow -> J4wrist, axis Y (wrist pitch). Pivot at L3 tip, offset
+    # up by VIS_Z_STACK to model the bracket that holds L4 above L3.
+    _add_arm_joint(stage, robot_path + "/ArmJ4",
+                   body0=j3_elb, body1=j4_wrs,
+                   localPos0=(-L_L3, 0.0, VIS_Z_STACK),
+                   axis="Y", limit_deg=ARM_LIMITS_DEG["ArmJ4"])
+
+    return ["ArmJ1", "ArmJ2", "ArmJ3", "ArmJ4"]
+
+
+def arm_tip_world(stage):
+    """Arm-tip world position for diagnostics."""
+    prim = stage.GetPrimAtPath("/World/Robot/ArmJ4wrist")
+    if not prim.IsValid():
+        return None
+    mat = UsdGeom.Xformable(prim).ComputeLocalToWorldTransform(Usd.TimeCode.Default())
+    # Link tip = (+L_L4, 0, 0) in wrist body local frame (horizontal stowed).
+    return mat.Transform(Gf.Vec3d(L_L4, 0.0, 0.0))
+
+
 def build_robot(stage, src_parts, src_center):
     robot_path = "/World/Robot"
     chassis_path = robot_path + "/Chassis"
@@ -577,7 +912,10 @@ def build_robot(stage, src_parts, src_center):
     UsdPhysics.MassAPI.Apply(cp).CreateMassAttr(CHASSIS_MASS)
     UsdPhysics.MassAPI(cp).CreateCenterOfMassAttr(Gf.Vec3f(0, 0, 0))
     UsdPhysics.ArticulationRootAPI.Apply(cp)
-    PhysxSchema.PhysxArticulationAPI.Apply(cp)
+    physx_art = PhysxSchema.PhysxArticulationAPI.Apply(cp)
+    # Arm links have no collision shapes in phase 1, so self-collision between
+    # arm and chassis cannot fire. Keep it off explicitly anyway for clarity.
+    physx_art.CreateEnabledSelfCollisionsAttr(False)
 
     build_chassis(stage, chassis_path)
 
@@ -655,40 +993,31 @@ def build_robot(stage, src_parts, src_center):
 
         drive_joint_paths.append(djp)
 
-    # Spawn position
-    if args.reactor:
-        global SPAWN_X, SPAWN_Y, spawn_yaw
-        import sim_config as cfg
+    # Arm (Sim3 phase 1): 4 extra rigid bodies + 4 revolute joints inside the
+    # same articulation as the chassis and wheels. Must be added BEFORE the
+    # spawn transform so the arm bodies inherit the robot_path xform.
+    arm_joint_names = build_arm(stage, robot_path, chassis_path)
 
-        if args.tunnel:
-            # Tunnel spawn — from xdrive_r0_entry_v2.py
-            # Robot in the access tunnel, facing toward reactor center (+Y direction)
-            SPAWN_X = 0.0
-            SPAWN_Y = -140.0 * IN            # -3.556m, in the tunnel
-            R0_PORT_Z = -1.7 * IN            # -0.043m
-            spawn_z = R0_PORT_Z + WHEEL_RADIUS + CHASSIS_H / 2.0 + 0.05
-            spawn_yaw = 90.0                  # face +Y (toward reactor)
-        else:
-            # Outer floor near step — from xdrive_reactor.py
-            SPAWN_X = 0.0
-            SPAWN_Y = -1.59                   # 62.7" from center
-            SPAWN_FLOOR_Z = cfg.Z_OUTER_IN * IN  # -49.3"
-            spawn_z = SPAWN_FLOOR_Z + WHEEL_RADIUS + CHASSIS_H / 2.0 + 0.10
-            spawn_yaw = math.degrees(math.atan2(0 - SPAWN_Y, 0 - SPAWN_X))
-        rxf = UsdGeom.Xformable(stage.GetPrimAtPath(robot_path))
-        rxf.ClearXformOpOrder()
-        rxf.AddTranslateOp().Set(Gf.Vec3d(SPAWN_X, SPAWN_Y, spawn_z))
-        rxf.AddRotateZOp().Set(spawn_yaw)
-        r_from_origin = math.sqrt(SPAWN_X**2 + SPAWN_Y**2)
-        print(f"Reactor spawn: ({SPAWN_X:.4f}, {SPAWN_Y:.4f}, {spawn_z:.4f})m", flush=True)
-        print(f"  = ({SPAWN_X/IN:.1f}\", {SPAWN_Y/IN:.1f}\", {spawn_z/IN:.1f}\")"
-              f" R={r_from_origin/IN:.1f}\" yaw={spawn_yaw:.1f}deg", flush=True)
-        print(f"  wheel_r={WHEEL_RADIUS:.4f}m, half_h={CHASSIS_H/2/IN:.2f}\"", flush=True)
-    else:
-        spawn_z = BELLY_HEIGHT + CHASSIS_H / 2.0 + 0.01
-        rxf = UsdGeom.Xformable(stage.GetPrimAtPath(robot_path))
-        rxf.ClearXformOpOrder()
-        rxf.AddTranslateOp().Set(Gf.Vec3d(0, 0, spawn_z))
+    # Spawn position (reactor straddle pose from xdrive_realwheel.py)
+    global SPAWN_X, SPAWN_Y, spawn_yaw
+    import sim_config as cfg
+    SPAWN_X = 0.0
+    SPAWN_Y = -1.63                   # 64.2" from center (nudged 1.6" outward
+                                      # from the realwheel default of -1.59
+                                      # to give forward-cantilevered arm
+                                      # clearance from the central column)
+    SPAWN_FLOOR_Z = cfg.Z_OUTER_IN * IN  # -49.3"
+    spawn_z = SPAWN_FLOOR_Z + WHEEL_RADIUS + CHASSIS_H / 2.0 + 0.10
+    spawn_yaw = math.degrees(math.atan2(0 - SPAWN_Y, 0 - SPAWN_X))
+    rxf = UsdGeom.Xformable(stage.GetPrimAtPath(robot_path))
+    rxf.ClearXformOpOrder()
+    rxf.AddTranslateOp().Set(Gf.Vec3d(SPAWN_X, SPAWN_Y, spawn_z))
+    rxf.AddRotateZOp().Set(spawn_yaw)
+    r_from_origin = math.sqrt(SPAWN_X**2 + SPAWN_Y**2)
+    print(f"Reactor spawn: ({SPAWN_X:.4f}, {SPAWN_Y:.4f}, {spawn_z:.4f})m", flush=True)
+    print(f"  = ({SPAWN_X/IN:.1f}\", {SPAWN_Y/IN:.1f}\", {spawn_z/IN:.1f}\")"
+          f" R={r_from_origin/IN:.1f}\" yaw={spawn_yaw:.1f}deg", flush=True)
+    print(f"  wheel_r={WHEEL_RADIUS:.4f}m, half_h={CHASSIS_H/2/IN:.2f}\"", flush=True)
 
     print(f"\nChassis: {CHASSIS_L/IN:.1f}x{CHASSIS_W/IN:.1f}x{CHASSIS_H/IN:.1f}\" rect, "
           f"{CHASSIS_MASS}kg", flush=True)
@@ -697,12 +1026,45 @@ def build_robot(stage, src_parts, src_center):
           f"{NUM_ROLLERS} real rollers/wheel", flush=True)
     print(f"Wheel Z in chassis frame: {wheel_z/IN:.2f}\"", flush=True)
     print(f"Spawn Z: {spawn_z:.4f}m ({spawn_z/IN:.2f}\")", flush=True)
-    print(f"Total bodies: 1 chassis + {4} hubs + {4*NUM_ROLLERS} rollers = "
-          f"{1 + 4 + 4*NUM_ROLLERS}", flush=True)
-    print(f"Total joints: {4} drive + {4*NUM_ROLLERS} roller = "
-          f"{4 + 4*NUM_ROLLERS}", flush=True)
+    print(f"Total bodies: 1 chassis + 4 hubs + {4*NUM_ROLLERS} rollers + 4 arm = "
+          f"{1 + 4 + 4*NUM_ROLLERS + 4}", flush=True)
+    print(f"Total joints: 4 drive + {4*NUM_ROLLERS} roller + 4 arm = "
+          f"{4 + 4*NUM_ROLLERS + 4}", flush=True)
 
-    return robot_path, chassis_path, drive_joint_paths, spawn_z
+    # Arm stowed pose geometry report (chassis-local, so independent of yaw).
+    j1_x   = ARM_MOUNT_X
+    j2_x   = ARM_MOUNT_X
+    j3_x   = ARM_MOUNT_X + L_L2
+    j4_x   = ARM_MOUNT_X + L_L2 - L_L3
+    tip_x  = ARM_MOUNT_X + L_L2 - L_L3 + L_L4
+    j2_z   = ARM_MOUNT_Z + L_J1
+    j3_z   = j2_z + VIS_Z_STACK
+    j4_z   = j2_z + 2.0 * VIS_Z_STACK
+    chassis_front_x = +CHASSIS_L / 2.0
+    l2_overhang = j3_x - chassis_front_x
+    print(f"\nArm (flat stowed on chassis top, mount at chassis back edge):", flush=True)
+    print(f"  ARM_MOUNT_X = {ARM_MOUNT_X/IN:+.2f}\" (chassis back edge = {-CHASSIS_L/2/IN:+.2f}\")", flush=True)
+    print(f"  Chassis X extents: {-CHASSIS_L/2/IN:+.2f}\" to {chassis_front_x/IN:+.2f}\"", flush=True)
+    print(f"  J1 pivot (chassis frame) x,z = {j1_x/IN:+.2f}\", {ARM_MOUNT_Z/IN:+.2f}\"", flush=True)
+    print(f"  J2 pivot                 x,z = {j2_x/IN:+.2f}\", {j2_z/IN:+.2f}\"", flush=True)
+    print(f"  J3 pivot (L2 tip)        x,z = {j3_x/IN:+.2f}\", {j3_z/IN:+.2f}\"", flush=True)
+    print(f"  J4 pivot (L3 tip)        x,z = {j4_x/IN:+.2f}\", {j4_z/IN:+.2f}\"", flush=True)
+    print(f"  L4 tip (camera)          x,z = {tip_x/IN:+.2f}\", {j4_z/IN:+.2f}\"", flush=True)
+    print(f"  L2 forward overhang past chassis front = {l2_overhang/IN:+.2f}\"", flush=True)
+    print(f"  Total arm mass = "
+          f"{M_J1_BASE + M_J2_SHOULDER + M_J3_ELBOW + M_L4_LINK + M_CAMERA:.3f} kg", flush=True)
+
+    # World-frame radial check (chassis yaw = 90 deg -> chassis +X = world +Y).
+    # r(point) = |SPAWN_Y + chassis_x| for y-axis-aligned chassis at SPAWN_X = 0.
+    def _r_world_in(cx):
+        return abs(SPAWN_Y + cx) / IN
+    print(f"  World radial distance from reactor center (yaw=90):", flush=True)
+    print(f"    J1 base     r = {_r_world_in(j1_x):5.2f}\"", flush=True)
+    print(f"    L2 tip / J3 r = {_r_world_in(j3_x):5.2f}\"  (central column r~38\")", flush=True)
+    print(f"    J4 pivot    r = {_r_world_in(j4_x):5.2f}\"", flush=True)
+    print(f"    L4 tip      r = {_r_world_in(tip_x):5.2f}\"", flush=True)
+
+    return robot_path, chassis_path, drive_joint_paths, arm_joint_names, spawn_z
 
 
 # ============================================================================
@@ -807,9 +1169,11 @@ class KB:
     def __init__(self):
         self.speed = DRIVE_SPEED
         self.rspeed = ROTATE_SPEED
-        self.orbit_radius = 1.59 if args.reactor else 1.0  # 62.7" = 1.59m from xdrive_reactor.py
+        self.orbit_radius = 1.59  # 62.7" = straddle radius
         self.reset = self.pstate = self.stop = False
         self.orbit = 0
+        self.arm_speed = 0.5    # rad/s per held arm key
+        self.arm_home = False   # 'H' -> snap all arm targets to 0
         self._keys = set()
         self._inp = carb.input.acquire_input_interface()
         self._kb = omni.appwindow.get_default_app_window().get_keyboard()
@@ -823,12 +1187,19 @@ class KB:
             if k == K.R: self.reset = True
             elif k == K.P: self.pstate = True
             elif k == K.SPACE: self.stop = True
+            elif k == K.H: self.arm_home = True
             elif k == K.EQUAL:
                 self.speed = min(self.speed + 0.05, 1.0)
-                print(f"Speed: {self.speed:.2f} m/s")
+                print(f"Drive speed: {self.speed:.2f} m/s")
             elif k == K.MINUS:
                 self.speed = max(self.speed - 0.05, 0.05)
-                print(f"Speed: {self.speed:.2f} m/s")
+                print(f"Drive speed: {self.speed:.2f} m/s")
+            elif k == K.RIGHT_BRACKET:
+                self.arm_speed = min(self.arm_speed + 0.1, 2.0)
+                print(f"Arm speed: {self.arm_speed:.2f} rad/s")
+            elif k == K.LEFT_BRACKET:
+                self.arm_speed = max(self.arm_speed - 0.1, 0.1)
+                print(f"Arm speed: {self.arm_speed:.2f} rad/s")
             elif k == K.O:
                 self.orbit = (self.orbit + 2) % 3 - 1
                 labels = {-1: "CW", 0: "OFF", 1: "CCW"}
@@ -854,12 +1225,25 @@ class KB:
         w = self.rspeed * (int(K.Q in self._keys) - int(K.E in self._keys))
         return vx, vy, w
 
+    def arm_delta(self, dt):
+        """Per-joint angular delta (rad) for the 4 arm joints based on held keys.
+
+        Keys: 1/2 = J1 -/+, 3/4 = J2 -/+, 5/6 = J3 -/+, 7/8 = J4 -/+.
+        """
+        K = carb.input.KeyboardInput
+        d = np.zeros(4, dtype=np.float64)
+        d[0] = int(K.KEY_2 in self._keys) - int(K.KEY_1 in self._keys)  # J1 yaw
+        d[1] = int(K.KEY_4 in self._keys) - int(K.KEY_3 in self._keys)  # J2 shoulder
+        d[2] = int(K.KEY_6 in self._keys) - int(K.KEY_5 in self._keys)  # J3 elbow
+        d[3] = int(K.KEY_8 in self._keys) - int(K.KEY_7 in self._keys)  # J4 wrist
+        return d * self.arm_speed * dt
+
 
 # ============================================================================
 # MAIN
 # ============================================================================
 print("=" * 60, flush=True)
-print("FORTIS X-Drive (Real Omni Wheel Meshes, GPU Physics)", flush=True)
+print("FORTIS Sim3 phase 1 -- X-drive + 4-DOF arm (reactor straddle)", flush=True)
 print("=" * 60, flush=True)
 
 # Read source wheel data before setting up the scene
@@ -876,41 +1260,27 @@ UsdGeom.SetStageMetersPerUnit(stage, 1.0)
 
 build_physics_scene(stage)
 
-if args.reactor:
-    # Load reactor environment
-    print(f"Loading reactor: {REACTOR_USD}", flush=True)
-    rp = stage.DefinePrim("/World/Reactor", "Xform")
-    rp.GetReferences().AddReference(REACTOR_USD)
-    # Still add a distant light
-    dl = stage.DefinePrim("/World/Light", "DistantLight")
-    dl.CreateAttribute("inputs:intensity", Sdf.ValueTypeNames.Float).Set(500.0)
-else:
-    build_ground(stage)
+# Reactor environment + bright lighting so the arm is visible against the walls.
+print(f"Loading reactor: {REACTOR_USD}", flush=True)
+rp = stage.DefinePrim("/World/Reactor", "Xform")
+rp.GetReferences().AddReference(REACTOR_USD)
+dome = stage.DefinePrim("/World/DomeLight", "DomeLight")
+dome.CreateAttribute("inputs:intensity", Sdf.ValueTypeNames.Float).Set(1000.0)
+dome.CreateAttribute("inputs:color", Sdf.ValueTypeNames.Color3f).Set(Gf.Vec3f(1, 1, 1))
+for i, (rx, ry, rz) in enumerate([(45, 0, 0), (-45, 0, 0), (0, 45, 0), (0, -45, 0)]):
+    dl = stage.DefinePrim(f"/World/DirLight{i}", "DistantLight")
+    dl.CreateAttribute("inputs:intensity", Sdf.ValueTypeNames.Float).Set(300.0)
+    dl.CreateAttribute("inputs:color", Sdf.ValueTypeNames.Color3f).Set(Gf.Vec3f(1, 1, 1))
+    dlxf = UsdGeom.Xformable(dl); dlxf.ClearXformOpOrder()
+    dlxf.AddRotateXYZOp().Set(Gf.Vec3f(rx, ry, rz))
 
-robot_path, chassis_path, drive_joint_paths, spawn_z = build_robot(
+robot_path, chassis_path, drive_joint_paths, arm_joint_names, spawn_z = build_robot(
     stage, src_parts, src_center)
 
 for _ in range(20):
     app.update()
 
 world = World(stage_units_in_meters=1.0)
-
-# --- Contact reporting setup (before timeline play) ---
-contact_sensor = None
-contact_log = []
-if args.contact:
-    from isaacsim.sensors.physics import _sensor as _contact_sensor
-    chassis_prim = stage.GetPrimAtPath(chassis_path)
-    if not chassis_prim.HasAPI(PhysxSchema.PhysxContactReportAPI):
-        cr_api = PhysxSchema.PhysxContactReportAPI.Apply(chassis_prim)
-    else:
-        cr_api = PhysxSchema.PhysxContactReportAPI(chassis_prim)
-    cr_api.CreateThresholdAttr().Set(0)
-    # Prevent chassis from sleeping (sleep suppresses contact events)
-    prb = PhysxSchema.PhysxRigidBodyAPI.Apply(chassis_prim)
-    prb.CreateSleepThresholdAttr(0.0)
-    contact_sensor = _contact_sensor.acquire_contact_sensor_interface()
-    print("Contact reporting ENABLED on chassis", flush=True)
 
 omni.timeline.get_timeline_interface().play()
 for _ in range(10):
@@ -954,14 +1324,46 @@ if len(drive_dof_indices) != 4:
 
 print(f"Drive DOF indices: {drive_dof_indices}", flush=True)
 
+# Find arm DOF indices by name (non-deterministic DOF ordering gotcha).
+arm_dof_indices = []
+for name in arm_joint_names:
+    found = -1
+    for i, dn in enumerate(dof_names):
+        if dn == name or dn.endswith("/" + name) or name in dn:
+            found = i
+            break
+    if found < 0:
+        print(f"FATAL: arm joint {name} not found in DOF names {dof_names}", flush=True)
+        app.close()
+        sys.exit(1)
+    arm_dof_indices.append(found)
+arm_idx_np = np.array(arm_dof_indices, dtype=np.int64)
+print(f"Arm DOF indices: {arm_dof_indices} -> {[dof_names[i] for i in arm_dof_indices]}",
+      flush=True)
+
+# Default everything to velocity mode, then flip only the arm DOFs to position.
 art.switch_control_mode("velocity", joint_indices=np.arange(ndof))
+art.switch_control_mode("position", joint_indices=arm_idx_np)
 
-# Set roller joints to near-zero damping (they should spin freely)
-# The drive joints already have damping from USD
+# Arm position targets buffer (radians). Starts at q=0 = stowed pose.
+arm_targets = np.zeros(4, dtype=np.float64)
 
-# Settle — print Z every 0.5s to track drop
-print("Settling 2s...", flush=True)
+def _apply_arm_targets():
+    """Write the current arm_targets buffer to the 4 arm DOFs of the articulation."""
+    if not art.is_physics_handle_valid():
+        return
+    # With joint_indices, the positions tensor is subset-sized: (num_envs=1, 4).
+    art.set_joint_position_targets(
+        arm_targets.reshape(1, -1),
+        joint_indices=arm_idx_np,
+    )
+
+_apply_arm_targets()
+
+# Settle 2s with zero drive + stowed arm.
+print("Settling 2s (stowed arm)...", flush=True)
 for i in range(2 * PHYSICS_HZ):
+    _apply_arm_targets()
     world.step(render=not headless)
     if i % (PHYSICS_HZ // 2) == 0:
         s = get_state(art, stage, chassis_path)
@@ -973,314 +1375,150 @@ for i in range(2 * PHYSICS_HZ):
 print_state(art, stage, chassis_path, 0)
 
 # ============================================================================
-# Contact test mode: drive forward through R0, log all chassis-reactor contacts
+# Spawn self-check (delta-based, 30 frames)
 # ============================================================================
-if args.contact:
-    import json
-    render = not headless
-    drive_speed = args.drive_speed
-    drive_time = args.drive_time
-    total_frames = int(drive_time * PHYSICS_HZ)
+def _snap_state():
+    s = get_state(art, stage, chassis_path)
+    try:
+        jp = art.get_joint_positions()
+    except Exception:
+        jp = None
+    return s, (jp.flatten() if jp is not None else np.zeros(ndof))
 
-    # In tunnel mode, robot faces +Y (yaw=90). "Forward" in chassis frame = +X local.
-    # The IK takes vx=forward, vy=strafe in chassis frame.
-    print(f"\n{'='*60}", flush=True)
-    print(f"CONTACT TEST: drive forward at {drive_speed} m/s for {drive_time}s", flush=True)
-    print(f"  Total frames: {total_frames} at {PHYSICS_HZ}Hz", flush=True)
-    print(f"{'='*60}\n", flush=True)
+print("\nSpawn self-check (30 frames delta)...", flush=True)
+s0, jp0 = _snap_state()
+for _ in range(30):
+    _apply_arm_targets()
+    world.step(render=not headless)
+s1, jp1 = _snap_state()
 
-    tv = xdrive_ik(drive_speed, 0, 0)
-    va = np.zeros(ndof)
-    for ii, di in enumerate(drive_dof_indices):
-        va[di] = tv[ii]
+arm_delta_check = jp1[arm_idx_np] - jp0[arm_idx_np]
+wheel_delta_check = jp1[np.array(drive_dof_indices)] - jp0[np.array(drive_dof_indices)]
+lat_drift = 0.0
+if s0 and s1:
+    lat_drift = math.sqrt((s1["pos"][0] - s0["pos"][0])**2 +
+                          (s1["pos"][1] - s0["pos"][1])**2)
 
-    contact_count = 0
-    for frame in range(total_frames):
-        if art.is_physics_handle_valid():
-            art.set_joint_velocity_targets(va.reshape(1, -1))
-        world.step(render=render)
+arm_ok = np.max(np.abs(arm_delta_check)) < 0.02    # 1.1 deg
+wheel_ok = np.max(np.abs(wheel_delta_check)) < 0.05
+drift_ok = lat_drift < 0.02
 
-        # Poll contacts
-        contacts = read_chassis_contacts(contact_sensor, chassis_path)
-        if contacts:
-            s = get_state(art, stage, chassis_path)
-            if s:
-                p = s["pos"]
-                yaw, pitch, roll = get_chassis_orientation(stage, chassis_path)
-                yaw_rad = math.radians(yaw)
-                t = frame / PHYSICS_HZ
-                for ct in contacts:
-                    imp = ct["impulse"]
-                    imp_mag = math.sqrt(imp[0]**2 + imp[1]**2 + imp[2]**2)
-                    force_n = imp_mag * PHYSICS_HZ
-                    lx, ly, lz = world_to_chassis_local(ct["position"], p, yaw_rad)
-                    entry = {
-                        "time": round(t, 4),
-                        "frame": frame,
-                        "world_pos": [round(x, 5) for x in ct["position"]],
-                        "local_pos": [round(lx, 5), round(ly, 5), round(lz, 5)],
-                        "normal": [round(x, 4) for x in ct["normal"]],
-                        "force_N": round(force_n, 2),
-                        "chassis_pos": [round(float(p[0]), 5), round(float(p[1]), 5), round(float(p[2]), 5)],
-                        "chassis_ypr": [round(yaw, 2), round(pitch, 2), round(roll, 2)],
-                        "reactor_prim": ct["other"],
-                    }
-                    contact_log.append(entry)
-                    contact_count += 1
+print(f"  arm joint delta (rad):   {arm_delta_check}  -> {'OK' if arm_ok else 'FAIL'}",
+      flush=True)
+print(f"  wheel joint delta (rad): {wheel_delta_check}  -> {'OK' if wheel_ok else 'FAIL'}",
+      flush=True)
+print(f"  chassis lateral drift:   {lat_drift*1000:.2f} mm  -> {'OK' if drift_ok else 'FAIL'}",
+      flush=True)
+tip = arm_tip_world(stage)
+if tip is not None:
+    r_tip = math.sqrt(tip[0]**2 + tip[1]**2)
+    print(f"  arm tip world: ({tip[0]:.3f}, {tip[1]:.3f}, {tip[2]:.3f}) m  "
+          f"r={r_tip:.3f} m ({r_tip/IN:.1f}\")", flush=True)
+if not (arm_ok and wheel_ok and drift_ok):
+    print("  ** SPAWN COLLISION OR DRIFT DETECTED -- continuing to GUI so you can see it **",
+          flush=True)
 
-        # Status every second
-        if frame % PHYSICS_HZ == 0:
-            s = get_state(art, stage, chassis_path)
-            if s:
-                p = s["pos"]
-                yaw, pitch, roll = get_chassis_orientation(stage, chassis_path)
-                ct_this_sec = sum(1 for e in contact_log if e["time"] >= frame/PHYSICS_HZ - 1)
-                print(f"[{frame/PHYSICS_HZ:.0f}s] pos=({p[0]/IN:.1f},{p[1]/IN:.1f},{p[2]/IN:.1f})\" "
-                      f"ypr=({yaw:.1f},{pitch:.1f},{roll:.1f}) "
-                      f"contacts_total={contact_count} last_sec={ct_this_sec}", flush=True)
-
-    # Save results
-    results_dir = os.path.join(BASE_DIR, "results")
-    os.makedirs(results_dir, exist_ok=True)
-    results = {
-        "test": "r0_entry_contact",
-        "params": {
-            "drive_speed_mps": drive_speed,
-            "drive_time_s": drive_time,
-            "belly_height_in": args.belly,
-            "physics_hz": PHYSICS_HZ,
-            "chassis_dims_in": [CHASSIS_L/IN, CHASSIS_W/IN, CHASSIS_H/IN],
-            "wheel_radius_mm": TARGET_DIA_MM / 2.0,
-        },
-        "summary": {
-            "total_contacts": len(contact_log),
-            "total_frames": total_frames,
-            "frames_with_contact": len(set(e["frame"] for e in contact_log)),
-        },
-        "contacts": contact_log,
-    }
-
-    # Add summary stats if there were contacts
-    if contact_log:
-        forces = [e["force_N"] for e in contact_log]
-        local_xs = [e["local_pos"][0] for e in contact_log]
-        local_ys = [e["local_pos"][1] for e in contact_log]
-        pitches = [e["chassis_ypr"][1] for e in contact_log]
-        results["summary"]["peak_force_N"] = round(max(forces), 2)
-        results["summary"]["mean_force_N"] = round(sum(forces)/len(forces), 2)
-        results["summary"]["first_contact_time_s"] = contact_log[0]["time"]
-        results["summary"]["last_contact_time_s"] = contact_log[-1]["time"]
-        results["summary"]["local_x_range"] = [round(min(local_xs)/IN, 2), round(max(local_xs)/IN, 2)]
-        results["summary"]["local_y_range"] = [round(min(local_ys)/IN, 2), round(max(local_ys)/IN, 2)]
-        results["summary"]["pitch_range_deg"] = [round(min(pitches), 1), round(max(pitches), 1)]
-
-    out_path = os.path.join(results_dir, "r0_contact_report.json")
-    with open(out_path, "w") as f:
-        json.dump(results, f, indent=2)
-
-    print(f"\n{'='*60}", flush=True)
-    print(f"CONTACT REPORT SAVED: {out_path}", flush=True)
-    print(f"  Total contact events: {len(contact_log)}", flush=True)
-    print(f"  Frames with contact: {results['summary']['frames_with_contact']} / {total_frames}", flush=True)
-    if contact_log:
-        print(f"  Peak force: {results['summary']['peak_force_N']:.1f} N", flush=True)
-        print(f"  First contact at t={results['summary']['first_contact_time_s']:.2f}s", flush=True)
-        print(f"  Chassis local X range: {results['summary']['local_x_range']} in", flush=True)
-        print(f"  Chassis local Y range: {results['summary']['local_y_range']} in", flush=True)
-        print(f"  Pitch range: {results['summary']['pitch_range_deg']} deg", flush=True)
-    else:
-        print("  NO chassis-reactor contacts detected!", flush=True)
-    print(f"{'='*60}", flush=True)
-
-    # Generate visualization
-    if contact_log:
-        try:
-            import matplotlib
-            matplotlib.use("Agg")
-            import matplotlib.pyplot as plt
-            from matplotlib.patches import FancyBboxPatch, Rectangle
-            from matplotlib.collections import PathCollection
-
-            fig, axes = plt.subplots(2, 2, figsize=(16, 12))
-            fig.suptitle(f"R0 Entry Contact Analysis — belly={args.belly}\" speed={drive_speed}m/s",
-                         fontsize=14, fontweight="bold")
-
-            # 1. Top-down chassis outline with contact heatmap (local frame)
-            ax = axes[0, 0]
-            lx_in = [e["local_pos"][0]/IN for e in contact_log]
-            ly_in = [e["local_pos"][1]/IN for e in contact_log]
-            forces_plot = [e["force_N"] for e in contact_log]
-            sc = ax.scatter(lx_in, ly_in, c=forces_plot, cmap="hot", s=4, alpha=0.5)
-            plt.colorbar(sc, ax=ax, label="Force (N)")
-            # Draw chassis outline
-            chl = CHASSIS_L / 2.0 / IN
-            chw = CHASSIS_W / 2.0 / IN
-            cc = CHAMFER_CUT / IN
-            oct_x = [chl, chl, chl-cc, -(chl-cc), -chl, -chl, -(chl-cc), chl-cc, chl]
-            oct_y = [-(chw-cc), chw-cc, chw, chw, chw-cc, -(chw-cc), -chw, -chw, -(chw-cc)]
-            ax.plot(oct_x, oct_y, 'b-', linewidth=2, label="Chassis outline")
-            ax.set_xlabel("Local X (in) — +X = forward")
-            ax.set_ylabel("Local Y (in)")
-            ax.set_title("Contact Points on Chassis (top-down)")
-            ax.set_aspect("equal")
-            ax.legend(fontsize=8)
-            ax.grid(True, alpha=0.3)
-
-            # 2. Side view: local X vs local Z
-            ax = axes[0, 1]
-            lz_in = [e["local_pos"][2]/IN for e in contact_log]
-            sc2 = ax.scatter(lx_in, lz_in, c=forces_plot, cmap="hot", s=4, alpha=0.5)
-            plt.colorbar(sc2, ax=ax, label="Force (N)")
-            # Draw chassis side profile
-            half_h = CHASSIS_H / 2.0 / IN
-            belly_h = BELLY_HEIGHT / IN
-            ml = MOTOR_MOUNT_LEN / IN
-            af = ARCH_FLAT_WIDTH / 2.0 / IN
-            re = chl - ml
-            ax.plot([-chl, -re, -af, af, re, chl], [-half_h]*2 + [-half_h+belly_h]*2 + [-half_h]*2,
-                    'b-', linewidth=2, label="Belly profile")
-            ax.axhline(-half_h, color='gray', linestyle='--', alpha=0.5)
-            ax.axhline(half_h, color='gray', linestyle='--', alpha=0.5)
-            ax.set_xlabel("Local X (in) — +X = forward")
-            ax.set_ylabel("Local Z (in)")
-            ax.set_title("Contact Points (side view)")
-            ax.legend(fontsize=8)
-            ax.grid(True, alpha=0.3)
-
-            # 3. Timeline: pitch + contact force over time
-            ax = axes[1, 0]
-            times = [e["time"] for e in contact_log]
-            ax.scatter(times, forces_plot, c="red", s=2, alpha=0.3, label="Contact force")
-            ax.set_xlabel("Time (s)")
-            ax.set_ylabel("Force (N)", color="red")
-            ax.tick_params(axis="y", labelcolor="red")
-            ax2 = ax.twinx()
-            ax2.scatter(times, [e["chassis_ypr"][1] for e in contact_log],
-                       c="blue", s=2, alpha=0.3, label="Pitch")
-            ax2.set_ylabel("Pitch (deg)", color="blue")
-            ax2.tick_params(axis="y", labelcolor="blue")
-            ax.set_title("Contact Force & Pitch vs Time")
-            ax.grid(True, alpha=0.3)
-
-            # 4. World-space contact positions (bird's eye)
-            ax = axes[1, 1]
-            wx = [e["world_pos"][0]/IN for e in contact_log]
-            wy = [e["world_pos"][1]/IN for e in contact_log]
-            sc4 = ax.scatter(wx, wy, c=times, cmap="viridis", s=4, alpha=0.5)
-            plt.colorbar(sc4, ax=ax, label="Time (s)")
-            ax.set_xlabel("World X (in)")
-            ax.set_ylabel("World Y (in)")
-            ax.set_title("Contact Points in World (bird's eye)")
-            ax.set_aspect("equal")
-            ax.grid(True, alpha=0.3)
-
-            plt.tight_layout()
-            plot_path = os.path.join(results_dir, "r0_contact_report.png")
-            fig.savefig(plot_path, dpi=150)
-            plt.close(fig)
-            print(f"Plot saved: {plot_path}", flush=True)
-        except Exception as ex:
-            print(f"WARNING: Could not generate plot: {ex}", flush=True)
-
-    omni.timeline.get_timeline_interface().stop()
-    app.close()
-    sys.exit(0)
-
+# ============================================================================
+# Headless smoke test (optional) -- just reports status and exits.
+# ============================================================================
 if headless:
-    for test_name, tvx, tvy, tw in [
-        ("forward", 0.2, 0, 0),
-        ("strafe left", 0, 0.2, 0),
-        ("rotate CW", 0, 0, -0.5),
-    ]:
-        print(f"\nTest: {test_name} for 2s...", flush=True)
-        tv = xdrive_ik(tvx, tvy, tw)
-        va = np.zeros(ndof)
-        for ii, di in enumerate(drive_dof_indices):
-            va[di] = tv[ii]
-        for _ in range(2 * PHYSICS_HZ):
-            art.set_joint_velocity_targets(va.reshape(1, -1))
-            world.step(render=False)
-        print_state(art, stage, chassis_path, 0)
-        art.set_joint_velocity_targets(np.zeros((1, ndof)))
-        for _ in range(PHYSICS_HZ):
-            world.step(render=False)
-
+    print("\nHeadless smoke test: 2s hold + report.", flush=True)
+    for _ in range(2 * PHYSICS_HZ):
+        _apply_arm_targets()
+        world.step(render=False)
+    print_state(art, stage, chassis_path, 0)
     omni.timeline.get_timeline_interface().stop()
     app.close()
     sys.exit(0)
 
-# GUI
-kb = KB()
-if args.reactor:
-    spawn_pos = [SPAWN_X, SPAWN_Y, spawn_z]
-    spawn_yaw_reset = spawn_yaw
-else:
-    spawn_pos = [0, 0, spawn_z]
-    spawn_yaw_reset = 0.0
-print("\nControls:", flush=True)
-print("  Arrows = translate  |  Q/E = rotate  |  +/- = speed", flush=True)
-print("  O = orbit toggle  |  9/0 = orbit radius", flush=True)
-print("  R = reset  |  P = print state  |  Space = stop", flush=True)
-if contact_sensor:
-    print("  Contact reporting active — scrape events logged to console", flush=True)
 
+# ============================================================================
+# GUI main loop (drive wheels in velocity mode + arm in position mode)
+# ============================================================================
+kb = KB()
+spawn_pos = [SPAWN_X, SPAWN_Y, spawn_z]
+spawn_yaw_reset = spawn_yaw
+
+print("\nControls:", flush=True)
+print("  Drive:   Arrows=translate  Q/E=rotate  +/-=drive speed", flush=True)
+print("           O=orbit toggle    9/0=orbit radius", flush=True)
+print("  Arm:     1/2=J1  3/4=J2  5/6=J3  7/8=J4  (hold to move)", flush=True)
+print("           H=home (all arm joints -> 0)   [ / ]=arm speed", flush=True)
+print("  Misc:    R=reset  P=print state  Space=stop", flush=True)
+
+# Joint limits in radians (for clamping arm_targets inside the USD limits).
+arm_lim_rad = np.array([
+    [math.radians(ARM_LIMITS_DEG[n][0]), math.radians(ARM_LIMITS_DEG[n][1])]
+    for n in arm_joint_names
+])
+
+dt = 1.0 / PHYSICS_HZ
 frame = 0
 while app.is_running():
     vx, vy, w = kb.cmd()
 
+    # Stop: zero wheel velocity (arm holds its current targets).
     if kb.stop:
         kb.stop = False
         art.set_joint_velocity_targets(np.zeros((1, ndof)))
         vx = vy = w = 0.0
 
-    elif kb.reset:
+    # Reset: move robot back to spawn pose and re-init the articulation.
+    if kb.reset:
         kb.reset = False
         omni.timeline.get_timeline_interface().stop()
         for _ in range(5): app.update()
         rxf = UsdGeom.Xformable(stage.GetPrimAtPath(robot_path))
         rxf.ClearXformOpOrder()
         rxf.AddTranslateOp().Set(Gf.Vec3d(*spawn_pos))
-        if spawn_yaw_reset != 0.0:
-            rxf.AddRotateZOp().Set(spawn_yaw_reset)
+        rxf.AddRotateZOp().Set(spawn_yaw_reset)
         omni.timeline.get_timeline_interface().play()
         for _ in range(10): app.update()
         art = Articulation(chassis_path)
         art.initialize()
         for _ in range(10): world.step(render=True)
         art.switch_control_mode("velocity", joint_indices=np.arange(ndof))
-        contact_log.clear()
-        print("RESET (contact log cleared)", flush=True)
+        art.switch_control_mode("position", joint_indices=arm_idx_np)
+        arm_targets[:] = 0.0
+        _apply_arm_targets()
+        print("RESET (arm to stowed)", flush=True)
         continue
 
+    # Arm home: snap all targets to zero.
+    if kb.arm_home:
+        kb.arm_home = False
+        arm_targets[:] = 0.0
+        print("Arm HOME -> stowed", flush=True)
+
+    # Integrate held arm keys into target positions, then clamp.
+    arm_targets += kb.arm_delta(dt)
+    arm_targets = np.clip(arm_targets, arm_lim_rad[:, 0], arm_lim_rad[:, 1])
+
+    # Wheels (velocity mode): write all DOFs at once; non-drive DOFs stay 0.
     tv = xdrive_ik(vx, vy, w)
     va = np.zeros(ndof)
     for ii, di in enumerate(drive_dof_indices):
         va[di] = tv[ii]
-    art.set_joint_velocity_targets(va.reshape(1, -1))
+    if art.is_physics_handle_valid():
+        art.set_joint_velocity_targets(va.reshape(1, -1))
+        _apply_arm_targets()
+
     world.step(render=True)
     frame += 1
-
-    # Log contacts in GUI mode too
-    if contact_sensor:
-        contacts = read_chassis_contacts(contact_sensor, chassis_path)
-        if contacts:
-            s = get_state(art, stage, chassis_path)
-            if s:
-                p = s["pos"]
-                yaw, pitch, roll = get_chassis_orientation(stage, chassis_path)
-                for ct in contacts:
-                    imp = ct["impulse"]
-                    force_n = math.sqrt(imp[0]**2 + imp[1]**2 + imp[2]**2) * PHYSICS_HZ
-                    if frame % 30 == 0:  # don't spam console every frame
-                        print(f"  SCRAPE frame={frame} force={force_n:.1f}N "
-                              f"at world=({ct['position'][0]/IN:.1f},{ct['position'][1]/IN:.1f},"
-                              f"{ct['position'][2]/IN:.1f})\" pitch={pitch:.1f}deg", flush=True)
 
     if kb.pstate:
         kb.pstate = False
         print_state(art, stage, chassis_path, frame)
-        print(f"  Cmd: vx={vx:.2f} vy={vy:.2f} w={w:.2f}", flush=True)
+        print(f"  Drive cmd: vx={vx:.2f} vy={vy:.2f} w={w:.2f}", flush=True)
+        print(f"  Arm targets (deg): "
+              f"[{', '.join(f'{math.degrees(x):+.1f}' for x in arm_targets)}]", flush=True)
+        tip = arm_tip_world(stage)
+        if tip is not None:
+            r_tip = math.sqrt(tip[0]**2 + tip[1]**2)
+            print(f"  Arm tip: ({tip[0]:.3f}, {tip[1]:.3f}, {tip[2]:.3f}) m  "
+                  f"r={r_tip:.3f} m ({r_tip/IN:.1f}\")", flush=True)
 
+    # Once-per-second chassis + arm-q status line.
     if frame % PHYSICS_HZ == 0:
         s = get_state(art, stage, chassis_path)
         if s:
@@ -1288,11 +1526,14 @@ while app.is_running():
             prim = stage.GetPrimAtPath(chassis_path)
             mat = UsdGeom.Xformable(prim).ComputeLocalToWorldTransform(Usd.TimeCode.Default())
             yaw = math.degrees(math.atan2(mat[1][0], mat[0][0]))
-            jv_str = ""
-            if s["jv"] is not None:
-                drive_vels = [s["jv"].flatten()[di] for di in drive_dof_indices]
-                jv_str = f" wv=[{','.join(f'{x:.1f}' for x in drive_vels)}]"
+            try:
+                jp_now = art.get_joint_positions().flatten()
+                arm_q_deg = [math.degrees(jp_now[i]) for i in arm_dof_indices]
+                aq_str = f" arm=[{','.join(f'{x:+.0f}' for x in arm_q_deg)}]"
+            except Exception:
+                aq_str = ""
             print(f"[{frame/PHYSICS_HZ:.0f}s] pos=({p[0]/IN:.1f},{p[1]/IN:.1f},{p[2]/IN:.1f})\" "
-                  f"yaw={yaw:.1f}deg{jv_str}", flush=True)
+                  f"yaw={yaw:.1f}deg{aq_str}", flush=True)
 
 app.close()
+

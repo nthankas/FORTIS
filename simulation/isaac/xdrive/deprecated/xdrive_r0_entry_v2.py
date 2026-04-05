@@ -89,7 +89,8 @@ WHEEL_XY = {
 AXLE_ANGLES = {"FR": 45.0, "FL": 135.0, "BL": 45.0, "BR": 135.0}
 WHEEL_ORDER = ["FR", "FL", "BL", "BR"]
 
-REACTOR_SIM_USD = os.path.join(os.path.dirname(os.path.abspath(__file__)), "diiid_reactor.usd")
+REACTOR_SIM_USD = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..", "assets", "diiid_reactor.usd")
 R0_PORT_Z = -1.7 * IN
 TETHER_ANCHOR_Y = -145.0 * IN
 
