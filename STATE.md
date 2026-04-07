@@ -49,29 +49,35 @@ scratch and don't copy from anything in `deprecated/`.
 
 ## Canonical arm model
 
-**`simulation/isaac/xdrive/canonical/xdrive_reactor_arm.py`** (Sim3 phase 1)
-- 4-DOF arm on top of the realwheel chassis, reactor straddle pose
-- Link lengths from Carlos's `inverse_kinetmatic_solver.py` DH_PARAMS (not the
-  spec-doc round numbers): L_J1=127mm, L_L2=576.1mm, L_L3=500mm, L_L4=150mm
-- **Flat-stowed pose**: arm lays horizontal on chassis top, folded zigzag.
-  Mount at **chassis back edge** (`ARM_MOUNT_X = -CHASSIS_L/2`), L2 extends
-  forward over the chassis top, L3 folds back, L4 folds forward. CG sits near
-  chassis center at spawn.
-- All-NEMA-17 + Cricket Drive MK II 25:1 on every joint, maxForce = 12 Nm
-  (gearbox rated torque, not motor stall)
-- Companion spec doc: `docs/arm_spec.md`
+**`simulation/isaac/xdrive/canonical/xdrive_reactor_arm.py`** — 4-DOF
+parallel-link arm on the realwheel chassis. Flat-stowed zigzag layout, mounted
+at chassis back edge. Keyboard control of each joint + real-time torque readout.
+
+Arm spec (2026-04-06):
+- J1 (Z yaw) + J2-J4 (Y pitch), all joints 0.629 kg (NEMA 17 0.80Nm + Cricket MK II 25:1)
+- L2=17", L3=15"(-X), L4=4"(+gripper at tip)
+- CF square tube 0.79"x0.79", 0.0053 lb/in (STD)
+- Depth camera: Orbbec Gemini 2, 98g, on J2 shoulder (2" from joint, looking down arm)
+- Gripper: 500g at L4 tip
+- Total arm mass: ~2.75 kg (6.06 lb)
+- Total reach: 36" (914mm)
+- J1 stack: 86mm (NEMA 17 60mm + Cricket 26mm)
+
+**Status:** TESTING — user verification of geometry and masses before sweep.
 
 ## Active simulations (canonical + tools)
 
 | Script | Purpose | Status |
 |---|---|---|
 | `canonical/xdrive_realwheel.py` | Canonical chassis model, flat ground + reactor + R0 contact logging | WORKING |
-| `canonical/xdrive_reactor_arm.py` | Sim3 phase 1 — flat-stowed arm on realwheel in reactor straddle | WORKING (phase 1 visual verification pending final sign-off) |
+| `canonical/xdrive_reactor_arm.py` | 4-DOF parallel-link arm (36" reach) on realwheel chassis, torque readout | TESTING |
 | `tools/test_drift.py` | Flat-ground drift verification | WORKING |
 | `tools/clearance_sweep.py` | Analytical R0 clearance calc | WORKING |
 | `tools/step_arch_optimizer.py` | Belly-arch geometry optimizer | WORKING |
 | `tools/orbit_torque.py` | Torque profiling at orbit radii | WORKING |
 | `tools/measure_r0_port.py` | R0 port geometry extraction from USD | WORKING |
+| `tools/arm_pose_sweep.py` | Headless arm pose sweep (all configs, step/reactor), CSV + JSON output | NEW |
+| `tools/parse_sweep_results.py` | Aggregates sweep results, comparison tables + charts | NEW |
 | `lib/sim_config.py` | Shared reactor/geometry constants — **import this**, don't duplicate | WORKING |
 
 ## DEPRECATED — do not copy from these
@@ -87,6 +93,9 @@ wrong. **Do not use them as the base for new scripts.** Kept under
 | `deprecated/xdrive_reactor.py` | Old chassis + sphere rollers, reactor env. Superseded by `canonical/xdrive_realwheel.py --reactor` |
 | `deprecated/xdrive_reactor_v2.py` | Intermediate v2 attempt, superseded by realwheel |
 | `deprecated/xdrive_r0_entry_v2.py` | R0 entry test with wrong tether model — needs rework on top of realwheel |
+| `deprecated/xdrive_reactor_arm.py` | All-NEMA-17 + Cricket MK II arm — J2 torque insufficient (~17.5 Nm needed vs 12 Nm rated) |
+| `deprecated/arm_torque_sweep.py` | Torque/power/stability sweep for the above arm config |
+| `deprecated/arm_sweep_masses.md` | Mass breakdown for the deprecated arm config |
 
 ## Hardware (locked)
 
@@ -96,11 +105,17 @@ wrong. **Do not use them as the base for new scripts.** Kept under
 - Gearbox: REV MAXPlanetary 9:1 single cartridge (30.38 Nm at wheel @ 90% eff)
 - Robot mass: 45 lb (20.4 kg)
 
-**Arm (Sim3):**
-- Motors (J1–J4, all identical): NEMA 17 StepperOnline 17HS24-2104S, 500 g, 0.65 Nm hold
-- Gearbox (all four): Cricket Drive MK II 25:1 (85.5% eff, ±8.5 arcmin backlash, **11–12 Nm rated torque = the binding constraint**)
-- Links: carbon fiber tube (82 g total across L2/L3/L4)
-- Camera: Orbbec Gemini 2 (445 g) at J4 link tip
+**Arm:** 4-DOF parallel-link (2026-04-06)
+- Motors: NEMA 17 stepper 0.80Nm x4 (Lin Engineering / Oriental Motor)
+- Gearbox: Cricket Drive MK II 25:1 x4 (Sweep Dynamics)
+- Drivers: TMC5160-TA x4
+- Joint mass: 0.629 kg each (motor 0.58 kg + hardware 49g)
+- Links: CF square tube 0.79"x0.79", 0.0053 lb/in (STD), RockWest Composites
+- L2=17", L3=15", L4=4" (total reach 36")
+- Depth camera: Orbbec Gemini 2 (98g) on J2 shoulder, 2" from joint
+- Gripper: 500g at L4 tip
+- J1 stack: 86mm (NEMA 17 + Cricket MK II)
+- Total arm mass: ~2.75 kg (6.06 lb)
 
 ## Stability / arm rules
 
