@@ -578,6 +578,149 @@ def tipping_sweep_j1(j2_rad, j3_rad, j4_rad, arm_params,
     }
 
 
+def tipping_at_j1_tilted(j1_rad, j2_rad, j3_rad, j4_rad, arm_params,
+                          tilt_rad=0.0, tilt_axis="Y"):
+    """
+    Tipping check with chassis tilt correction for step straddling.
+
+    When the chassis straddles the step, it tilts (rolls) around the X axis.
+    The gravity vector is no longer aligned with the chassis Z axis —
+    it has a lateral component that shifts the effective CG projection.
+
+    The correction: each body's CG position, when projected onto the ground
+    plane along the TRUE gravity vector (not chassis Z), shifts laterally
+    by  body_height_above_tilt_axis * tan(tilt).
+
+    For a roll around X: the shift is in Y (toward the lower side).
+    tilt_rad > 0 means the +Y side (FL, BL wheels) is lower.
+
+    Args:
+        tilt_rad: chassis roll angle in radians (measured or computed from step)
+        tilt_axis: "Y" means step edge runs along X, chassis rolls around X
+    """
+    L2, L3, L4 = arm_params["L2"], arm_params["L3"], arm_params["L4"]
+    fk = fk_planar(j2_rad, j3_rad, j4_rad, L2, L3, L4)
+
+    c1 = math.cos(j1_rad)
+    s1 = math.sin(j1_rad)
+
+    mx = ARM_MOUNT_X
+    my = ARM_MOUNT_Y
+
+    # tan(tilt) for CG shift computation
+    tan_tilt = math.tan(tilt_rad)
+
+    # Build body list: (x, y, z_above_chassis_center, mass)
+    # z_above_chassis_center is used for the tilt shift
+    bodies = []
+    M_j = arm_params["M_joint"]
+
+    # J1 base at mount point, z = mount height above chassis center
+    j1_z = ARM_MOUNT_Z  # chassis top
+    bodies.append((mx, my, j1_z, M_j))
+
+    # Outboard bodies: fk gives (x, z) in the planar arm frame
+    # z in FK is height above J2, and J2 is at ARM_MOUNT_Z + J1_STACK_H
+    j2_z = ARM_MOUNT_Z + J1_STACK_H
+    for label, mass in [
+        ("L2_mid", arm_params["M_L2"]),
+        ("cam", arm_params["M_camera"]),
+        ("j3", M_j),
+        ("L3_mid", arm_params["M_L3"]),
+        ("j4", M_j),
+        ("L4_mid", arm_params["M_L4"]),
+        ("ee", arm_params["M_gripper"]),
+    ]:
+        fx, fz = fk[label]
+        bx = mx + fx * c1
+        by = my + fx * s1
+        bz = j2_z + fz  # height above chassis center
+        bodies.append((bx, by, bz, mass))
+
+    # Combined CG in chassis XY frame, with tilt-corrected projection
+    # For each body, the true gravity projection shifts its apparent Y
+    # position by: body_height * tan(tilt) toward the lower side (+Y).
+    total_mass = CHASSIS_MASS + sum(m for _, _, _, m in bodies)
+
+    # Chassis CG: at chassis center (0, 0, 0). Height above tilt axis = 0
+    # (the tilt axis passes through chassis center approximately)
+    cg_x = CHASSIS_MASS * 0.0
+    cg_y = CHASSIS_MASS * 0.0
+
+    for bx, by, bz, m in bodies:
+        # Tilt shifts the apparent Y by bz * tan(tilt)
+        apparent_y = by + bz * tan_tilt
+        cg_x += m * bx
+        cg_y += m * apparent_y
+    cg_x /= total_mass
+    cg_y /= total_mass
+
+    # Wheel support polygon (AABB) — same as level version
+    wheel_xs = [pos[0] for pos in WHEEL_XY.values()]
+    wheel_ys = [pos[1] for pos in WHEEL_XY.values()]
+    x_min = min(wheel_xs)
+    x_max = max(wheel_xs)
+    y_min = min(wheel_ys)
+    y_max = max(wheel_ys)
+
+    margin_front = x_max - cg_x
+    margin_back = cg_x - x_min
+    margin_left = y_max - cg_y
+    margin_right = cg_y - y_min
+    worst = min(margin_front, margin_back, margin_left, margin_right)
+
+    return {
+        "stable": worst > 0,
+        "margin_worst": worst,
+        "margin_front": margin_front,
+        "margin_back": margin_back,
+        "margin_left": margin_left,
+        "margin_right": margin_right,
+        "cg_x": cg_x,
+        "cg_y": cg_y,
+        "tilt_deg": math.degrees(tilt_rad),
+    }
+
+
+def tipping_sweep_j1_tilted(j2_rad, j3_rad, j4_rad, arm_params,
+                             tilt_rad=0.0, j1_angles_deg=None):
+    """
+    Sweep J1 yaw with tilt correction. Same interface as tipping_sweep_j1()
+    but accounts for chassis roll from step straddling.
+    """
+    if j1_angles_deg is None:
+        j1_angles_deg = list(range(0, 360, 15))
+
+    worst_margin = float("inf")
+    worst_j1 = 0.0
+    best_margin = float("-inf")
+    best_j1 = 0.0
+    n_stable = 0
+
+    for j1_deg in j1_angles_deg:
+        j1_rad = math.radians(j1_deg)
+        tip = tipping_at_j1_tilted(
+            j1_rad, j2_rad, j3_rad, j4_rad, arm_params, tilt_rad=tilt_rad)
+        if tip["margin_worst"] < worst_margin:
+            worst_margin = tip["margin_worst"]
+            worst_j1 = j1_deg
+        if tip["margin_worst"] > best_margin:
+            best_margin = tip["margin_worst"]
+            best_j1 = j1_deg
+        if tip["stable"]:
+            n_stable += 1
+
+    return {
+        "worst_margin": worst_margin,
+        "worst_j1_deg": worst_j1,
+        "best_margin": best_margin,
+        "best_j1_deg": best_j1,
+        "stable_all": n_stable == len(j1_angles_deg),
+        "n_stable": n_stable,
+        "n_total": len(j1_angles_deg),
+    }
+
+
 # ==========================================================================
 # Workspace sweep helper
 # ==========================================================================
