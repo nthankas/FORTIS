@@ -1,0 +1,31 @@
+{
+  "config": "36in_bare_step",
+  "arm_reach_in": 36.0,
+  "loaded": false,
+  "environment": "step",
+  "grid": {
+    "j2": [
+      -30,
+      150,
+      15
+    ],
+    "j3": [
+      -170,
+      170,
+      20
+    ],
+    "j4": [
+      -150,
+      150,
+      30
+    ]
+  },
+  "total_poses": 2574,
+  "n_done": 2574,
+  "n_converged": 2574,
+  "n_nan": 0,
+  "elapsed_s": 342.4277482032776,
+  "started_utc": "2026-04-08T04:41:38.827633Z",
+  "csv_path": "E:\\Capstone\\Projects\\FORTIS\\simulation\\isaac\\xdrive\\results\\arm_continuous_sweep\\36in_bare_step.csv",
+  "test_mode": false
+}

@@ -1,0 +1,31 @@
+{
+  "config": "30in_loaded_flat",
+  "arm_reach_in": 30.0,
+  "loaded": true,
+  "environment": "flat",
+  "grid": {
+    "j2": [
+      -30,
+      150,
+      15
+    ],
+    "j3": [
+      -170,
+      170,
+      20
+    ],
+    "j4": [
+      -150,
+      150,
+      30
+    ]
+  },
+  "total_poses": 2574,
+  "n_done": 2574,
+  "n_converged": 2574,
+  "n_nan": 0,
+  "elapsed_s": 381.38508439064026,
+  "started_utc": "2026-04-08T05:33:00.125765Z",
+  "csv_path": "E:\\Capstone\\Projects\\FORTIS\\simulation\\isaac\\xdrive\\results\\arm_continuous_sweep\\30in_loaded_flat.csv",
+  "test_mode": false
+}

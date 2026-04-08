@@ -1,0 +1,20 @@
+{
+  "source_csv": "results/arm_continuous_sweep/30in_bare_flat.csv",
+  "arm_reach_in": 30,
+  "loaded": false,
+  "margin_m": 0.01,
+  "max_pos_error_deg": 5.0,
+  "tipping_thresh_deg": 8.0,
+  "z_j2_floor_m": 0.28193999999999997,
+  "total": 2574,
+  "n_valid": 1890,
+  "n_rej_chassis": 380,
+  "n_rej_self_l4l2": 100,
+  "n_rej_self_l4j1": 0,
+  "n_rej_floor": 204,
+  "n_rej_converge": 0,
+  "n_rej_tipping": 0,
+  "tip_worst_margin_m": 0.033777,
+  "tip_mean_margin_m": 0.0607500783068783,
+  "tip_n_tight_10mm": 0
+}
