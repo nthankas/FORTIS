@@ -104,7 +104,7 @@ Outboard of J3: J4 joint (629 g) + L3 mass + end effector (1860 g).
 | 30" loaded | 0.30 mm | 0.12 mm | ~0.01 mm | **~0.4 mm** |
 | 24" loaded | 0.09 mm | 0.12 mm | ~0.01 mm | **~0.2 mm** |
 
-Total sag is under 1 mm even in the worst case (36" loaded, arm fully extended). The CF tube is more than stiff enough. 
+Total sag is under 1 mm even in the worst case (36" loaded, arm fully extended). The CF tube is more than stiff enough
 
 ---
 
