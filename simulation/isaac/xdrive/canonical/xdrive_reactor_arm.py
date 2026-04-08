@@ -206,9 +206,9 @@ LINK_Y = [(-1.0) * LINK_Y_SPACING,   # L2
           (+1.0) * LINK_Y_SPACING]   # L4
 
 # DriveAPI for arm joints (position mode, Nm units via USD deg convention)
-ARM_STIFFNESS = 1000.0   # Nm/deg
-ARM_DAMPING   = 100.0    # Nm*s/deg
-ARM_MAX_FORCE = 100.0    # Nm (high for free testing — real motor limits checked in sweep)
+ARM_STIFFNESS = 50.0     # Nm/deg — converges with <0.5° error, no oscillation
+ARM_DAMPING   = 10.0     # Nm*s/deg — critically damped for arm inertia
+ARM_MAX_FORCE = 500.0    # Nm — high so we measure what's NEEDED, not clamp it
 
 # Joint limits: all +-180 for testing. Real limits applied in sweep later.
 ARM_LIMITS_DEG = {

@@ -1,0 +1,20 @@
+{
+  "source_csv": "results/arm_continuous_sweep/36in_bare_step.csv",
+  "arm_reach_in": 36,
+  "loaded": false,
+  "margin_m": 0.01,
+  "max_pos_error_deg": 5.0,
+  "tipping_thresh_deg": 8.0,
+  "z_j2_floor_m": 0.28193999999999997,
+  "total": 2574,
+  "n_valid": 1880,
+  "n_rej_chassis": 353,
+  "n_rej_self_l4l2": 74,
+  "n_rej_self_l4j1": 4,
+  "n_rej_floor": 263,
+  "n_rej_converge": 0,
+  "n_rej_tipping": 0,
+  "tip_worst_margin_m": 0.025188,
+  "tip_mean_margin_m": 0.05754773031914894,
+  "tip_n_tight_10mm": 0
+}
