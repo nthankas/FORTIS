@@ -1,0 +1,108 @@
+{
+  "config": {
+    "arm_inches": 36,
+    "arm_segments_in": [
+      17.0,
+      15.0,
+      4.0
+    ],
+    "loaded": false,
+    "gripper_mass_kg": 0.5,
+    "environment": "step",
+    "physics_hz": 360,
+    "belly_height_in": 2.5,
+    "settle_frames": 720,
+    "measure_frames": 180,
+    "chassis_mass_kg": 20.4
+  },
+  "grid": {
+    "j2_range_deg": "0,90,30",
+    "j3_range_deg": "-90,90,30",
+    "j4_range_deg": "-90,90,30",
+    "j1_tipping_deg": "0,360,15",
+    "total_poses": 196,
+    "valid_poses": 193,
+    "n_underground": 3,
+    "n_chassis_fk_collision": 0,
+    "physics_poses": 193
+  },
+  "timing": {
+    "start_utc": "2026-04-07T05:57:10.926220Z",
+    "end_utc": "2026-04-07T05:58:28.548392Z",
+    "elapsed_s": 77.6,
+    "mean_pose_time_s": 0.402
+  },
+  "torques": {
+    "j1": {
+      "mean_abs_Nm": 0.10795680399299884,
+      "peak_abs_Nm": 0.4016897678375244,
+      "peak_pose_deg": [
+        0.0,
+        90.0,
+        -90.0
+      ]
+    },
+    "j2": {
+      "mean_abs_Nm": 4.148246366150525,
+      "peak_abs_Nm": 9.128154754638672,
+      "peak_pose_deg": [
+        0.0,
+        90.0,
+        -90.0
+      ]
+    },
+    "j3": {
+      "mean_abs_Nm": 3.4913458866732463,
+      "peak_abs_Nm": 4.054412364959717,
+      "peak_pose_deg": [
+        90.0,
+        0.0,
+        -90.0
+      ]
+    },
+    "j4": {
+      "mean_abs_Nm": 0.42965272996498616,
+      "peak_abs_Nm": 0.4880829155445099,
+      "peak_pose_deg": [
+        0.0,
+        60.0,
+        -90.0
+      ]
+    }
+  },
+  "tipping": {
+    "n_tipping_at_j1_0": 0,
+    "n_tipping_any_j1": 98,
+    "worst_margin_m": -0.267084,
+    "worst_pose_deg": [
+      0.0,
+      90.0,
+      -90.0
+    ],
+    "worst_j1_deg": 180.0,
+    "pct_stable_all_j1": 49.2
+  },
+  "collision": {
+    "n_collision_poses": 0,
+    "pct_collision": 0.0,
+    "chassis_drift_thresh_m": 0.003
+  },
+  "saturated": {
+    "n_saturated_poses": 95,
+    "pct_saturated": 49.2,
+    "saturation_thresh_Nm": 425.0
+  },
+  "contact": {
+    "n_contact_poses": 0,
+    "n_reactor_contact_poses": 0,
+    "pct_contact": 0.0,
+    "mean_contact_force_N": 0.0,
+    "peak_contact_force_N": 0.0,
+    "contacted_bodies": []
+  },
+  "reach": {
+    "max_ee_z_m": 0.5444,
+    "min_ee_z_m": 0.2213,
+    "max_ee_radius_m": 0.5074
+  }
+}
