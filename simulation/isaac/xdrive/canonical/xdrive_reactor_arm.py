@@ -169,7 +169,7 @@ ARM_REACH_IN = _l2_in + _l3_in + _l4_in
 # Joint mass: motor (0.58 kg) + hardware (49g) = 0.629 kg each
 M_JOINT = 0.629
 
-# CF tube: square 0.79"x0.79", linear density 0.0053 lb/in (STD)
+# CF tube: square 0.79"x0.79", linear density 0.0053 lb/in (STD) (in parts list)
 CF_DENSITY_LB_PER_IN = 0.0053
 CF_DENSITY_KG_PER_M = CF_DENSITY_LB_PER_IN * 0.453592 / IN
 M_L2 = CF_DENSITY_KG_PER_M * L_L2
