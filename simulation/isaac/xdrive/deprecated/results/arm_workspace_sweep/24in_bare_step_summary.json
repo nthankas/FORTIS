@@ -1,0 +1,43 @@
+{
+  "stats": {
+    "n_targets": 8100,
+    "n_ik_fail": 2001,
+    "n_joint_limit": 766,
+    "n_collision": 4916,
+    "n_valid": 6516,
+    "elapsed_s": 0.79
+  },
+  "arm_config": {
+    "reach_in": 24,
+    "loaded": false,
+    "L2_m": 0.3048,
+    "L3_m": 0.254,
+    "L4_m": 0.0508,
+    "max_reach_m": 0.6096
+  },
+  "env": "step",
+  "torques": {
+    "j2_peak_Nm": 8.446,
+    "j2_mean_Nm": 3.79,
+    "j2_p95_Nm": 7.648,
+    "j3_peak_Nm": 3.106,
+    "j3_mean_Nm": 2.062,
+    "j3_p95_Nm": 3.035,
+    "j4_peak_Nm": 0.25,
+    "j4_mean_Nm": 0.151,
+    "j4_p95_Nm": 0.25,
+    "any_peak_Nm": 8.446
+  },
+  "workspace": {
+    "ee_r_min_m": 0.05,
+    "ee_r_max_m": 0.5974,
+    "ee_z_min_m": -0.2319,
+    "ee_z_max_m": 0.5974
+  },
+  "tipping": {
+    "worst_margin_m": 0.04316,
+    "n_always_stable": 6516,
+    "n_sometimes_unstable": 0,
+    "pct_always_stable": 100.0
+  }
+}

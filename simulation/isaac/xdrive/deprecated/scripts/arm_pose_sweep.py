@@ -31,6 +31,10 @@ parser.add_argument("--j2-range", default="-30,150,10", help="start,stop,step")
 parser.add_argument("--j3-range", default="-150,150,10")
 parser.add_argument("--j4-range", default="-90,90,15")
 parser.add_argument("--j1-tipping", default="0,360,15", help="J1 yaw angles for analytical tipping")
+parser.add_argument("--ik-poses", type=str, default=None,
+                    help="CSV from arm_workspace_sweep.py — skip joint grid, use IK-solved poses")
+parser.add_argument("--ik-limit", type=int, default=0,
+                    help="Max poses to run from --ik-poses CSV (0=all)")
 parser.add_argument("--resume", action="store_true", help="Resume from existing CSV")
 args, _ = parser.parse_known_args()
 
@@ -174,9 +178,9 @@ LINK_Y = [(-1.0) * LINK_Y_SPACING,
           ( 0.0) * LINK_Y_SPACING,
           (+1.0) * LINK_Y_SPACING]
 
-ARM_STIFFNESS = 1000.0
-ARM_DAMPING   = 100.0
-ARM_MAX_FORCE = 100.0
+ARM_STIFFNESS = 1000.0  # Nm/deg — lock arm at target after teleport (collision check only)
+ARM_DAMPING   = 100.0   # Nm*s/deg — heavy to prevent movement after teleport
+ARM_MAX_FORCE = 5000.0  # Nm — very high: we want the arm FROZEN at the target pose
 
 ARM_LIMITS_DEG = {
     "ArmJ1": (-180.0, 180.0),
@@ -946,19 +950,37 @@ def read_ee_contacts(cs, ee_path):
 
 
 def read_chassis_contacts(cs, chassis_path_local):
-    """Read contacts on chassis body, return list of arm-body contacts."""
+    """Read contacts on chassis body, return list of arm-body contacts.
+
+    Filters out: J1 base (parent-child with chassis) and zero-force contacts
+    (PhysX reports contact events for filtered parent-child pairs with zero impulse).
+    """
     raw = cs.get_rigid_body_raw_data(chassis_path_local)
     arm_contacts = []
+    # Bodies directly connected to chassis via joints — NOT real collisions
+    PARENT_CHILD = {"ArmJ1base", "Wheel_FR", "Wheel_FL", "Wheel_BL", "Wheel_BR"}
     for c in raw:
         b0 = cs.decode_body_name(int(c["body0"]))
         b1 = cs.decode_body_name(int(c["body1"]))
         other = b1 if chassis_path_local in b0 else b0
-        # Only care about arm bodies hitting chassis
+        # Only care about arm bodies hitting chassis (not joint-connected ones)
         if "Arm" in other:
+            # Skip parent-child contacts (J1 base connected to chassis)
+            skip = False
+            for pc in PARENT_CHILD:
+                if pc in other:
+                    skip = True
+                    break
+            if skip:
+                continue
             imp = np.array([float(c["impulse"]["x"]),
                             float(c["impulse"]["y"]),
                             float(c["impulse"]["z"])])
-            arm_contacts.append({"body": other, "force_mag": np.linalg.norm(imp)})
+            force = np.linalg.norm(imp)
+            # Filter zero-force contacts (PhysX reports filtered parent-child as zero)
+            if force < 0.01:
+                continue
+            arm_contacts.append({"body": other, "force_mag": force})
     return arm_contacts
 
 
@@ -1259,24 +1281,52 @@ print(f"FORTIS Arm Pose Sweep ({ARM_REACH_IN:.0f}\" reach){_load_str} — HEADLE
       flush=True)
 print("=" * 60, flush=True)
 
-# Parse grid ranges
-j2_grid = parse_range(args.j2_range)
-j3_grid = parse_range(args.j3_range)
-j4_grid = parse_range(args.j4_range)
+# Parse grid ranges (only used when NOT using --ik-poses)
 j1_tipping_angles = parse_range(args.j1_tipping)
 
-total_poses = len(j2_grid) * len(j3_grid) * len(j4_grid)
-print(f"Grid: J2={args.j2_range} ({len(j2_grid)} pts), "
-      f"J3={args.j3_range} ({len(j3_grid)} pts), "
-      f"J4={args.j4_range} ({len(j4_grid)} pts)", flush=True)
-print(f"Total grid poses: {total_poses}", flush=True)
+# IK-pose mode: read pre-solved poses from Phase 1 CSV
+ik_pose_list = None  # list of dicts if --ik-poses
+if args.ik_poses:
+    if not os.path.exists(args.ik_poses):
+        print(f"FATAL: --ik-poses file not found: {args.ik_poses}", flush=True)
+        app.close()
+        sys.exit(1)
+    ik_pose_list = []
+    with open(args.ik_poses, "r", newline="") as ikf:
+        reader = csv.DictReader(ikf)
+        for row in reader:
+            ik_pose_list.append({
+                "j2_deg": float(row["j2_deg"]),
+                "j3_deg": float(row["j3_deg"]),
+                "j4_deg": float(row["j4_deg"]),
+                "target_r": float(row.get("target_r", 0)),
+                "target_z": float(row.get("target_z", 0)),
+                "ee_pitch_deg": float(row.get("ee_pitch_deg", 0)),
+                "tau_j2_analytical": float(row.get("tau_j2", 0)),
+                "tau_j3_analytical": float(row.get("tau_j3", 0)),
+                "tau_j4_analytical": float(row.get("tau_j4", 0)),
+            })
+    if args.ik_limit > 0:
+        ik_pose_list = ik_pose_list[:args.ik_limit]
+    total_poses = len(ik_pose_list)
+    print(f"IK-pose mode: {total_poses} poses from {args.ik_poses}", flush=True)
+else:
+    j2_grid = parse_range(args.j2_range)
+    j3_grid = parse_range(args.j3_range)
+    j4_grid = parse_range(args.j4_range)
+    total_poses = len(j2_grid) * len(j3_grid) * len(j4_grid)
+    print(f"Grid: J2={args.j2_range} ({len(j2_grid)} pts), "
+          f"J3={args.j3_range} ({len(j3_grid)} pts), "
+          f"J4={args.j4_range} ({len(j4_grid)} pts)", flush=True)
+    print(f"Total grid poses: {total_poses}", flush=True)
 print(f"J1 tipping angles: {args.j1_tipping} ({len(j1_tipping_angles)} pts)", flush=True)
 
 # Output directory
 arm_label = f"{int(ARM_REACH_IN)}arm"
 load_label = "loaded" if ARM_LOADED else "unloaded"
 env_label = "reactor" if args.reactor else ("step" if args.step else "flat")
-out_dir = os.path.join(RESULTS_ROOT, "arm_pose_sweep", f"{arm_label}_{load_label}_{env_label}")
+sweep_subdir = "arm_pose_sweep_ik" if ik_pose_list else "arm_pose_sweep"
+out_dir = os.path.join(RESULTS_ROOT, sweep_subdir, f"{arm_label}_{load_label}_{env_label}")
 os.makedirs(out_dir, exist_ok=True)
 csv_path = os.path.join(out_dir, "poses.csv")
 json_path = os.path.join(out_dir, "summary.json")
@@ -1304,44 +1354,92 @@ Z_J2_ABOVE_FLOOR = chassis_center_above_lowest + ARM_MOUNT_Z + J1_STACK_H
 print(f"J2 height above lowest floor: {Z_J2_ABOVE_FLOOR/IN:.2f}\" "
       f"({Z_J2_ABOVE_FLOOR*1000:.1f}mm)", flush=True)
 
-SETTLE_FRAMES = 360   # 1s at 360Hz
-MEASURE_FRAMES = 90   # 0.25s at 360Hz
-SETTLE_TOL_DEG = 0.5
-SETTLE_CONSEC = 10
+if ik_pose_list is not None:
+    SETTLE_FRAMES = 60    # ~0.17s at 360Hz — arm frozen at target, detect interpenetration
+    MEASURE_FRAMES = 60   # ~0.17s — check contacts and chassis orientation
+else:
+    SETTLE_FRAMES = 720   # 2s at 360Hz for joint-grid mode
+    MEASURE_FRAMES = 180  # 0.5s
+SETTLE_TOL_DEG = 0.5  # deg
+SETTLE_CONSEC = 15
 
 above_ground_count = 0
 underground_count = 0
 
-# Pre-compute above-ground mask
-above_ground_mask = {}
-for j2_deg in j2_grid:
+# Pre-compute valid pose mask via analytical FK.
+# Filter out: (a) underground poses, (b) poses where arm enters chassis bbox.
+# Chassis bbox in arm-mount frame: X from 0 to +CHASSIS_L (mount is at back edge),
+# Z from -(ARM_MOUNT_Z + J1_STACK_H) to (CHASSIS_H/2 - ARM_MOUNT_Z - J1_STACK_H + small margin).
+# We use a conservative margin so we catch collisions before they happen.
+CHASSIS_X_MAX = CHASSIS_L + 0.02  # arm mount to front of chassis + 2cm margin
+CHASSIS_Z_LOW = -(ARM_MOUNT_Z + J1_STACK_H) - 0.01  # below chassis top to chassis bottom
+CHASSIS_Z_HIGH = (CHASSIS_H / 2.0) - ARM_MOUNT_Z - J1_STACK_H + 0.02
+# Y check: arm links are at LINK_Y offsets, chassis half-width = CHASSIS_W/2
+CHASSIS_Y_HALF = CHASSIS_W / 2.0 + 0.01
+
+valid_mask = {}
+n_underground = 0
+n_chassis_collision = 0
+
+if ik_pose_list is not None:
+    # IK poses are already filtered by Phase 1 — all are valid
+    above_ground_count = len(ik_pose_list)
+    physics_pose_count = above_ground_count
+    print(f"IK-pose mode: all {above_ground_count} poses pre-validated, skipping FK filter",
+          flush=True)
+
+if ik_pose_list is None:
+  for j2_deg in j2_grid:
     for j3_deg in j3_grid:
         for j4_deg in j4_grid:
             j2_rad = math.radians(j2_deg)
             j3_rad = math.radians(j3_deg)
             j4_rad = math.radians(j4_deg)
-            # In the arm's local XZ plane (J1=0), cumulative pitch angles.
-            # L2 extends from J2 in +X direction; pitch rotates in XZ plane.
-            # Z component: positive pitch = arm goes up.
+            # FK in arm-mount XZ plane (J1=0). Origin at J2.
             A2 = j2_rad
             A23 = j2_rad + j3_rad
             A234 = j2_rad + j3_rad + j4_rad
+            # Z (vertical) positions relative to J2
             z_j3 = L_L2 * math.sin(A2)
             z_j4 = z_j3 + L_L3 * math.sin(A23)
             z_ee = z_j4 + L_L4 * math.sin(A234)
+            # X (horizontal) positions relative to arm mount (0 = back edge, +X = forward)
+            x_j3 = L_L2 * math.cos(A2)
+            x_j4 = x_j3 + L_L3 * math.cos(A23)
+            x_ee = x_j4 + L_L4 * math.cos(A234)
+
+            # Check underground
             min_z = min(z_j3, z_j4, z_ee)
-            above = (min_z + Z_J2_ABOVE_FLOOR) > 0
-            above_ground_mask[(j2_deg, j3_deg, j4_deg)] = above
-            if above:
-                above_ground_count += 1
-            else:
-                underground_count += 1
+            if (min_z + Z_J2_ABOVE_FLOOR) <= 0:
+                valid_mask[(j2_deg, j3_deg, j4_deg)] = "underground"
+                n_underground += 1
+                continue
 
-physics_pose_count = above_ground_count
-print(f"Above-ground poses: {above_ground_count} / {total_poses} "
-      f"(underground skipped: {underground_count})", flush=True)
+            # Check chassis collision: any joint/EE inside chassis bounding box?
+            # Positions are relative to arm mount. Chassis extends in +X from mount.
+            # Z is relative to J2 height; chassis top is near J2, bottom is below.
+            in_chassis = False
+            for px, pz in [(x_j3, z_j3), (x_j4, z_j4), (x_ee, z_ee)]:
+                if (0 < px < CHASSIS_X_MAX and
+                    CHASSIS_Z_LOW < pz < CHASSIS_Z_HIGH):
+                    in_chassis = True
+                    break
+            if in_chassis:
+                valid_mask[(j2_deg, j3_deg, j4_deg)] = "chassis_fk"
+                n_chassis_collision += 1
+                continue
 
-# CSV columns
+            valid_mask[(j2_deg, j3_deg, j4_deg)] = "valid"
+            above_ground_count += 1
+
+if ik_pose_list is None:
+    physics_pose_count = above_ground_count
+n_filtered = n_underground + n_chassis_collision
+print(f"Valid poses: {above_ground_count} / {total_poses} "
+      f"(underground: {n_underground}, chassis FK collision: {n_chassis_collision})",
+      flush=True)
+
+# CSV columns — base fields + IK-specific fields
 CSV_FIELDS = [
     "pose_idx", "j2_deg", "j3_deg", "j4_deg", "status",
     "tau_j1_Nm", "tau_j2_Nm", "tau_j3_Nm", "tau_j4_Nm",
@@ -1353,6 +1451,21 @@ CSV_FIELDS = [
     "ee_contact", "reactor_contact", "contact_force_N", "contact_bodies",
     "chassis_drift_m", "arm_chassis_contact",
 ]
+if ik_pose_list is not None:
+    CSV_FIELDS = [
+        "pose_idx", "j2_deg", "j3_deg", "j4_deg",
+        "target_r", "target_z", "ee_pitch_deg", "status",
+        "tau_j2_analytical", "tau_j3_analytical", "tau_j4_analytical",
+        "tau_j1_Nm", "tau_j2_Nm", "tau_j3_Nm", "tau_j4_Nm",
+        "tau_j1_peak_Nm", "tau_j2_peak_Nm", "tau_j3_peak_Nm", "tau_j4_peak_Nm",
+        "ee_x_m", "ee_y_m", "ee_z_m",
+        "margin_front_m", "margin_back_m", "margin_left_m", "margin_right_m",
+        "tipping_moment_Nm", "stable",
+        "worst_j1_margin_m", "worst_j1_deg",
+        "ee_contact", "reactor_contact", "contact_force_N", "contact_bodies",
+        "chassis_drift_m", "arm_chassis_contact",
+        "chassis_roll_deg", "chassis_pitch_deg",
+    ]
 
 # Resume logic
 completed_poses = set()
@@ -1420,7 +1533,10 @@ else:
 cr_chassis.CreateThresholdAttr().Set(0)
 print("Contact reporting ENABLED on chassis (arm collision detection)", flush=True)
 
-CHASSIS_DRIFT_THRESH = 0.003  # 3mm — if chassis moves this much, pose is invalid
+if ik_pose_list is not None:
+    CHASSIS_DRIFT_THRESH = 0.015  # 15mm — arm dynamics cause some chassis motion
+else:
+    CHASSIS_DRIFT_THRESH = 0.003  # 3mm — tight for grid mode
 
 for _ in range(20):
     app.update()
@@ -1545,15 +1661,24 @@ all_ee_z = []
 all_ee_radius = []
 pose_times = []
 n_collision = 0
+n_saturated = 0
 
 pose_idx = 0
 physics_done = 0
 
 print(f"\nStarting sweep: {total_poses} total, {physics_pose_count} physics poses", flush=True)
 
-for j2_deg in j2_grid:
-    for j3_deg in j3_grid:
-        for j4_deg in j4_grid:
+# Build flat pose iterator for both modes
+if ik_pose_list is not None:
+    _pose_iter = [(p["j2_deg"], p["j3_deg"], p["j4_deg"], p) for p in ik_pose_list]
+else:
+    _pose_iter = []
+    for j2d in j2_grid:
+        for j3d in j3_grid:
+            for j4d in j4_grid:
+                _pose_iter.append((float(j2d), float(j3d), float(j4d), None))
+
+for j2_deg, j3_deg, j4_deg, _ik_row in _pose_iter:
             pose_idx += 1
             key = (float(j2_deg), float(j3_deg), float(j4_deg))
 
@@ -1561,59 +1686,102 @@ for j2_deg in j2_grid:
             if key in completed_poses:
                 continue
 
-            # Check underground
-            if not above_ground_mask.get(key, False):
-                row = {f: float('nan') for f in CSV_FIELDS}
-                row["pose_idx"] = pose_idx
-                row["j2_deg"] = j2_deg
-                row["j3_deg"] = j3_deg
-                row["j4_deg"] = j4_deg
-                row["status"] = "underground"
-                row["stable"] = ""
-                row["ee_contact"] = ""
-                row["reactor_contact"] = ""
-                row["contact_bodies"] = ""
-                row["chassis_drift_m"] = ""
-                row["arm_chassis_contact"] = ""
-                writer.writerow(row)
-                csv_file.flush()
-                continue
+            # Check pre-filtered (underground or chassis FK collision) — grid mode only
+            if _ik_row is None:
+                pose_validity = valid_mask.get(key, "valid")
+                if pose_validity != "valid":
+                    row = {f: float('nan') for f in CSV_FIELDS}
+                    row["pose_idx"] = pose_idx
+                    row["j2_deg"] = j2_deg
+                    row["j3_deg"] = j3_deg
+                    row["j4_deg"] = j4_deg
+                    row["status"] = pose_validity
+                    row["stable"] = ""
+                    row["ee_contact"] = ""
+                    row["reactor_contact"] = ""
+                    row["contact_bodies"] = ""
+                    row["chassis_drift_m"] = ""
+                    row["arm_chassis_contact"] = ""
+                    writer.writerow(row)
+                    csv_file.flush()
+                    continue
 
             pose_t0 = time.time()
             physics_done += 1
 
-            # Snapshot chassis position before commanding arm
-            s_pre = get_state(art, stage, chassis_path)
-            chassis_pos_before = s_pre["pos"].copy() if s_pre is not None else np.zeros(3)
-
             # Command pose: J1=0, J2=j2, J3=j3, J4=j4
             target_angles = [0.0, float(j2_deg), float(j3_deg), float(j4_deg)]
+
+            # Place arm at target pose and set drive targets
+            target_pos = np.zeros(ndof)
+            target_pos[:] = init_jp.flatten()  # keep non-arm DOFs at init
             for i, ajn in enumerate(ARM_JOINT_NAMES):
                 jp = f"/World/Robot/{ajn}"
                 jprim = stage.GetPrimAtPath(jp)
                 if jprim.IsValid():
                     UsdPhysics.DriveAPI(jprim, "angular").GetTargetPositionAttr().Set(
                         float(target_angles[i]))
+                target_pos[arm_dof_indices[i]] = math.radians(target_angles[i])
+
+            if ik_pose_list is not None:
+                # IK mode: set joints directly to target, then let physics settle.
+                # This avoids the arm passing through the chassis/ground en route
+                # from stowed. The physics sim resolves any interpenetration and
+                # provides realistic holding torques, collision detection, and tipping.
+                pose_jp = init_jp.flatten().copy()
+                for i in range(4):
+                    pose_jp[arm_dof_indices[i]] = math.radians(target_angles[i])
+                art.set_joint_positions(pose_jp.reshape(1, -1))
+                art.set_joint_velocities(np.zeros_like(pose_jp).reshape(1, -1))
+
+            if art.is_physics_handle_valid():
+                art.set_joint_position_targets(target_pos.reshape(1, -1))
 
             # Keep wheels locked
             if art.is_physics_handle_valid():
                 art.set_joint_velocity_targets(va_lock.reshape(1, -1))
+
+            # Let the pose establish (brief physics to resolve initial placement)
+            for _ in range(10):
+                world.step(render=False)
+
+            # Snapshot chassis position AFTER arm is in place
+            s_pre = get_state(art, stage, chassis_path)
+            chassis_pos_before = s_pre["pos"].copy() if s_pre is not None else np.zeros(3)
 
             # Settle: step until arm joints within tolerance or timeout
             # Also detect early collision (chassis drift) and bail out fast
             consec_ok = 0
             settled = False
             early_collision = False
+            saturated = False
+            SATURATION_THRESH = 30.0  # Nm (only used in grid mode)
             for sf in range(SETTLE_FRAMES):
                 world.step(render=False)
-                # Check for chassis drift every 60 frames (~0.17s)
                 if sf > 0 and sf % 60 == 0:
-                    s_check = get_state(art, stage, chassis_path)
-                    if s_check is not None:
-                        drift = np.linalg.norm(s_check["pos"] - chassis_pos_before)
-                        if drift > CHASSIS_DRIFT_THRESH * 3:  # 9mm = clearly colliding
-                            early_collision = True
+                    # Grid mode: check drift and saturation for early bailout
+                    if ik_pose_list is None:
+                        s_check = get_state(art, stage, chassis_path)
+                        if s_check is not None:
+                            drift = np.linalg.norm(s_check["pos"] - chassis_pos_before)
+                            if drift > CHASSIS_DRIFT_THRESH * 3:
+                                early_collision = True
+                                break
+                        je_check = None
+                        try:
+                            je_check = art.get_measured_joint_efforts()
+                        except:
+                            pass
+                        if je_check is not None:
+                            je_flat = je_check.flatten()
+                            for ai, aidx in enumerate(arm_dof_indices):
+                                if abs(je_flat[aidx]) > SATURATION_THRESH:
+                                    saturated = True
+                                    break
+                        if saturated:
                             break
+                    # IK mode: no early bailout — poses are pre-validated,
+                    # let physics fully settle and detect real collisions
                 try:
                     jp_now = art.get_joint_positions()
                     if jp_now is not None:
@@ -1633,6 +1801,47 @@ for j2_deg in j2_grid:
                             consec_ok = 0
                 except:
                     pass
+
+            # If saturated (joint at maxForce), pose is unreachable
+            if saturated:
+                n_saturated += 1
+                row = {
+                    "pose_idx": pose_idx,
+                    "j2_deg": j2_deg, "j3_deg": j3_deg, "j4_deg": j4_deg,
+                    "status": "saturated",
+                }
+                for f in CSV_FIELDS:
+                    if f not in row:
+                        row[f] = "nan"
+                row["chassis_drift_m"] = ""
+                row["arm_chassis_contact"] = ""
+                row["stable"] = ""
+                row["ee_contact"] = ""
+                row["reactor_contact"] = ""
+                row["contact_bodies"] = ""
+                writer.writerow(row)
+                csv_file.flush()
+                try:
+                    art.set_joint_positions(init_jp)
+                    art.set_joint_velocities(init_jv)
+                    art.set_joint_velocity_targets(va_lock.reshape(1, -1))
+                    for _rf in range(10):
+                        world.step(render=False)
+                except Exception:
+                    pass
+                pose_dt = time.time() - pose_t0
+                pose_times.append(pose_dt)
+                if physics_done % 50 == 0 or physics_done == physics_pose_count:
+                    elapsed = time.time() - start_time
+                    mean_pt = np.mean(pose_times) if pose_times else 0
+                    remaining = (physics_pose_count - physics_done) * mean_pt
+                    eta_min = remaining / 60.0
+                    print(f"  [{physics_done}/{physics_pose_count}] "
+                          f"j2={j2_deg:+.0f} j3={j3_deg:+.0f} j4={j4_deg:+.0f} "
+                          f"status=saturated "
+                          f"elapsed={elapsed/60:.1f}min ETA={eta_min:.1f}min "
+                          f"({mean_pt:.2f}s/pose)", flush=True)
+                continue
 
             # If early collision detected, skip measurement entirely
             if early_collision:
@@ -1712,6 +1921,14 @@ for j2_deg in j2_grid:
                 chassis_hits = read_chassis_contacts(contact_sensor, chassis_path)
                 if chassis_hits:
                     arm_chassis_hit = True
+                    if not hasattr(read_chassis_contacts, '_printed_bodies'):
+                        read_chassis_contacts._printed_bodies = set()
+                    for ch in chassis_hits:
+                        bkey = (pose_idx, ch["body"])
+                        if bkey not in read_chassis_contacts._printed_bodies:
+                            print(f"    [DEBUG] Pose {pose_idx}: chassis<->arm contact: "
+                                  f"{ch['body']} force={ch['force_mag']:.3f}N", flush=True)
+                            read_chassis_contacts._printed_bodies.add(bkey)
 
             # Chassis drift: did the arm push the robot?
             s_post = get_state(art, stage, chassis_path)
@@ -1774,10 +1991,31 @@ for j2_deg in j2_grid:
                         peak_torque_poses[jk] = (peak_torques[ai],
                                                  (j2_deg, j3_deg, j4_deg))
 
-            # Status: collision if arm hit chassis or pushed the robot
-            if arm_chassis_hit or chassis_drift > CHASSIS_DRIFT_THRESH:
+            # Chassis orientation (physics-based tipping detection)
+            chassis_roll_deg = 0.0
+            chassis_pitch_deg = 0.0
+            try:
+                cprim_post = stage.GetPrimAtPath(chassis_path)
+                cmat_post = UsdGeom.Xformable(cprim_post).ComputeLocalToWorldTransform(
+                    Usd.TimeCode.Default())
+                r = cmat_post.ExtractRotationMatrix()
+                chassis_roll_deg = math.degrees(math.atan2(float(r[2][1]), float(r[2][2])))
+                chassis_pitch_deg = math.degrees(math.asin(max(-1, min(1, -float(r[2][0])))))
+            except Exception:
+                pass
+
+            # Status determination:
+            # - "collision": arm physically contacted chassis (PhysX contact report)
+            # - "tipped": chassis rolled/pitched > 5 deg (physics-based tipping)
+            # - "settled": arm reached target within tolerance
+            # - "timeout": arm didn't converge but no collision/tipping
+            # Note: chassis drift from CG shift is expected and NOT a collision.
+            physics_tipped = abs(chassis_roll_deg) > 5.0 or abs(chassis_pitch_deg) > 5.0
+            if arm_chassis_hit:
                 status = "collision"
                 n_collision += 1
+            elif physics_tipped:
+                status = "tipped"
             elif settled:
                 status = "settled"
             else:
@@ -1816,6 +2054,16 @@ for j2_deg in j2_grid:
                 "chassis_drift_m": f"{chassis_drift:.6f}",
                 "arm_chassis_contact": "1" if arm_chassis_hit else "0",
             }
+            # Add IK-specific fields
+            if _ik_row is not None:
+                row["target_r"] = f"{_ik_row['target_r']:.5f}"
+                row["target_z"] = f"{_ik_row['target_z']:.5f}"
+                row["ee_pitch_deg"] = f"{_ik_row['ee_pitch_deg']:.1f}"
+                row["tau_j2_analytical"] = f"{_ik_row['tau_j2_analytical']:.4f}"
+                row["tau_j3_analytical"] = f"{_ik_row['tau_j3_analytical']:.4f}"
+                row["tau_j4_analytical"] = f"{_ik_row['tau_j4_analytical']:.4f}"
+                row["chassis_roll_deg"] = f"{chassis_roll_deg:.3f}"
+                row["chassis_pitch_deg"] = f"{chassis_pitch_deg:.3f}"
             writer.writerow(row)
             csv_file.flush()
 
@@ -1922,7 +2170,9 @@ summary = {
         "j4_range_deg": args.j4_range,
         "j1_tipping_deg": args.j1_tipping,
         "total_poses": total_poses,
-        "above_ground_poses": above_ground_count,
+        "valid_poses": above_ground_count,
+        "n_underground": n_underground,
+        "n_chassis_fk_collision": n_chassis_collision,
         "physics_poses": physics_done,
     },
     "timing": {
@@ -1944,6 +2194,11 @@ summary = {
         "n_collision_poses": n_collision,
         "pct_collision": round((n_collision / max(physics_done, 1)) * 100.0, 1),
         "chassis_drift_thresh_m": CHASSIS_DRIFT_THRESH,
+    },
+    "saturated": {
+        "n_saturated_poses": n_saturated,
+        "pct_saturated": round((n_saturated / max(physics_done, 1)) * 100.0, 1),
+        "saturation_thresh_Nm": ARM_MAX_FORCE * 0.85,
     },
     "contact": {
         "n_contact_poses": n_contact,
@@ -1970,7 +2225,7 @@ print("SWEEP SUMMARY", flush=True)
 print(f"{'='*60}", flush=True)
 print(f"  Config: {int(ARM_REACH_IN)}\" arm, {'loaded' if ARM_LOADED else 'unloaded'}, "
       f"{env_label}", flush=True)
-print(f"  Grid: {total_poses} total, {above_ground_count} above ground, "
+print(f"  Grid: {total_poses} total, {above_ground_count} valid, "
       f"{physics_done} physics", flush=True)
 print(f"  Time: {elapsed_s/60:.1f} min ({mean_pose_time:.2f}s/pose)", flush=True)
 print(f"\n  Torques (mean|peak Nm):", flush=True)
@@ -1988,6 +2243,8 @@ print(f"    Worst margin: {worst_tipping_margin*1000:.1f}mm "
       f"j4={worst_tipping_pose[2]:.0f} j1={worst_tipping_j1:.0f}", flush=True)
 print(f"\n  Arm-chassis collision:", flush=True)
 print(f"    {n_collision} poses ({(n_collision/max(physics_done,1))*100:.1f}%) — arm hit chassis or pushed robot", flush=True)
+print(f"\n  Saturated (unreachable):", flush=True)
+print(f"    {n_saturated} poses ({(n_saturated/max(physics_done,1))*100:.1f}%) — joint at maxForce, pose physically impossible", flush=True)
 print(f"\n  Contact:", flush=True)
 print(f"    EE contact: {n_contact} poses ({(n_contact/max(physics_done,1))*100:.1f}%)", flush=True)
 print(f"    Reactor contact: {n_reactor_contact} poses", flush=True)
