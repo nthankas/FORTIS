@@ -12,8 +12,6 @@ AXIS_IDLE = 1
 AXIS_CLOSED_LOOP_CONTROL = 8
 
 class ODrive_S1(Motor):
-
-
     def __init__(self, name: str, can_id: int, max_velocity: float, max_current: float):
         super().__init__(name, can_id, max_velocity, max_current)
         self._bus = can.Bus("can0", interface="virtual")
@@ -59,3 +57,4 @@ class ODrive_S1(Motor):
 
     def _read_current(self):
         return 0.0
+
