@@ -44,6 +44,10 @@ parser.add_argument("--24arm", action="store_true", dest="arm24",
                     help="24\" arm: 12+10+2")
 parser.add_argument("--armloaded", action="store_true",
                     help="Loaded EE: gripper 500g + max payload 3lb (1361g) at tip")
+parser.add_argument("--metal", action="store_true", dest="metal", 
+                    help="Link type: metal")
+parser.add_argument("--cf", action="store_true", dest="cf", 
+                    help="Link type: carbon fiber")
 args, _ = parser.parse_known_args()
 headless = args.headless or not args.gui
 
@@ -169,12 +173,22 @@ ARM_REACH_IN = _l2_in + _l3_in + _l4_in
 # Joint mass: motor (0.58 kg) + hardware (49g) = 0.629 kg each
 M_JOINT = 0.629
 
-# CF tube: square 0.79"x0.79", linear density 0.0053 lb/in (STD) (in parts list)
+# CF tube: square 0.79"x0.79", linear density 0.0053 lb/in (STD) (in bom list)
 CF_DENSITY_LB_PER_IN = 0.0053
 CF_DENSITY_KG_PER_M = CF_DENSITY_LB_PER_IN * 0.453592 / IN
-M_L2 = CF_DENSITY_KG_PER_M * L_L2
-M_L3 = CF_DENSITY_KG_PER_M * L_L3
-M_L4 = CF_DENSITY_KG_PER_M * L_L4
+
+METAL_DENSITY_LB_PER_IN = 0.013
+METAL_DENSITY_KG_PER_M = METAL_DENSITY_LB_PER_IN * 0.453592 / IN
+
+if args.metal:
+    M_L2 = METAL_DENSITY_KG_PER_M * L_L2
+    M_L3 = METAL_DENSITY_KG_PER_M * L_L3
+    M_L4 = METAL_DENSITY_KG_PER_M * L_L4
+if args.cf:
+    M_L2 = CF_DENSITY_KG_PER_M * L_L2
+    M_L3 = CF_DENSITY_KG_PER_M * L_L3
+    M_L4 = CF_DENSITY_KG_PER_M * L_L4
+
 
 # End-effector tip mass
 M_GRIPPER_BARE = 0.500   # gripper hardware: 500g
