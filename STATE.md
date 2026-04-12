@@ -65,12 +65,51 @@ Arm spec (2026-04-06):
 
 **Status:** TESTING — user verification of geometry and masses before sweep.
 
+## V2 arm model (heterogeneous motors) — 2026-04-11
+
+**`simulation/isaac/xdrive/canonical/xdrive_reactor_arm_v2.py`** — same
+parallel-link structure as the canonical arm above, but with the new
+heterogeneous-motor hardware spec. The v1 files are NOT deprecated; both
+coexist. V2 scripts all carry a `_v2` suffix and write output CSVs with a
+`_v2` tag so v1 data is preserved.
+
+V2 hardware (2026-04-11):
+- J1 (Z yaw): NEMA 17 (17HS24-2104-ME1K, 500 g) + Cricket Drive MK II 25:1 (80 g).
+  Inside chassis, output platform flush with chassis top. Range ±180° software.
+  Torque limit 12 Nm continuous.
+- J2 (shoulder): NEMA 23 (23HS45-4204-ME1K, 1500 g) + EG23-G20-D10 20:1
+  planetary (1090 g) + adapter (~75 g) = 2665 g. Mounted on J1 platform.
+  Range −30° to +150°. Torque limit 30 Nm continuous / 60 Nm peak.
+- J3 (elbow): NEMA 17 + Cricket MK II 25:1 + adapter = 655 g. Range ±180°
+  (self-collision limited). Torque limit 12 Nm.
+- J4 (wrist): Hitec D845WP reprogrammed servo (227 g, IP67) + adapter = 302 g.
+  Range ±101° (hardware). Torque 4.9 Nm @ 7.4 V.
+- Links: RockWest Composites CF square tube 1.25"×1.38" OD, 0.065" wall,
+  0.226 lb/ft (8.54 g/in). L2=15" (128 g), L3=12" (103 g), L4=3" (26 g)
+  at the 30" reach config.
+- Camera: Orbbec Gemini 2 (98 g) mounted at L4 midpoint, 1.5" from J4.
+- End effector: ServoCity parallel gripper kit (81 g) + Hitec D645MW servo
+  (60 g) + adapter (75 g) = 216 g. Payload capacity 3 lb (1361 g).
+- Total arm mass at 30" loaded: **6.13 kg** (13.5 lb). (User-stated
+  ~6.95 kg is ~820 g above the component sum.)
+
+**v1→v2 motive:** v1 (all NEMA 17 + Cricket 25:1) had insufficient J2
+torque margin (~17.5 Nm needed vs 12 Nm rated). V2 uses a NEMA 23 + EG23
+20:1 at J2 and drops lighter hardware everywhere else; J2 torque now runs
+at ~57 % of continuous rating even with the heavier arm.
+
+**Status:** WORKING. Full torque sweep for 30″ loaded step: see
+`results/arm_continuous_sweep/30in_loaded_step_v2.csv` and the v2 torque
+report at `results/arm_continuous_sweep/sweep_report_v2.md`. Stability
+(tipping) sweep is NOT part of v2 — only torque sizing.
+
 ## Active simulations (canonical + tools)
 
 | Script | Purpose | Status |
 |---|---|---|
 | `canonical/xdrive_realwheel.py` | Canonical chassis model, flat ground + reactor + R0 contact logging | WORKING |
-| `canonical/xdrive_reactor_arm.py` | 4-DOF parallel-link arm (36" reach) on realwheel chassis, torque readout | TESTING |
+| `canonical/xdrive_reactor_arm.py` | 4-DOF parallel-link arm v1 (all NEMA 17) on realwheel chassis, torque readout | TESTING |
+| `canonical/xdrive_reactor_arm_v2.py` | 4-DOF parallel-link arm v2 (NEMA 17/23 heterogeneous, 1.25x1.38 CF tube) | WORKING |
 | `tools/test_drift.py` | Flat-ground drift verification | WORKING |
 | `tools/clearance_sweep.py` | Analytical R0 clearance calc | WORKING |
 | `tools/step_arch_optimizer.py` | Belly-arch geometry optimizer | WORKING |
@@ -78,6 +117,13 @@ Arm spec (2026-04-06):
 | `tools/measure_r0_port.py` | R0 port geometry extraction from USD | WORKING |
 | `tools/arm_pose_sweep.py` | Headless arm pose sweep (all configs, step/reactor), CSV + JSON output | NEW |
 | `tools/parse_sweep_results.py` | Aggregates sweep results, comparison tables + charts | NEW |
+| `tools/arm_continuous_sweep.py` | Raw torque sweep v1 (all NEMA 17), collision-free teleport | WORKING |
+| `tools/arm_continuous_sweep_v2.py` | Raw torque sweep v2 (heterogeneous motors, 1.25x1.38 CF) | WORKING |
+| `tools/arm_sweep_filter.py` | Post-filter v1 raw CSV via `arm_ik` (collision + tipping) | WORKING |
+| `tools/arm_sweep_filter_v2.py` | Post-filter v2 raw CSV via `arm_ik_v2` | WORKING |
+| `tools/arm_stability_sweep.py` | Physics tipping sweep v1, reads v1 filtered CSV | WORKING |
+| `lib/arm_ik.py` | Analytical IK/FK, gravity torques, collision checks — v1 uniform masses | WORKING |
+| `lib/arm_ik_v2.py` | Same as arm_ik.py but with v2 per-joint masses + 1.25x1.38 CF + L4 camera | WORKING |
 | `lib/sim_config.py` | Shared reactor/geometry constants — **import this**, don't duplicate | WORKING |
 
 ## DEPRECATED — do not copy from these
