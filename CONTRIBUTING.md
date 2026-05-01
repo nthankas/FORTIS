@@ -17,7 +17,6 @@ Isaac Sim runs on the Windows host, not in the dev container.
 | ROS 2 packages (nodes, launch files, msg defs) | `src/<package_name>/` | Anything you want to `colcon build` and `ros2 run` |
 | Pure-Python libraries (no ROS dependency) | `control/<library_name>/` | Reusable in notebooks, scripts, future nodes; no ROS coupling |
 | Isaac Sim scripts | `sim/isaac/...` | Runs on the Windows host with Isaac Sim 5.1 |
-| Microcontroller firmware | `firmware/` | Reserved; nothing here yet |
 | Reference code from earlier design rounds | `legacy/` | Read-only. Not in the build. |
 | Drivetrain / arm analysis writeups | `analysis/` | Markdown only. No code. |
 

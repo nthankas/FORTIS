@@ -34,7 +34,6 @@ control/            Pure-Python libraries (pre-ROS, non-ROS, or ROS-adjacent)
 sim/                Simulation work (Isaac Sim)
   isaac/xdrive/     Canonical chassis + arm sims, tools, docs, results
 analysis/           Drivetrain and arm analysis writeups
-firmware/           Reserved for any future MCU firmware (currently empty)
 legacy/             Reference code from earlier design iterations
 ```
 
