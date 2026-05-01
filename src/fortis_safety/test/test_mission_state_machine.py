@@ -1,8 +1,10 @@
 """
 Tests for MissionStateMachine.
 
-Run with: python -m pytest control/state_machine/test_mission_state_machine.py -v
-Or:       python control/state_machine/test_mission_state_machine.py
+Run with:
+    cd /workspace
+    source install/setup.bash
+    python -m pytest src/fortis_safety/test/test_mission_state_machine.py -v
 """
 
 import pytest
