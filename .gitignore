@@ -43,3 +43,7 @@ sim/isaac/xdrive/results/xdrive_realwheel/r0_contact_report.json
 build/
 install/
 log/
+
+# Files that must not enter the repo
+
+CONTRIBUTING.md
