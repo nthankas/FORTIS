@@ -56,8 +56,13 @@ class MissionStateNode(Node):
         self.sm = MissionStateMachine()
         self.ctx: dict = {}
 
-        # Latched QoS for state output: late subscribers (e.g. UI started
-        # after the node) still get the most recent state on connect.
+        # Latched QoS for the state topic. The mission state changes
+        # rarely (seconds-to-minutes apart) but downstream consumers - the
+        # event console, any UI, log replay tools - need to know the
+        # current state the moment they connect, not after the next
+        # transition fires. TRANSIENT_LOCAL durability replays the last
+        # message to late subscribers, and RELIABLE makes the state
+        # message non-droppable. depth=1 because only the latest matters.
         latched_qos = QoSProfile(
             depth=1,
             durability=QoSDurabilityPolicy.TRANSIENT_LOCAL,
@@ -103,6 +108,11 @@ class MissionStateNode(Node):
     # on. The factory pattern captures the value at function definition.
 
     def _make_event_callback(self, event: Event):
+        # try_step (not step) on purpose: events arrive over ROS topics
+        # from external publishers we don't control. A STOP click while
+        # already IDLE, or a stale event left over from a prior run, is
+        # noise - we want to log and ignore, not raise. step() would
+        # raise IllegalTransition and tear down the spin loop.
         def callback(_msg: Empty) -> None:
             before = self.sm.current
             result = self.sm.try_step(event, self.ctx)
