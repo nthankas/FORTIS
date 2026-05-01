@@ -37,3 +37,8 @@ simulation/isaac/xdrive/plots/
 
 # Large per-script result dumps (kept locally, not in git)
 simulation/isaac/xdrive/results/xdrive_realwheel/r0_contact_report.json
+
+# ROS 2 Colcon Build artifacts
+build/
+install/
+log/
