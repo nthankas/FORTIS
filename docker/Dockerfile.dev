@@ -1,0 +1,52 @@
+FROM osrf/ros:humble-desktop
+
+ARG USERNAME=FORTIS
+ARG USER_UID=1000
+ARG USER_GID=1000
+
+# Install necessary packages
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    sudo \
+    git \
+    curl \
+    wget \
+    nano \
+    build-essential \
+    python3-pip \
+    python3-colcon-common-extensions \
+    python3-rosdep \
+    ros-humble-xacro \
+    ros-humble-joint-state-publisher-gui \
+    ros-humble-robot-localization \
+    ros-humble-moveit \
+    ros-humble-ros2-control \
+    ros-humble-ros2-controllers \
+    ros-humble-controller-manager \
+    ros-humble-tf2-tools \
+    ros-humble-rqt-tf-tree \
+    ros-humble-foxglove-bridge \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN pip install --no-cache-dir \
+    depthai \
+    python-can \
+    pyserial \
+    odrive \
+    numpy \
+    matplotlib \
+    scipy 
+
+RUN groupadd --gid ${USER_GID} ${USERNAME} \
+ && useradd -m -s /bin/bash --uid ${USER_UID} --gid ${USER_GID} ${USERNAME} \
+    && echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers.d/${USERNAME} \
+    && chmod 440 /etc/sudoers.d/${USERNAME}
+
+RUN echo "source /opt/ros/humble/setup.bash" >> /home/${USERNAME}/.bashrc \
+ && echo "if [ -f /workspace/install/setup.bash ]; then source /workspace/install/setup.bash; fi" >> /home/${USERNAME}/.bashrc \
+ && echo "alias ll='ls -la'" >> /home/${USERNAME}/.bashrc
+
+USER ${USERNAME}
+WORKDIR /workspace
+
+CMD ["/bin/bash"]
+
