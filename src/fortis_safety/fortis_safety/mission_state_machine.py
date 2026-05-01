@@ -3,16 +3,46 @@ FORTIS mission-level state machine.
 
 Tracks the high-level operational phase of the robot during an inspection
 mission. This is pure logic with no ROS or hardware dependencies so it can be
-unit tested in isolation. A ROS 2 node wraps this class, subscribing to event
-topics and publishing the current state.
+unit tested in isolation. A ROS 2 node (mission_state_node.py) wraps this
+class, subscribing to event topics and publishing the current state.
 
-States and transitions are defined as data (TRANSITIONS table) rather than
-nested if/elif chains. To add or change behavior, edit the table.
+Table-driven design
+-------------------
+States, events, and transitions are defined as data in the TRANSITIONS list
+rather than nested if/elif chains. Each Transition has:
+    from_state  source state, or None for a wildcard ("from any state")
+    event       the Event that triggers it
+    to_state    target state
+    guard       a function (ctx: dict) -> bool, default `always`
 
-Stow/deploy is intentionally NOT modeled here. Stow is a pose flag handled by
-the arm controller; the mission can be in any state with the arm stowed or
-deployed. Forcing stow into this state machine would create a combinatorial
-explosion of states.
+step() walks the table top-to-bottom and takes the first transition whose
+event matches, whose from_state matches (or is None), and whose guard
+returns True. Order matters when two transitions share the same
+(state, event) - put the more specific guards first.
+
+Guards
+------
+A guard inspects a runtime context dict supplied by the caller and returns
+True if the transition should fire. The state machine does NOT own this
+context; the caller (typically the ROS node) populates it from sensor /
+planner state and passes it to step() each time. This keeps the FSM pure
+and easy to test - the same step() call with different contexts produces
+deterministic outcomes. Known context keys are listed at the top of the
+Guards section below.
+
+Adding new states or events
+---------------------------
+1. Add the new State or Event to its enum.
+2. If a new context field is needed, add a guard function that reads it.
+3. Append Transition entries to TRANSITIONS.
+4. If the new context field has to flow in over ROS, add it to
+   CONTEXT_FIELDS in mission_state_node.py.
+5. Add unit tests in test/test_mission_state_machine.py.
+
+Stow/deploy is intentionally NOT modeled here. Stow is a pose flag handled
+by the arm controller; the mission can be in any state with the arm stowed
+or deployed. Forcing stow into this state machine would create a
+combinatorial explosion of states.
 """
 
 from __future__ import annotations

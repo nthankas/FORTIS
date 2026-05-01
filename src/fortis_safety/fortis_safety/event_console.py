@@ -1,3 +1,18 @@
+"""
+Interactive REPL for driving the mission state machine over ROS.
+
+Threading model
+---------------
+ROS spinning runs on a daemon background thread; the Python REPL runs on
+the main thread. This way input() can block forever waiting for the user
+without starving subscription callbacks (state updates from
+mission_state_node would otherwise never arrive). The spin thread is a
+daemon so it exits cleanly when the main thread quits the REPL.
+
+Useful for bring-up before any real planner / UI exists - lets us drive
+state transitions and toggle context flags by hand.
+"""
+
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, QoSDurabilityPolicy, QoSReliabilityPolicy
@@ -46,6 +61,12 @@ class EventConsole(Node):
                 Empty, topic, 10
             )
         
+        # Context publishers are also latched. The state machine only
+        # consults a context field when an event arrives, so a context
+        # value set five minutes ago must still be the value the node
+        # sees. Without TRANSIENT_LOCAL the node misses any context
+        # updates published before it subscribed (e.g. on restart), and
+        # transitions silently fail their guards.
         self.ctx_pubs: dict = {}
         for field in CONTEXT_FIELDS:
             topic = f"/fortis/context/{field}"
@@ -128,6 +149,10 @@ def run_cli(node):
             print(f"Unknown command: {cmd}. Type 'help' for a list of commands.")
     
 def parse_bool(token: str):
+    # Accept the obvious tokens for booleans. We don't use Python's
+    # bool() because bool("false") is True - any non-empty string is
+    # truthy. Returning None on invalid input lets the REPL print a
+    # clear error instead of silently coercing typos to True.
     t = token.lower()
     if t in ("true", "t", "1"):
         return True
