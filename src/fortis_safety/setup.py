@@ -25,6 +25,7 @@ setup(
     entry_points={
         'console_scripts': [
             'mission_state_node = fortis_safety.mission_state_node:main',
+            'event_console = fortis_safety.event_console:main',
         ],
     },
 )
