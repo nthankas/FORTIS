@@ -130,7 +130,5 @@ The full set of intended ROS 2 packages is `fortis_description`, `fortis_drive`,
 
 ## Documentation
 
-- `CONTRIBUTING.md` - dev workflow, where each kind of code goes, how to run tests
-- `` - context for AI coding sessions in this repo
 - `sim/isaac/xdrive/CHANGELOG.md` and `sim/isaac/xdrive/docs/` - simulation history and specs
 - `analysis/` - drivetrain rationale (x-drive vs skid-steer, orbit, torque, pivot)
