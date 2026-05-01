@@ -72,7 +72,6 @@ control/            Pure-Python libraries (no ROS coupling)
 sim/                Simulation
   isaac/            Isaac Sim 5.1 (host-only, not container)
 analysis/           Drivetrain / arm analysis writeups (markdown)
-firmware/           Empty; reserved for future MCU firmware
 legacy/             Reference code from earlier design rounds
 ```
 
