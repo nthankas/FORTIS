@@ -4,6 +4,7 @@ __pycache__/
 *.pyo
 venv/
 .venv/
+.pytest_cache/
 
 # Large binary files (keep in local Optimizer/ directory, not in git)
 *.stl
@@ -31,12 +32,12 @@ build_output.txt
 test_output.txt
 
 # Simulation result dumps
-simulation/isaac/xdrive/*_results.json
-simulation/isaac/xdrive/logs/
-simulation/isaac/xdrive/plots/
+sim/isaac/xdrive/*_results.json
+sim/isaac/xdrive/logs/
+sim/isaac/xdrive/plots/
 
 # Large per-script result dumps (kept locally, not in git)
-simulation/isaac/xdrive/results/xdrive_realwheel/r0_contact_report.json
+sim/isaac/xdrive/results/xdrive_realwheel/r0_contact_report.json
 
 # ROS 2 Colcon Build artifacts
 build/
