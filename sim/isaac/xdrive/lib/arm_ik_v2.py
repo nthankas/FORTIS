@@ -1,6 +1,16 @@
 """
 Analytical IK/FK, gravity torques, and collision checks for the FORTIS 4-DOF arm.
 
+V2 HARDWARE SPEC (2026-04-11) — heterogeneous motors + larger CF tube:
+  J1: NEMA 17 + Cricket MK II 25:1                        (0.580 kg)
+  J2: NEMA 23 + EG23-G20-D10 20:1 + adapter               (2.665 kg)
+  J3: NEMA 17 + Cricket MK II 25:1 + adapter              (0.655 kg)
+  J4: D845WP servo + adapter                              (0.302 kg)
+  Links: CF square tube 1.25"x1.38" OD, 0.065" wall       (0.226 lb/ft)
+  Camera (Orbbec Gemini 2, 98 g) mounted at L4 midpoint   (1.5" from J4)
+  Gripper: ServoCity parallel kit + D645MW + adapter      (0.216 kg)
+  Payload: 3 lb (1.361 kg) at L4 tip
+
 Kinematic chain: J1 (Z yaw) + J2/J3/J4 (Y pitch), yaw-decoupled planar.
 FK convention: standard 3R planar, no direction multipliers.
   x_j3 = L2*cos(A2),  z_j3 = L2*sin(A2)
@@ -25,15 +35,49 @@ ARM_CONFIGS = {
     24: (12.0, 10.0, 2.0),
 }
 
-# Masses
-M_JOINT = 0.629       # kg per joint (NEMA 17 + Cricket MK II + hardware)
-M_GRIPPER_BARE = 0.500  # kg
-M_PAYLOAD = 1.361     # kg (3 lb)
-M_CAMERA = 0.098      # kg (Orbbec Gemini 2)
-CAM_OFFSET_ON_L2 = 2.0 * IN  # camera position along L2 from J2
+# ----------------------------------------------------------------------
+# Per-joint masses (heterogeneous hardware spec)
+# ----------------------------------------------------------------------
+M_J1 = 0.580   # NEMA 17 (500 g) + Cricket MK II 25:1 (80 g)
+M_J2 = 2.665   # NEMA 23 (1500 g) + EG23-G20-D10 20:1 (1090 g) + adapter (75 g)
+M_J3 = 0.655   # NEMA 17 (500 g) + Cricket MK II 25:1 (80 g) + adapter (75 g)
+M_J4 = 0.302   # D845WP servo (227 g) + adapter (75 g)
 
-# CF square tube: 0.79" x 0.79", density 0.0053 lb/in
-CF_DENSITY_KG_PER_M = 0.0053 * 0.453592 / IN  # ~0.0946 kg/m
+# Legacy placeholder — some callers still reference a single M_JOINT. Not
+# used in torque math below; the per-joint values above are authoritative.
+M_JOINT = M_J1
+
+# End-effector and instrumentation
+# Gripper total: ServoCity kit 81 g + D645MW servo 60 g + adapter 75 g = 216 g
+M_GRIPPER_BARE = 0.216
+M_PAYLOAD = 1.361         # kg (3 lb max payload)
+M_CAMERA = 0.098          # kg (Orbbec Gemini 2) — now on L4 midpoint
+CAM_OFFSET_ON_L4 = 1.5 * IN  # camera position along L4 from J4
+
+# Torque limits (Nm) — continuous ratings per joint
+TORQUE_LIMITS_NM = {
+    "J1": 12.0,   # NEMA 17 + Cricket 25:1, conservative cont limit
+    "J2": 30.0,   # EG23-G20 20:1 continuous (60 Nm peak)
+    "J3": 12.0,   # Cricket MK II 25:1 continuous
+    "J4": 4.9,    # D845WP at 7.4 V
+}
+
+# Joint ranges (USD convention, degrees)
+JOINT_LIMITS_DEG = {
+    "ArmJ1": (-180.0, 180.0),   # software-limited yaw
+    "ArmJ2": (-30.0, 150.0),    # physical range
+    "ArmJ3": (-180.0, 180.0),   # self-collision limited
+    "ArmJ4": (-101.0, 101.0),   # hardware-limited servo
+}
+
+# CF square tube: RockWest Composites 1.25" x 1.38" OD, 0.065" wall
+# Linear density: 0.226 lb/ft = 0.018833 lb/in -> 0.3362 kg/m
+CF_DENSITY_LB_PER_FT = 0.226
+CF_DENSITY_KG_PER_M = CF_DENSITY_LB_PER_FT * 0.453592 / (12.0 * IN)  # ~0.3362 kg/m
+
+# CF tube cross-section (for inertia + collision envelope)
+CF_TUBE_Y = 1.25 * IN   # tube Y dimension (~31.8 mm)
+CF_TUBE_Z = 1.38 * IN   # tube Z dimension (~35.1 mm)
 
 # Chassis geometry
 CHASSIS_L = 15.354 * IN  # 0.3900 m
@@ -82,7 +126,7 @@ BELLY_HEIGHT = 2.5 * IN  # 0.0635 m
 # Arm config helper
 # ==========================================================================
 def get_arm_params(reach_in, loaded=False):
-    """Return arm parameters for a given reach config."""
+    """Return arm parameters for a given reach config (v2 heterogeneous)."""
     if reach_in not in ARM_CONFIGS:
         raise ValueError(f"Unknown arm config: {reach_in}\" (valid: {list(ARM_CONFIGS.keys())})")
     l2_in, l3_in, l4_in = ARM_CONFIGS[reach_in]
@@ -93,16 +137,22 @@ def get_arm_params(reach_in, loaded=False):
     M_L3 = CF_DENSITY_KG_PER_M * L3
     M_L4 = CF_DENSITY_KG_PER_M * L4
     M_gripper = M_GRIPPER_BARE + M_PAYLOAD if loaded else M_GRIPPER_BARE
+    total_arm = M_J1 + M_J2 + M_J3 + M_J4 + M_L2 + M_L3 + M_L4 + M_CAMERA + M_gripper
     return {
         "reach_in": reach_in,
         "loaded": loaded,
         "L2": L2, "L3": L3, "L4": L4,
         "M_L2": M_L2, "M_L3": M_L3, "M_L4": M_L4,
-        "M_joint": M_JOINT,
+        # Per-joint masses (heterogeneous)
+        "M_J1": M_J1, "M_J2": M_J2, "M_J3": M_J3, "M_J4": M_J4,
+        # Legacy single-joint alias (some callers still use this; points at J1)
+        "M_joint": M_J1,
         "M_gripper": M_gripper,
         "M_camera": M_CAMERA,
-        "cam_offset": CAM_OFFSET_ON_L2,
+        # Camera now rides L4 at its midpoint, not L2 shoulder
+        "cam_offset_L4": CAM_OFFSET_ON_L4,
         "max_reach": L2 + L3 + L4,
+        "total_arm_mass": total_arm,
     }
 
 
@@ -139,9 +189,9 @@ def fk_planar(j2_rad, j3_rad, j4_rad, L2, L3, L4):
     x_L4_mid = x_j4 + 0.5 * L4 * math.cos(A234)
     z_L4_mid = z_j4 + 0.5 * L4 * math.sin(A234)
 
-    # Camera on L2 shoulder
-    x_cam = CAM_OFFSET_ON_L2 * math.cos(A2)
-    z_cam = CAM_OFFSET_ON_L2 * math.sin(A2)
+    # Camera on L4 at CAM_OFFSET_ON_L4 from the J4 pivot (along L4)
+    x_cam = x_j4 + CAM_OFFSET_ON_L4 * math.cos(A234)
+    z_cam = z_j4 + CAM_OFFSET_ON_L4 * math.sin(A234)
 
     return {
         "j3": (x_j3, z_j3),
@@ -268,7 +318,7 @@ def ik_3d(target_x, target_y, target_z, ee_pitch_rad, arm_params,
 # ==========================================================================
 def gravity_torques(j2_rad, j3_rad, j4_rad, arm_params):
     """
-    Compute static gravity torques at J2, J3, J4.
+    Compute static gravity torques at J2, J3, J4 with per-joint masses.
 
     Returns dict with tau_j2, tau_j3, tau_j4 in Nm (signed).
     Positive = motor must push against gravity in the positive joint direction.
@@ -280,45 +330,48 @@ def gravity_torques(j2_rad, j3_rad, j4_rad, arm_params):
     L4 = arm_params["L4"]
     fk = fk_planar(j2_rad, j3_rad, j4_rad, L2, L3, L4)
 
-    M_j = arm_params["M_joint"]
+    M_J3_ = arm_params["M_J3"]   # elbow motor at J3 pivot
+    M_J4_ = arm_params["M_J4"]   # wrist motor at J4 pivot
     M_L2 = arm_params["M_L2"]
     M_L3 = arm_params["M_L3"]
     M_L4 = arm_params["M_L4"]
     M_grip = arm_params["M_gripper"]
     M_cam = arm_params["M_camera"]
 
-    # Positions relative to J2 (x = horizontal in vertical plane)
+    # Positions relative to J2 pivot (x = horizontal in vertical plane)
     x_j3, _ = fk["j3"]
     x_j4, _ = fk["j4"]
     x_ee, _ = fk["ee"]
     x_L2m, _ = fk["L2_mid"]
     x_L3m, _ = fk["L3_mid"]
     x_L4m, _ = fk["L4_mid"]
-    x_cam, _ = fk["cam"]
+    x_cam, _ = fk["cam"]   # camera now sits on L4 (see fk_planar)
 
-    # Gravity torque at J2: moment arm = horizontal distance from J2 to each mass
-    # tau = -g * sum(m_i * x_i)  (negative because gravity pulls down, torque resists)
+    # Gravity torque at J2: horizontal distance from J2 to each mass
+    # (tau = -g * sum(m_i * x_i); negative = motor pushes up against gravity)
     tau_j2 = -GRAV * (
-        M_L2 * x_L2m +           # L2 link CG
-        M_cam * x_cam +           # camera on L2
-        M_j * x_j3 +              # J3 motor at elbow
-        M_L3 * x_L3m +           # L3 link CG
-        M_j * x_j4 +              # J4 motor at wrist
-        M_L4 * x_L4m +           # L4 link CG
-        M_grip * x_ee             # gripper at EE tip
+        M_L2 * x_L2m +            # L2 link CG
+        M_J3_ * x_j3 +            # J3 elbow motor stack
+        M_L3 * x_L3m +            # L3 link CG
+        M_J4_ * x_j4 +            # J4 wrist motor stack
+        M_L4 * x_L4m +            # L4 link CG
+        M_cam * x_cam +           # camera on L4 midpoint
+        M_grip * x_ee             # gripper at L4 tip
     )
 
-    # Gravity torque at J3: moment arm = horizontal distance from J3
+    # Gravity torque at J3: horizontal distance from J3
     tau_j3 = -GRAV * (
         M_L3 * (x_L3m - x_j3) +
-        M_j * (x_j4 - x_j3) +
+        M_J4_ * (x_j4 - x_j3) +
         M_L4 * (x_L4m - x_j3) +
+        M_cam * (x_cam - x_j3) +
         M_grip * (x_ee - x_j3)
     )
 
-    # Gravity torque at J4: moment arm = horizontal distance from J4
+    # Gravity torque at J4: horizontal distance from J4
     tau_j4 = -GRAV * (
         M_L4 * (x_L4m - x_j4) +
+        M_cam * (x_cam - x_j4) +
         M_grip * (x_ee - x_j4)
     )
 
@@ -395,8 +448,9 @@ def check_collisions(j2_rad, j3_rad, j4_rad, arm_params, z_j2_above_floor,
     x_j4, z_j4 = fk["j4"]
     x_ee, z_ee = fk["ee"]
 
-    # Link half-thickness: CF tube 0.79" + joint motor clearance
-    LINK_HALF_THICK = 0.79 * IN / 2.0 + 0.005  # ~15mm
+    # Link half-thickness: CF tube 1.25"x1.38" + joint motor clearance.
+    # Use the larger of the two cross-section dims for a conservative bound.
+    LINK_HALF_THICK = max(CF_TUBE_Y, CF_TUBE_Z) / 2.0 + 0.005  # ~23 mm
 
     # --- Floor collision: any key point below ground ---
     floor_margin = margin + LINK_HALF_THICK
@@ -485,19 +539,18 @@ def tipping_at_j1(j1_rad, j2_rad, j3_rad, j4_rad, arm_params,
 
     # Body positions in chassis XY frame
     bodies = []
-    M_j = arm_params["M_joint"]
 
     # J1 base (at mount point, no horizontal offset)
-    bodies.append((mx, my, M_j))
+    bodies.append((mx, my, arm_params["M_J1"]))
 
     # Each outboard body: rotate (fk_x, 0) by J1 around mount
     for label, mass in [
         ("L2_mid", arm_params["M_L2"]),
-        ("cam", arm_params["M_camera"]),
-        ("j3", M_j),          # J3 motor
+        ("j3", arm_params["M_J3"]),   # J3 elbow motor
         ("L3_mid", arm_params["M_L3"]),
-        ("j4", M_j),          # J4 motor
+        ("j4", arm_params["M_J4"]),   # J4 wrist motor
         ("L4_mid", arm_params["M_L4"]),
+        ("cam", arm_params["M_camera"]),  # camera on L4 midpoint
         ("ee", arm_params["M_gripper"]),
     ]:
         fx, fz = fk[label]
@@ -613,22 +666,21 @@ def tipping_at_j1_tilted(j1_rad, j2_rad, j3_rad, j4_rad, arm_params,
     # Build body list: (x, y, z_above_chassis_center, mass)
     # z_above_chassis_center is used for the tilt shift
     bodies = []
-    M_j = arm_params["M_joint"]
 
     # J1 base at mount point, z = mount height above chassis center
     j1_z = ARM_MOUNT_Z  # chassis top
-    bodies.append((mx, my, j1_z, M_j))
+    bodies.append((mx, my, j1_z, arm_params["M_J1"]))
 
     # Outboard bodies: fk gives (x, z) in the planar arm frame
     # z in FK is height above J2, and J2 is at ARM_MOUNT_Z + J1_STACK_H
     j2_z = ARM_MOUNT_Z + J1_STACK_H
     for label, mass in [
         ("L2_mid", arm_params["M_L2"]),
-        ("cam", arm_params["M_camera"]),
-        ("j3", M_j),
+        ("j3", arm_params["M_J3"]),
         ("L3_mid", arm_params["M_L3"]),
-        ("j4", M_j),
+        ("j4", arm_params["M_J4"]),
         ("L4_mid", arm_params["M_L4"]),
+        ("cam", arm_params["M_camera"]),  # camera on L4 midpoint
         ("ee", arm_params["M_gripper"]),
     ]:
         fx, fz = fk[label]
