@@ -1,41 +1,48 @@
 """
-FORTIS arm collision-free torque sweep — headless Isaac Sim.
+FORTIS arm stability sweep — physics-based tipping test on step geometry.
 
-Sweeps ALL J2/J3/J4 poses with collision DISABLED on arm links.
-Records torques, joint positions, EE position, and chassis orientation
-for every single pose — no filtering during simulation.
+Tests whether the robot tips over on the 4.5" step for each arm pose.
+Reads geometry-valid poses from the torque sweep filtered CSV, then
+runs Isaac Sim with chassis collision ON to detect actual tipping.
 
-Post-processing (arm_sweep_filter.py) applies:
-  - Self-collision filter (L4 vs L2, L4 vs J1)
-  - Chassis collision filter (links vs chassis bbox)
-  - Tipping filter (chassis orientation change)
-  - Reactor workspace bounds
-
-This gives raw + filtered datasets. Raw guarantees readings for every pose.
+Modes:
+  --measure-tilt  Just measure the chassis tilt angle on the step and exit.
+  --test          Run 10-20 borderline poses for validation.
+  (default)       Full stability sweep of all borderline poses.
 
 Usage:
-  IsaacSim\\python.bat tools/arm_continuous_sweep.py --36arm --step --test
-  IsaacSim\\python.bat tools/arm_continuous_sweep.py --36arm --step --coarse
-  IsaacSim\\python.bat tools/arm_continuous_sweep.py --30arm --flat --fine
-  IsaacSim\\python.bat tools/arm_continuous_sweep.py --24arm --armloaded --step --coarse
+  IsaacSim\\python.bat tools/arm_stability_sweep.py --36arm --armloaded --measure-tilt
+  IsaacSim\\python.bat tools/arm_stability_sweep.py --36arm --armloaded --test
+  IsaacSim\\python.bat tools/arm_stability_sweep.py --36arm --armloaded
 """
 import os, sys, math, argparse, time, csv, json, datetime
 import numpy as np
 
 os.environ["PYTHONIOENCODING"] = "utf-8"
 
-parser = argparse.ArgumentParser(description="FORTIS arm continuous sweep — headless")
+parser = argparse.ArgumentParser(description="FORTIS arm stability sweep — step tipping test")
 parser.add_argument("--36arm", action="store_true", dest="arm36", help="36\" arm (default)")
 parser.add_argument("--30arm", action="store_true", dest="arm30", help="30\" arm")
 parser.add_argument("--24arm", action="store_true", dest="arm24", help="24\" arm")
 parser.add_argument("--armloaded", action="store_true")
-parser.add_argument("--step", action="store_true")
+_link_grp = parser.add_mutually_exclusive_group()
+_link_grp.add_argument("--metal", action="store_true",
+                       help="Link material: aluminum (0.013 lb/in)")
+_link_grp.add_argument("--cf", action="store_true",
+                       help="Link material: carbon fiber (0.0053 lb/in, default)")
+parser.add_argument("--step", action="store_true", default=True)
 parser.add_argument("--reactor", action="store_true")
 parser.add_argument("--hz", type=int, default=360)
-parser.add_argument("--fine", action="store_true", help="Fine grid (5/5/10 deg)")
-parser.add_argument("--coarse", action="store_true", help="Coarse grid (15/15/30 deg)")
-parser.add_argument("--resume", action="store_true", help="Resume from existing CSV")
-parser.add_argument("--test", action="store_true", help="Run ~30 test poses to validate script")
+parser.add_argument("--measure-tilt", action="store_true", dest="measure_tilt",
+                    help="Just measure chassis tilt on step and exit")
+parser.add_argument("--test", action="store_true", help="Run ~20 test poses")
+parser.add_argument("--margin-threshold", type=float, default=30.0, dest="margin_mm",
+                    help="Analytical margin threshold in mm (default 30)")
+parser.add_argument("--settle-time", type=float, default=2.0, dest="settle_s",
+                    help="Settle time after teleport in seconds")
+parser.add_argument("--hold-time", type=float, default=1.5, dest="hold_s",
+                    help="Hold time for tipping detection in seconds")
+parser.add_argument("--resume", action="store_true")
 args, _ = parser.parse_known_args()
 
 # Always headless
@@ -147,11 +154,19 @@ L_L4 = _l4_in * IN
 ARM_REACH_IN = _l2_in + _l3_in + _l4_in
 
 M_JOINT = 0.629
+# Link tube material densities (square 0.79"x0.79")
+# CF: 0.0053 lb/in (STD, in BOM)
+# Aluminum: 0.013 lb/in
 CF_DENSITY_LB_PER_IN = 0.0053
 CF_DENSITY_KG_PER_M = CF_DENSITY_LB_PER_IN * 0.453592 / IN
-M_L2 = CF_DENSITY_KG_PER_M * L_L2
-M_L3 = CF_DENSITY_KG_PER_M * L_L3
-M_L4 = CF_DENSITY_KG_PER_M * L_L4
+METAL_DENSITY_LB_PER_IN = 0.013
+METAL_DENSITY_KG_PER_M = METAL_DENSITY_LB_PER_IN * 0.453592 / IN
+# Default to CF unless --metal is specified (mutually exclusive with --cf)
+_link_density = METAL_DENSITY_KG_PER_M if args.metal else CF_DENSITY_KG_PER_M
+LINK_MATERIAL = "aluminum" if args.metal else "carbon_fiber"
+M_L2 = _link_density * L_L2
+M_L3 = _link_density * L_L3
+M_L4 = _link_density * L_L4
 
 M_GRIPPER_BARE = 0.500
 M_PAYLOAD = 1.361
@@ -194,12 +209,8 @@ ARM_JOINT_NAMES = ["ArmJ1", "ArmJ2", "ArmJ3", "ArmJ4"]
 #   J2=0: L2 horizontal (+X forward from mount)
 #   J3=0: L3 folded back (-X, stowed)   J3=180/-180: L3 extended forward
 #   J4=0: L4 extends +X from J4 body
-if args.fine:
-    J2_STEP, J3_STEP, J4_STEP = 5, 5, 10
-elif args.coarse:
-    J2_STEP, J3_STEP, J4_STEP = 15, 20, 30
-else:
-    J2_STEP, J3_STEP, J4_STEP = 10, 10, 15
+# Grid steps not used (poses read from CSV), but kept for compatibility
+J2_STEP, J3_STEP, J4_STEP = 15, 20, 30
 
 J2_MIN, J2_MAX = -30, 150
 J3_MIN, J3_MAX = -170, 170
@@ -809,23 +820,12 @@ def build_robot(stage, src_parts, src_center):
     return robot_path, chassis_path, drive_joint_paths, spawn_z, arm_joint_names
 
 
+
 # ============================================================================
-# Helper functions
+# Stability-specific helpers
 # ============================================================================
-def arm_tip_world(stage):
-    prim = stage.GetPrimAtPath("/World/Robot/ArmJ4wrist")
-    if not prim.IsValid(): return None
-    mat = UsdGeom.Xformable(prim).ComputeLocalToWorldTransform(Usd.TimeCode.Default())
-    return mat.Transform(Gf.Vec3d(L_L4, 0.0, 0.0))
-
-
-def arm_body_world_pos(stage, body_path):
-    prim = stage.GetPrimAtPath(body_path)
-    if not prim.IsValid(): return None
-    mat = UsdGeom.Xformable(prim).ComputeLocalToWorldTransform(Usd.TimeCode.Default())
-    t = mat.ExtractTranslation()
-    return np.array([t[0], t[1], t[2]])
-
+SETTLE_FRAMES = 150  # for arm PD convergence during sweep (not used in measure-tilt)
+STEP_H = 4.5 * IN
 
 def get_chassis_orientation(stage, chassis_path):
     """Get chassis roll/pitch from rotation matrix."""
@@ -840,16 +840,41 @@ def get_chassis_orientation(stage, chassis_path):
         return 0.0, 0.0
 
 
+def get_chassis_quaternion(stage, chassis_path):
+    """Get chassis orientation as quaternion [w, x, y, z]. Avoids Euler gimbal."""
+    try:
+        cprim = stage.GetPrimAtPath(chassis_path)
+        cmat = UsdGeom.Xformable(cprim).ComputeLocalToWorldTransform(Usd.TimeCode.Default())
+        rot = cmat.ExtractRotation()
+        q = rot.GetQuat()
+        im = q.GetImaginary()
+        return np.array([q.GetReal(), im[0], im[1], im[2]], dtype=np.float64)
+    except Exception:
+        return np.array([1.0, 0.0, 0.0, 0.0])
+
+
+def quaternion_angle_deg(q1, q2):
+    """Angular distance between two unit quaternions, in degrees."""
+    dot = np.clip(abs(np.dot(q1, q2)), 0.0, 1.0)
+    return 2.0 * math.degrees(math.acos(dot))
+
+
+def get_wheel_hub_z(stage):
+    """Get world-frame Z position of each wheel hub."""
+    zs = {}
+    for wname in WHEEL_ORDER:
+        path = f"/World/Robot/Wheel_{wname}/Hub"
+        prim = stage.GetPrimAtPath(path)
+        if prim.IsValid():
+            mat = UsdGeom.Xformable(prim).ComputeLocalToWorldTransform(Usd.TimeCode.Default())
+            t = mat.ExtractTranslation()
+            zs[wname] = float(t[2])
+        else:
+            zs[wname] = float('nan')
+    return zs
+
+
 def usd_to_fk_angles(j2_usd, j3_usd, j4_usd):
-    """Convert USD joint angles (deg) to standard FK convention (deg).
-
-    USD convention (zigzag layout):
-      J2=0: L2 horizontal +X.  J3=0: L3 folded back -X.  J4=0: L4 forward +X from J4.
-    FK convention (standard 3R):
-      J2=0: L2 horizontal. J3=0: L3 continues forward. J4=0: L4 continues forward.
-
-    Mapping: J3_FK = J3_USD + 180, J4_FK = J4_USD - 180 (wrapped to [-180,180])
-    """
     j2_fk = j2_usd
     j3_fk = j3_usd + 180.0
     if j3_fk > 180.0: j3_fk -= 360.0
@@ -860,126 +885,50 @@ def usd_to_fk_angles(j2_usd, j3_usd, j4_usd):
     return j2_fk, j3_fk, j4_fk
 
 
-def compute_analytical_torques(j2_usd_deg, j3_usd_deg, j4_usd_deg):
-    """Compute gravity torques from USD joint angles using arm_ik.py FK."""
-    import arm_ik
-    j2_fk, j3_fk, j4_fk = usd_to_fk_angles(j2_usd_deg, j3_usd_deg, j4_usd_deg)
-    params = arm_ik.get_arm_params(_arm_sel, loaded=ARM_LOADED)
-    torques = arm_ik.gravity_torques(
-        math.radians(j2_fk), math.radians(j3_fk), math.radians(j4_fk), params)
-    return torques
-
-
 # ============================================================================
-# Generate snake-ordered pose grid
+# Main
 # ============================================================================
-def generate_pose_grid():
-    """Generate all J2/J3/J4 poses in simple sequential order.
+_arm_sel = 36
+if args.arm30: _arm_sel = 30
+if args.arm24: _arm_sel = 24
+if args.arm36: _arm_sel = 36
 
-    Collision-free sweep: every pose is reachable (no collision to dodge).
-    Simple nested loops — no snake ordering needed since we teleport.
-    """
-    if args.test:
-        # Tiny grid for validation: 5 J2 × 3 J3 × 2 J4 = 30 poses
-        j2_grid = np.array([-30.0, 0.0, 60.0, 90.0, 150.0])
-        j3_grid = np.array([-90.0, 0.0, 90.0])
-        j4_grid = np.array([0.0, 60.0])
-    else:
-        j2_grid = np.arange(J2_MIN, J2_MAX + 0.1, J2_STEP)
-        j3_grid = np.arange(J3_MIN, J3_MAX + 0.1, J3_STEP)
-        j4_grid = np.arange(J4_MIN, J4_MAX + 0.1, J4_STEP)
-
-    poses = []
-    for j2 in j2_grid:
-        for j3 in j3_grid:
-            for j4 in j4_grid:
-                poses.append((float(j2), float(j3), float(j4)))
-
-    total = len(poses)
-    print(f"Grid: J2=[{j2_grid[0]:.0f},{j2_grid[-1]:.0f}]/{len(j2_grid)}  "
-          f"J3=[{j3_grid[0]:.0f},{j3_grid[-1]:.0f}]/{len(j3_grid)}  "
-          f"J4=[{j4_grid[0]:.0f},{j4_grid[-1]:.0f}]/{len(j4_grid)}", flush=True)
-    print(f"Total poses: {total} ({len(j2_grid)}x{len(j3_grid)}x{len(j4_grid)})"
-          f"{' [TEST MODE]' if args.test else ''}", flush=True)
-    return poses
-
-
-# ============================================================================
-# Output setup
-# ============================================================================
-env_label = "reactor" if args.reactor else ("step" if args.step else "flat")
+env_label = "step"
 load_label = "loaded" if args.armloaded else "bare"
-config_tag = f"{ARM_REACH_IN:.0f}in_{load_label}_{env_label}"
+# CF is the historical default; only suffix when metal so existing CF results stay intact
+mat_suffix = "_metal" if args.metal else ""
+config_name = f"{_arm_sel}in_{load_label}_step{mat_suffix}"
 
-out_dir = os.path.join(RESULTS_ROOT, "arm_continuous_sweep")
-os.makedirs(out_dir, exist_ok=True)
-csv_path = os.path.join(out_dir, f"{config_tag}.csv")
-json_path = os.path.join(out_dir, f"{config_tag}_summary.json")
+RESULTS_DIR = os.path.join(RESULTS_ROOT, "arm_stability_sweep")
+PHYSICS_DIR = os.path.join(RESULTS_DIR, "physics")
+os.makedirs(PHYSICS_DIR, exist_ok=True)
 
-CSV_FIELDS = [
-    "pose_idx", "j2_deg", "j3_deg", "j4_deg",
-    "j2_fk_deg", "j3_fk_deg", "j4_fk_deg",
-    # Actual angles the physics engine reached
-    "j1_actual_deg", "j2_actual_deg", "j3_actual_deg", "j4_actual_deg",
-    "position_error_deg",
-    # Physics-measured torques (mean over measurement window)
-    "tau_j1_Nm", "tau_j2_Nm", "tau_j3_Nm", "tau_j4_Nm",
-    # Analytical gravity torques from arm_ik.py
-    "tau_j2_analytical", "tau_j3_analytical", "tau_j4_analytical",
-    # End effector world position
-    "ee_x_m", "ee_y_m", "ee_z_m",
-    # Joint positions in arm plane (relative to J2 pivot, for post-filter collision checks)
-    "j3_local_x_m", "j3_local_z_m",
-    "j4_local_x_m", "j4_local_z_m",
-    "ee_local_x_m", "ee_local_z_m",
-    # Chassis state
-    "chassis_roll_deg", "chassis_pitch_deg",
-    # Convergence flag
-    "converged",
-]
+csv_path = os.path.join(PHYSICS_DIR, f"{config_name}_stability.csv")
+json_path = os.path.join(PHYSICS_DIR, f"{config_name}_stability_summary.json")
 
-# Resume: load completed poses
-completed_poses = set()
-if args.resume and os.path.exists(csv_path):
-    with open(csv_path, "r") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            try:
-                key = (float(row["j2_deg"]), float(row["j3_deg"]), float(row["j4_deg"]))
-                completed_poses.add(key)
-            except (KeyError, ValueError):
-                pass
-    print(f"Resume: {len(completed_poses)} poses already completed", flush=True)
+# Input: filtered CSV from torque sweep (same pose set as CF — metal reuses CF-filtered poses)
+_input_config_name = f"{_arm_sel}in_{load_label}_step"
+INPUT_CSV = os.path.join(RESULTS_ROOT, "arm_continuous_sweep", f"{_input_config_name}_filtered.csv")
 
+print(f"\n{'='*60}", flush=True)
+print(f"FORTIS Arm Stability Sweep", flush=True)
+print(f"Config: {config_name}", flush=True)
+print(f"Input: {INPUT_CSV}", flush=True)
+print(f"Output: {csv_path}", flush=True)
+print(f"{'='*60}\n", flush=True)
 
 # ============================================================================
 # Build scene
 # ============================================================================
-print(f"\n{'='*60}", flush=True)
-print(f"FORTIS Arm Continuous Sweep — {config_tag}", flush=True)
-print(f"{'='*60}", flush=True)
-
 src_parts, src_center = read_source_wheel()
-
 stage = omni.usd.get_context().get_stage()
 build_physics_scene(stage)
-
-if args.reactor:
-    print(f"Loading reactor: {REACTOR_USD}", flush=True)
-    rp = stage.DefinePrim("/World/Reactor", "Xform")
-    rp.GetReferences().AddReference(REACTOR_USD)
-    dl = stage.DefinePrim("/World/Light", "DistantLight")
-    dl.CreateAttribute("inputs:intensity", Sdf.ValueTypeNames.Float).Set(500.0)
-elif args.step:
-    build_step_env(stage)
-else:
-    build_ground(stage)
+build_step_env(stage)
 
 robot_path, chassis_path, drive_joint_paths, spawn_z, arm_joint_names = build_robot(
     stage, src_parts, src_center)
 
-# No contact sensors needed — collision-free sweep, filtered in post-processing
-print("Arm collision DISABLED — raw sweep mode", flush=True)
+print("Arm collision DISABLED — stability via chassis physics", flush=True)
 
 # Initialize simulation
 for _ in range(20):
@@ -1001,22 +950,13 @@ if not art.is_physics_handle_valid():
 
 ndof = art.num_dof
 dof_names = art.dof_names
-print(f"Articulation: {ndof} DOFs", flush=True)
 
-# Map DOFs
-drive_dof_indices = []
-for djp in drive_joint_paths:
-    jn = djp.split("/")[-1]
-    for i, dn in enumerate(dof_names):
-        if jn in dn or dn == jn:
-            drive_dof_indices.append(i); break
-
+# Map arm DOFs
 arm_dof_indices = []
 for ajn in arm_joint_names:
     for i, dn in enumerate(dof_names):
         if ajn in dn or dn == ajn:
             arm_dof_indices.append(i); break
-
 if len(arm_dof_indices) != 4:
     arm_dof_indices = [i for i, dn in enumerate(dof_names) if "Arm" in dn]
 print(f"Arm DOF indices: {arm_dof_indices}", flush=True)
@@ -1027,21 +967,201 @@ art.switch_control_mode("velocity", joint_indices=non_arm)
 va_lock = np.zeros(ndof)
 art.set_joint_velocity_targets(va_lock.reshape(1, -1))
 
-# Settle 2s
-print("Settling 2s...", flush=True)
-for i in range(2 * PHYSICS_HZ):
+# The omni wheel rollers allow the robot to slide off the step in Y.
+# In deployment, the tether cable prevents this. We model this with
+# physical guide walls at Y = ±guide_y that keep the wheels on the step.
+# The walls are thin collision boxes straddling the step edge.
+guide_y = 0.15  # slightly wider than wheel span (~0.09m from center)
+wall_h = 0.3    # tall enough to block chassis
+wall_t = 0.01   # thin
+
+for side, ypos in [("inner", guide_y), ("outer", -guide_y)]:
+    wp = UsdGeom.Cube.Define(stage, f"/World/Step/Guide_{side}")
+    wp.GetSizeAttr().Set(1.0)
+    wxf = UsdGeom.Xformable(wp.GetPrim()); wxf.ClearXformOpOrder()
+    wxf.AddTranslateOp().Set(Gf.Vec3d(0, ypos, wall_h / 2.0 - 0.05))
+    wxf.AddScaleOp().Set(Gf.Vec3d(4.0, wall_t, wall_h))
+    UsdPhysics.CollisionAPI.Apply(wp.GetPrim())
+    UsdPhysics.MeshCollisionAPI.Apply(wp.GetPrim()).GetApproximationAttr().Set("boundingCube")
+    PhysxSchema.PhysxCollisionAPI.Apply(wp.GetPrim())
+    wp.GetPurposeAttr().Set(UsdGeom.Tokens.guide)  # invisible
+print(f"Guide walls at Y=+/-{guide_y:.3f}m (models tether lateral constraint)", flush=True)
+
+# Settle on step (3 seconds for proper settling)
+print("Settling on step (3s)...", flush=True)
+for _ in range(3 * PHYSICS_HZ):
     world.step(render=False)
 
 init_jp = art.get_joint_positions().copy()
-print("Stowed position captured", flush=True)
 
-# === LAUNCH: Teleport arm to J2=90° (straight up) with J3=J4=0 (folded) ===
-# This is safe: folded arm going straight up can't hit anything.
-# We teleport because the PD controller is too slow for a 90° jump.
+# ============================================================================
+# Measure baseline chassis state
+# ============================================================================
+baseline_quat = get_chassis_quaternion(stage, chassis_path)
+baseline_roll, baseline_pitch = get_chassis_orientation(stage, chassis_path)
+baseline_wheel_z = get_wheel_hub_z(stage)
+
+# Check where the chassis actually ended up
+chassis_prim = stage.GetPrimAtPath(chassis_path)
+chassis_mat = UsdGeom.Xformable(chassis_prim).ComputeLocalToWorldTransform(Usd.TimeCode.Default())
+chassis_world_pos = chassis_mat.ExtractTranslation()
+print(f"\nChassis world position: ({chassis_world_pos[0]:.4f}, {chassis_world_pos[1]:.4f}, {chassis_world_pos[2]:.4f})", flush=True)
+
+# Also check individual wheel world XYZ
+print("Wheel hub world positions:", flush=True)
+for wname in WHEEL_ORDER:
+    path = f"/World/Robot/Wheel_{wname}/Hub"
+    prim = stage.GetPrimAtPath(path)
+    if prim.IsValid():
+        mat = UsdGeom.Xformable(prim).ComputeLocalToWorldTransform(Usd.TimeCode.Default())
+        t = mat.ExtractTranslation()
+        print(f"  {wname}: ({t[0]:.4f}, {t[1]:.4f}, {t[2]:.4f})", flush=True)
+
+print(f"\nBaseline chassis state on step:", flush=True)
+print(f"  Quaternion: [{baseline_quat[0]:.6f}, {baseline_quat[1]:.6f}, "
+      f"{baseline_quat[2]:.6f}, {baseline_quat[3]:.6f}]", flush=True)
+print(f"  Roll={baseline_roll:.2f} deg, Pitch={baseline_pitch:.2f} deg", flush=True)
+print(f"  Wheel Z: FR={baseline_wheel_z['FR']:.4f} FL={baseline_wheel_z['FL']:.4f} "
+      f"BL={baseline_wheel_z['BL']:.4f} BR={baseline_wheel_z['BR']:.4f}", flush=True)
+
+# Compute actual tilt from wheel heights
+z_right = (baseline_wheel_z["FR"] + baseline_wheel_z["BR"]) / 2.0
+z_left = (baseline_wheel_z["FL"] + baseline_wheel_z["BL"]) / 2.0
+wheel_y_span = abs(WHEEL_XY["FL"][1] - WHEEL_XY["FR"][1])
+measured_tilt_rad = math.atan2(abs(z_right - z_left), wheel_y_span)
+measured_tilt_deg = math.degrees(measured_tilt_rad)
+print(f"\n  Z_right={z_right:.4f}m, Z_left={z_left:.4f}m", flush=True)
+print(f"  Delta Z = {abs(z_right - z_left)*1000:.1f}mm over {wheel_y_span*1000:.1f}mm span", flush=True)
+print(f"  MEASURED CHASSIS TILT = {measured_tilt_deg:.2f} degrees", flush=True)
+
+# ============================================================================
+# Measure-tilt mode: just report and exit
+# ============================================================================
+if args.measure_tilt:
+    # Also measure tilt stability over 2 more seconds
+    print("\nMonitoring tilt stability (2s)...", flush=True)
+    quat_samples = []
+    for i in range(2 * PHYSICS_HZ):
+        world.step(render=False)
+        if i % 72 == 0:  # every 0.2s
+            q = get_chassis_quaternion(stage, chassis_path)
+            angle = quaternion_angle_deg(baseline_quat, q)
+            quat_samples.append(angle)
+    print(f"  Quaternion drift over 2s: max={max(quat_samples):.3f} deg, "
+          f"mean={sum(quat_samples)/len(quat_samples):.3f} deg", flush=True)
+
+    # Save result
+    tilt_result = {
+        "config": config_name,
+        "measured_tilt_deg": measured_tilt_deg,
+        "measured_tilt_rad": measured_tilt_rad,
+        "baseline_roll_deg": baseline_roll,
+        "baseline_pitch_deg": baseline_pitch,
+        "baseline_quaternion": baseline_quat.tolist(),
+        "wheel_z": baseline_wheel_z,
+        "z_right_avg": z_right,
+        "z_left_avg": z_left,
+        "quat_drift_max_deg": max(quat_samples),
+        "quat_drift_mean_deg": sum(quat_samples) / len(quat_samples),
+    }
+    tilt_path = os.path.join(RESULTS_DIR, f"{config_name}_tilt.json")
+    with open(tilt_path, "w") as f:
+        json.dump(tilt_result, f, indent=2)
+    print(f"\nTilt data saved to {tilt_path}", flush=True)
+    app.close()
+    sys.exit(0)
+
+# ============================================================================
+# Load poses from filtered CSV
+# ============================================================================
+if not os.path.exists(INPUT_CSV):
+    print(f"FATAL: Input CSV not found: {INPUT_CSV}", flush=True)
+    app.close(); sys.exit(1)
+
+import arm_ik as _arm_ik_mod
+_arm_params = _arm_ik_mod.get_arm_params(_arm_sel, loaded=args.armloaded)
+
+print(f"\nLoading poses from {INPUT_CSV}...", flush=True)
+all_rows = []
+with open(INPUT_CSV, "r") as f:
+    reader = csv.DictReader(f)
+    for row in reader:
+        all_rows.append(row)
+print(f"  Total rows: {len(all_rows)}", flush=True)
+
+# Select geometry-valid poses (passes chassis/self/floor checks)
+# Include both "valid" and "tipping" (tipping-only rejection = geometry is fine)
+geom_valid_rows = []
+for row in all_rows:
+    status = row.get("filter_status", "")
+    # Accept if status is "valid" or if the ONLY rejection is "tipping"
+    if status == "valid":
+        geom_valid_rows.append(row)
+    elif "tipping" in status:
+        # Check that no geometry filters are set
+        if (row.get("filter_chassis") != "True" and
+            row.get("filter_self_L4_L2") != "True" and
+            row.get("filter_self_L4_J1") != "True" and
+            row.get("filter_floor") != "True"):
+            geom_valid_rows.append(row)
+print(f"  Geometry-valid poses: {len(geom_valid_rows)}", flush=True)
+
+# Compute corrected analytical tipping with measured tilt
+print(f"  Computing tilted tipping margins (tilt={measured_tilt_deg:.2f} deg)...", flush=True)
+margin_threshold_m = args.margin_mm / 1000.0
+
+test_poses = []
+for row in geom_valid_rows:
+    j2_usd = float(row["j2_deg"])
+    j3_usd = float(row["j3_deg"])
+    j4_usd = float(row["j4_deg"])
+    j2_fk, j3_fk, j4_fk = usd_to_fk_angles(j2_usd, j3_usd, j4_usd)
+
+    tip = _arm_ik_mod.tipping_sweep_j1_tilted(
+        math.radians(j2_fk), math.radians(j3_fk), math.radians(j4_fk),
+        _arm_params, tilt_rad=measured_tilt_rad)
+
+    if tip["worst_margin"] < margin_threshold_m:
+        test_poses.append({
+            "j2_deg": j2_usd, "j3_deg": j3_usd, "j4_deg": j4_usd,
+            "analytical_margin_m": tip["worst_margin"],
+            "worst_j1_deg": tip["worst_j1_deg"],
+            "best_j1_deg": tip["best_j1_deg"],
+            "n_stable": tip["n_stable"],
+            "n_total": tip["n_total"],
+        })
+
+print(f"  Poses below {args.margin_mm:.0f}mm threshold: {len(test_poses)}", flush=True)
+
+if args.test:
+    # Take up to 20 evenly spaced poses sorted by margin
+    test_poses.sort(key=lambda p: p["analytical_margin_m"])
+    step = max(1, len(test_poses) // 20)
+    test_poses = test_poses[::step][:20]
+    print(f"  Test mode: selected {len(test_poses)} poses", flush=True)
+
+if len(test_poses) == 0:
+    print("\nNo poses to test! All margins above threshold.", flush=True)
+    summary = {
+        "config": config_name,
+        "measured_tilt_deg": measured_tilt_deg,
+        "margin_threshold_mm": args.margin_mm,
+        "total_geom_valid": len(geom_valid_rows),
+        "total_below_threshold": 0,
+        "total_tested": 0,
+        "stable": 0, "tipping": 0, "borderline": 0,
+    }
+    with open(json_path, "w") as f:
+        json.dump(summary, f, indent=2)
+    print(f"Summary saved to {json_path}", flush=True)
+    app.close(); sys.exit(0)
+
+# ============================================================================
+# Teleport arm to launch (J2=90, straight up)
+# ============================================================================
 launch_jp = init_jp.flatten().copy()
 launch_j2_deg = 90.0
 launch_jp[arm_dof_indices[1]] = math.radians(launch_j2_deg)
-# Set both position AND drive target
 art.set_joint_positions(launch_jp.reshape(1, -1))
 art.set_joint_velocities(np.zeros_like(launch_jp).reshape(1, -1))
 for i in range(4):
@@ -1053,325 +1173,244 @@ for i in range(4):
 art.set_joint_position_targets(launch_jp.reshape(1, -1))
 art.set_joint_velocity_targets(va_lock.reshape(1, -1))
 
-# Settle after launch teleport (1.5s — let dynamics fully damp)
-print(f"Launch: teleported to J2={launch_j2_deg:.0f}° (arm up, clear of chassis)", flush=True)
-for i in range(int(1.5 * PHYSICS_HZ)):
+print("Launch: arm to J2=90 (straight up)", flush=True)
+for _ in range(int(1.5 * PHYSICS_HZ)):
     world.step(render=False)
-print("Launch settled", flush=True)
 
-# Verify launch position
-actual_launch_jp = art.get_joint_positions().flatten()
-actual_launch_arm = [math.degrees(actual_launch_jp[arm_dof_indices[i]]) for i in range(4)]
-print(f"Launch verification: J1={actual_launch_arm[0]:.1f}° J2={actual_launch_arm[1]:.1f}° "
-      f"J3={actual_launch_arm[2]:.1f}° J4={actual_launch_arm[3]:.1f}°", flush=True)
-if abs(actual_launch_arm[1] - launch_j2_deg) > 5.0:
-    print(f"WARNING: J2 didn't reach launch target! Expected {launch_j2_deg}°, "
-          f"got {actual_launch_arm[1]:.1f}°", flush=True)
-
-# Flush: step physics to clear any stale contact reports from teleport
-for _ in range(60):
-    world.step(render=False)
-print("Launch flush complete", flush=True)
-
-# Record initial chassis orientation AFTER launch (arm at J2=90°, representative of sweep state)
-# Step env causes permanent roll — tipping detection measures CHANGE from this baseline
-init_roll, init_pitch = get_chassis_orientation(stage, chassis_path)
-print(f"Baseline chassis orientation: roll={init_roll:.1f}°, pitch={init_pitch:.1f}°", flush=True)
-
-# Analytical torques via arm_ik (for cross-validation)
-import arm_ik as _arm_ik_mod
-_arm_params = _arm_ik_mod.get_arm_params(_arm_sel, loaded=ARM_LOADED)
+# Re-capture baseline after launch (arm up changes CG slightly)
+baseline_quat = get_chassis_quaternion(stage, chassis_path)
+baseline_wheel_z = get_wheel_hub_z(stage)
+print("Baseline re-captured after launch", flush=True)
 
 # ============================================================================
-# SWEEP LOOP — collision-free, teleport to each pose
+# Stability sweep loop
 # ============================================================================
-poses = generate_pose_grid()
-total_poses = len(poses)
+SETTLE_FRAMES = int(args.settle_s * PHYSICS_HZ)
+HOLD_FRAMES = int(args.hold_s * PHYSICS_HZ)
+SAMPLE_INTERVAL = 36  # sample every 0.1s
 
-csv_mode = "a" if (args.resume and len(completed_poses) > 0) else "w"
+# Tipping thresholds
+STABLE_QUAT_THRESH = 3.0    # degrees
+TIPPING_QUAT_THRESH = 8.0   # degrees
+STABLE_LIFT_THRESH = 3.0    # mm
+TIPPING_LIFT_THRESH = 10.0  # mm
+
+CSV_FIELDS = [
+    "j2_deg", "j3_deg", "j4_deg", "j1_deg",
+    "analytical_margin_m", "analytical_worst_j1_deg",
+    "hold_quat_angle_deg", "hold_max_wheel_lift_mm",
+    "settle_quat_angle_deg",
+    "wheel_FR_lift_mm", "wheel_FL_lift_mm", "wheel_BL_lift_mm", "wheel_BR_lift_mm",
+    "classification", "tipped_reset", "test_duration_s",
+]
+
+# Resume support
+completed_keys = set()
+if args.resume and os.path.exists(csv_path):
+    with open(csv_path, "r") as f:
+        for row in csv.DictReader(f):
+            key = (float(row["j2_deg"]), float(row["j3_deg"]),
+                   float(row["j4_deg"]), float(row["j1_deg"]))
+            completed_keys.add(key)
+    print(f"Resume: {len(completed_keys)} tests already done", flush=True)
+
+csv_mode = "a" if (args.resume and len(completed_keys) > 0) else "w"
 csv_file = open(csv_path, csv_mode, newline="", encoding="utf-8")
 writer = csv.DictWriter(csv_file, fieldnames=CSV_FIELDS)
 if csv_mode == "w":
     writer.writeheader()
     csv_file.flush()
 
+# For each pose, test 3 J1 angles: worst, worst+15, worst-15
+n_total = 0
+n_stable = 0
+n_tipping = 0
+n_borderline = 0
+n_reset = 0
 start_time = time.time()
-start_utc = datetime.datetime.utcnow().isoformat() + "Z"
 
-# Statistics
-n_done = 0
-n_skipped = 0
-n_converged = 0
-n_nan = 0
-pose_times = []
+total_tests = sum(3 for _ in test_poses)  # 3 J1 angles per pose
+print(f"\nStarting stability sweep: {len(test_poses)} poses x 3 J1 angles = {total_tests} tests", flush=True)
+print(f"Settle={args.settle_s:.1f}s, Hold={args.hold_s:.1f}s", flush=True)
 
-print(f"\nStarting collision-free sweep: {total_poses} poses", flush=True)
-print(f"Settle={SETTLE_FRAMES} frames ({SETTLE_FRAMES/PHYSICS_HZ:.2f}s), "
-      f"Measure={MEASURE_FRAMES} frames ({MEASURE_FRAMES/PHYSICS_HZ:.2f}s)", flush=True)
-print(f"Output: {csv_path}", flush=True)
+for pi, pose in enumerate(test_poses):
+    j2_deg = pose["j2_deg"]
+    j3_deg = pose["j3_deg"]
+    j4_deg = pose["j4_deg"]
+    worst_j1 = pose["worst_j1_deg"]
 
-PROGRESS_INTERVAL = 60  # print progress every 1 min
+    # Test 3 J1 angles: worst, worst-15, worst+15
+    j1_angles = [worst_j1, (worst_j1 - 15) % 360, (worst_j1 + 15) % 360]
 
-for pose_idx, (j2_deg, j3_deg, j4_deg) in enumerate(poses):
-    key = (j2_deg, j3_deg, j4_deg)
-    if key in completed_poses:
-        n_skipped += 1
-        continue
+    for j1_deg in j1_angles:
+        key = (j2_deg, j3_deg, j4_deg, j1_deg)
+        if key in completed_keys:
+            continue
 
-    pose_t0 = time.time()
+        t0 = time.time()
+        target_angles_deg = [j1_deg, j2_deg, j3_deg, j4_deg]
 
-    # Target joint positions (USD angles, degrees). J1=0 fixed.
-    target_angles_deg = [0.0, j2_deg, j3_deg, j4_deg]
+        # Build target joint position array
+        target_jp = init_jp.flatten().copy()
+        for i in range(4):
+            target_jp[arm_dof_indices[i]] = math.radians(target_angles_deg[i])
 
-    # Build target joint position array
-    target_jp = init_jp.flatten().copy()
-    for i in range(4):
-        target_jp[arm_dof_indices[i]] = math.radians(target_angles_deg[i])
+        # Teleport
+        art.set_joint_positions(target_jp.reshape(1, -1))
+        art.set_joint_velocities(np.zeros_like(target_jp).reshape(1, -1))
+        for i in range(4):
+            jp_path = f"/World/Robot/{ARM_JOINT_NAMES[i]}"
+            jprim = stage.GetPrimAtPath(jp_path)
+            if jprim.IsValid():
+                UsdPhysics.DriveAPI(jprim, "angular").GetTargetPositionAttr().Set(
+                    float(target_angles_deg[i]))
+        art.set_joint_position_targets(target_jp.reshape(1, -1))
+        art.set_joint_velocity_targets(va_lock.reshape(1, -1))
 
-    # ---- TELEPORT: set positions + targets atomically ----
-    art.set_joint_positions(target_jp.reshape(1, -1))
-    art.set_joint_velocities(np.zeros_like(target_jp).reshape(1, -1))
-    for i in range(4):
-        jp_path = f"/World/Robot/{ARM_JOINT_NAMES[i]}"
-        jprim = stage.GetPrimAtPath(jp_path)
-        if jprim.IsValid():
-            UsdPhysics.DriveAPI(jprim, "angular").GetTargetPositionAttr().Set(
-                float(target_angles_deg[i]))
-    art.set_joint_position_targets(target_jp.reshape(1, -1))
-    art.set_joint_velocity_targets(va_lock.reshape(1, -1))
-
-    # ---- SETTLE: let PD controller converge ----
-    for _ in range(SETTLE_FRAMES):
-        world.step(render=False)
-
-    # ---- NaN CHECK: guard against physics blow-up ----
-    raw_jp = art.get_joint_positions()
-    if raw_jp is None or np.any(np.isnan(raw_jp)):
-        n_nan += 1
-        n_done += 1
-        row = {f: "" for f in CSV_FIELDS}
-        row["pose_idx"] = pose_idx
-        row["j2_deg"] = j2_deg; row["j3_deg"] = j3_deg; row["j4_deg"] = j4_deg
-        j2f, j3f, j4f = usd_to_fk_angles(j2_deg, j3_deg, j4_deg)
-        row["j2_fk_deg"] = f"{j2f:.1f}"; row["j3_fk_deg"] = f"{j3f:.1f}"; row["j4_fk_deg"] = f"{j4f:.1f}"
-        row["converged"] = "NaN"
-        writer.writerow(row); csv_file.flush()
-        pose_times.append(time.time() - pose_t0)
-        if n_nan <= 5:
-            print(f"  WARNING pose {pose_idx}: NaN in joint positions ({j2_deg:.0f},{j3_deg:.0f},{j4_deg:.0f})", flush=True)
-        # Reset to launch to recover
-        art.set_joint_positions(launch_jp.reshape(1, -1))
-        art.set_joint_velocities(np.zeros_like(launch_jp).reshape(1, -1))
-        art.set_joint_position_targets(launch_jp.reshape(1, -1))
-        for _ in range(60):
+        # Settle
+        for _ in range(SETTLE_FRAMES):
             world.step(render=False)
-        continue
 
-    # ---- ACTUAL ANGLES: what physics reached ----
-    actual_jp = raw_jp.flatten()
-    actual_arm_deg = [math.degrees(actual_jp[arm_dof_indices[i]]) for i in range(4)]
-    pos_errors = [abs(target_angles_deg[i] - actual_arm_deg[i]) for i in range(1, 4)]
-    max_pos_error = max(pos_errors)
-    converged = max_pos_error < POSITION_WARN_THRESH
+        # NaN check
+        raw_jp = art.get_joint_positions()
+        if raw_jp is None or np.any(np.isnan(raw_jp)):
+            # NaN — record and reset
+            row = {f: "" for f in CSV_FIELDS}
+            row["j2_deg"] = j2_deg; row["j3_deg"] = j3_deg; row["j4_deg"] = j4_deg
+            row["j1_deg"] = j1_deg
+            row["analytical_margin_m"] = f"{pose['analytical_margin_m']:.6f}"
+            row["analytical_worst_j1_deg"] = worst_j1
+            row["classification"] = "NaN"
+            row["tipped_reset"] = "True"
+            row["test_duration_s"] = f"{time.time()-t0:.2f}"
+            writer.writerow(row); csv_file.flush()
+            n_reset += 1
+            # Reset
+            art.set_joint_positions(launch_jp.reshape(1, -1))
+            art.set_joint_velocities(np.zeros_like(launch_jp).reshape(1, -1))
+            art.set_joint_position_targets(launch_jp.reshape(1, -1))
+            for _ in range(2 * PHYSICS_HZ):
+                world.step(render=False)
+            baseline_quat = get_chassis_quaternion(stage, chassis_path)
+            baseline_wheel_z = get_wheel_hub_z(stage)
+            continue
 
-    if not converged and n_done < 20:
-        print(f"  WARN pose {pose_idx}: err={max_pos_error:.2f}° "
-              f"target=({j2_deg:.0f},{j3_deg:.0f},{j4_deg:.0f}) "
-              f"actual=({actual_arm_deg[1]:.1f},{actual_arm_deg[2]:.1f},{actual_arm_deg[3]:.1f})", flush=True)
+        # Check orientation after settle
+        settle_quat = get_chassis_quaternion(stage, chassis_path)
+        settle_angle = quaternion_angle_deg(baseline_quat, settle_quat)
 
-    # ---- MEASURE: torques over measurement window ----
-    torque_samples = [[] for _ in range(4)]
-    for _ in range(MEASURE_FRAMES):
-        world.step(render=False)
-        try:
-            je = art.get_measured_joint_efforts()
-            if je is not None:
-                je_flat = je.flatten()
-                for ai in range(4):
-                    val = float(je_flat[arm_dof_indices[ai]])
-                    if math.isfinite(val):
-                        torque_samples[ai].append(val)
-        except Exception:
-            pass
+        # Hold and detect tipping
+        max_quat_angle = settle_angle
+        max_wheel_lift = 0.0
+        wheel_lifts = {wn: 0.0 for wn in WHEEL_ORDER}
 
-    mean_torques = []
-    for ai in range(4):
-        if torque_samples[ai]:
-            mean_torques.append(float(np.mean(torque_samples[ai])))
+        for frame in range(HOLD_FRAMES):
+            world.step(render=False)
+            if frame % SAMPLE_INTERVAL == 0:
+                q = get_chassis_quaternion(stage, chassis_path)
+                angle = quaternion_angle_deg(baseline_quat, q)
+                if angle > max_quat_angle:
+                    max_quat_angle = angle
+
+                wz = get_wheel_hub_z(stage)
+                for wn in WHEEL_ORDER:
+                    lift = (wz[wn] - baseline_wheel_z[wn]) * 1000.0  # mm, positive = up
+                    if lift > wheel_lifts[wn]:
+                        wheel_lifts[wn] = lift
+                    if lift > max_wheel_lift:
+                        max_wheel_lift = lift
+
+        # Classify
+        if max_quat_angle > TIPPING_QUAT_THRESH or max_wheel_lift > TIPPING_LIFT_THRESH:
+            classification = "TIPPING"
+            n_tipping += 1
+        elif max_quat_angle < STABLE_QUAT_THRESH and max_wheel_lift < STABLE_LIFT_THRESH:
+            classification = "STABLE"
+            n_stable += 1
         else:
-            mean_torques.append(float('nan'))
+            classification = "BORDERLINE"
+            n_borderline += 1
 
-    # ---- EE POSITION (world frame) ----
-    ee_pos = arm_tip_world(stage)
-    ee_x = float(ee_pos[0]) if ee_pos else float('nan')
-    ee_y = float(ee_pos[1]) if ee_pos else float('nan')
-    ee_z = float(ee_pos[2]) if ee_pos else float('nan')
+        tipped_reset = classification == "TIPPING"
+        n_total += 1
 
-    # ---- FK LOCAL POSITIONS (for post-filter collision checks) ----
-    j2f, j3f, j4f = usd_to_fk_angles(j2_deg, j3_deg, j4_deg)
-    try:
-        fk = _arm_ik_mod.fk_planar(
-            math.radians(j2f), math.radians(j3f), math.radians(j4f),
-            _arm_params["L2"], _arm_params["L3"], _arm_params["L4"])
-        j3_lx, j3_lz = fk["j3"]
-        j4_lx, j4_lz = fk["j4"]
-        ee_lx, ee_lz = fk["ee"]
-    except Exception:
-        j3_lx = j3_lz = j4_lx = j4_lz = ee_lx = ee_lz = float('nan')
+        row = {
+            "j2_deg": j2_deg, "j3_deg": j3_deg, "j4_deg": j4_deg,
+            "j1_deg": j1_deg,
+            "analytical_margin_m": f"{pose['analytical_margin_m']:.6f}",
+            "analytical_worst_j1_deg": worst_j1,
+            "hold_quat_angle_deg": f"{max_quat_angle:.3f}",
+            "hold_max_wheel_lift_mm": f"{max_wheel_lift:.2f}",
+            "settle_quat_angle_deg": f"{settle_angle:.3f}",
+            "wheel_FR_lift_mm": f"{wheel_lifts['FR']:.2f}",
+            "wheel_FL_lift_mm": f"{wheel_lifts['FL']:.2f}",
+            "wheel_BL_lift_mm": f"{wheel_lifts['BL']:.2f}",
+            "wheel_BR_lift_mm": f"{wheel_lifts['BR']:.2f}",
+            "classification": classification,
+            "tipped_reset": str(tipped_reset),
+            "test_duration_s": f"{time.time()-t0:.2f}",
+        }
+        writer.writerow(row); csv_file.flush()
 
-    # ---- CHASSIS ORIENTATION ----
-    roll_deg, pitch_deg = get_chassis_orientation(stage, chassis_path)
+        # Reset if tipped
+        if tipped_reset:
+            n_reset += 1
+            art.set_joint_positions(launch_jp.reshape(1, -1))
+            art.set_joint_velocities(np.zeros_like(launch_jp).reshape(1, -1))
+            art.set_joint_position_targets(launch_jp.reshape(1, -1))
+            for _ in range(2 * PHYSICS_HZ):
+                world.step(render=False)
+            baseline_quat = get_chassis_quaternion(stage, chassis_path)
+            baseline_wheel_z = get_wheel_hub_z(stage)
 
-    # ---- ANALYTICAL TORQUES ----
-    try:
-        ana_torques = compute_analytical_torques(j2_deg, j3_deg, j4_deg)
-    except Exception:
-        ana_torques = {"tau_j2": float('nan'), "tau_j3": float('nan'), "tau_j4": float('nan')}
-
-    # ---- WRITE ROW ----
-    if converged:
-        n_converged += 1
-    n_done += 1
-
-    row = {
-        "pose_idx": pose_idx,
-        "j2_deg": j2_deg, "j3_deg": j3_deg, "j4_deg": j4_deg,
-        "j2_fk_deg": f"{j2f:.1f}", "j3_fk_deg": f"{j3f:.1f}", "j4_fk_deg": f"{j4f:.1f}",
-        "j1_actual_deg": f"{actual_arm_deg[0]:.3f}",
-        "j2_actual_deg": f"{actual_arm_deg[1]:.3f}",
-        "j3_actual_deg": f"{actual_arm_deg[2]:.3f}",
-        "j4_actual_deg": f"{actual_arm_deg[3]:.3f}",
-        "position_error_deg": f"{max_pos_error:.3f}",
-        "tau_j1_Nm": f"{mean_torques[0]:.4f}",
-        "tau_j2_Nm": f"{mean_torques[1]:.4f}",
-        "tau_j3_Nm": f"{mean_torques[2]:.4f}",
-        "tau_j4_Nm": f"{mean_torques[3]:.4f}",
-        "tau_j2_analytical": f"{ana_torques['tau_j2']:.4f}",
-        "tau_j3_analytical": f"{ana_torques['tau_j3']:.4f}",
-        "tau_j4_analytical": f"{ana_torques['tau_j4']:.4f}",
-        "ee_x_m": f"{ee_x:.6f}", "ee_y_m": f"{ee_y:.6f}", "ee_z_m": f"{ee_z:.6f}",
-        "j3_local_x_m": f"{j3_lx:.6f}", "j3_local_z_m": f"{j3_lz:.6f}",
-        "j4_local_x_m": f"{j4_lx:.6f}", "j4_local_z_m": f"{j4_lz:.6f}",
-        "ee_local_x_m": f"{ee_lx:.6f}", "ee_local_z_m": f"{ee_lz:.6f}",
-        "chassis_roll_deg": f"{roll_deg:.3f}",
-        "chassis_pitch_deg": f"{pitch_deg:.3f}",
-        "converged": "True" if converged else "False",
-    }
-    writer.writerow(row)
-    csv_file.flush()
-
-    pose_dt = time.time() - pose_t0
-    pose_times.append(pose_dt)
-
-    # Diagnostic: first 10 poses get full printout
-    if n_done <= 10:
-        print(f"  [{n_done}/{total_poses}] J2={j2_deg:.0f} J3={j3_deg:.0f} J4={j4_deg:.0f}  "
-              f"tau2={mean_torques[1]:.2f} tau3={mean_torques[2]:.2f} tau4={mean_torques[3]:.2f} Nm  "
-              f"err={max_pos_error:.2f}°  {pose_dt:.2f}s", flush=True)
-
-    # Progress every PROGRESS_INTERVAL or every 10%
-    if n_done > 10 and (time.time() - pose_t0 > 0):
+    # Progress
+    if (pi + 1) % 10 == 0 or pi == 0:
         elapsed = time.time() - start_time
-        if (n_done % max(1, total_poses // 10) == 0) or (elapsed % PROGRESS_INTERVAL < pose_dt):
-            rate = n_done / elapsed if elapsed > 0 else 0
-            remaining_poses = total_poses - n_done - n_skipped
-            eta = remaining_poses / rate if rate > 0 else 0
-            mean_pt = np.mean(pose_times[-50:]) if pose_times else 0
-            print(f"  [{n_done}/{total_poses}] converged={n_converged} nan={n_nan} "
-                  f"elapsed={elapsed/60:.1f}min ETA={eta/60:.1f}min "
-                  f"({mean_pt:.3f}s/pose)", flush=True)
+        rate = n_total / elapsed if elapsed > 0 else 0
+        print(f"  [{pi+1}/{len(test_poses)}] tests={n_total} "
+              f"stable={n_stable} tipping={n_tipping} borderline={n_borderline} "
+              f"resets={n_reset} ({rate:.1f} tests/s)", flush=True)
 
 csv_file.close()
-
-# ============================================================================
-# Summary
-# ============================================================================
-elapsed_total = time.time() - start_time
+elapsed = time.time() - start_time
 
 print(f"\n{'='*60}", flush=True)
-print(f"SWEEP COMPLETE — {config_tag}", flush=True)
+print(f"Stability sweep complete: {config_name}", flush=True)
+print(f"  Total tests: {n_total}", flush=True)
+print(f"  STABLE: {n_stable} ({100*n_stable/max(1,n_total):.1f}%)", flush=True)
+print(f"  TIPPING: {n_tipping} ({100*n_tipping/max(1,n_total):.1f}%)", flush=True)
+print(f"  BORDERLINE: {n_borderline} ({100*n_borderline/max(1,n_total):.1f}%)", flush=True)
+print(f"  Resets: {n_reset}", flush=True)
+print(f"  Time: {elapsed:.0f}s ({elapsed/60:.1f}min)", flush=True)
+print(f"  Measured tilt: {measured_tilt_deg:.2f} deg", flush=True)
 print(f"{'='*60}", flush=True)
-print(f"  Total poses: {total_poses}", flush=True)
-print(f"  Skipped (resume): {n_skipped}", flush=True)
-print(f"  Recorded: {n_done}", flush=True)
-print(f"    Converged (err<{POSITION_WARN_THRESH}°): {n_converged} ({(n_converged/max(n_done,1))*100:.1f}%)", flush=True)
-print(f"    NaN (physics blow-up): {n_nan}", flush=True)
-print(f"  Elapsed: {elapsed_total/60:.1f} min ({elapsed_total/3600:.2f} hr)", flush=True)
-if pose_times:
-    print(f"  Mean pose time: {np.mean(pose_times):.3f}s", flush=True)
 
-# Read back CSV for torque summary (no pandas — use csv + numpy)
-try:
-    with open(csv_path, "r", encoding="utf-8", errors="replace") as f:
-        reader = csv.DictReader(f)
-        summary_rows = [r for r in reader if r.get("converged", "").strip() == "True"]
-    if not summary_rows:
-        summary_rows = list(csv.DictReader(open(csv_path, "r", encoding="utf-8", errors="replace")))
-
-    print(f"\n  TORQUE SUMMARY (n={len(summary_rows)} converged poses):", flush=True)
-    for jn in ["j2", "j3", "j4"]:
-        for label, col in [("physics", f"tau_{jn}_Nm"), ("analytical", f"tau_{jn}_analytical")]:
-            vals = []
-            for r in summary_rows:
-                try:
-                    v = float(r.get(col, ""))
-                    if math.isfinite(v): vals.append(v)
-                except (ValueError, TypeError):
-                    pass
-            if vals:
-                arr = np.array(vals)
-                print(f"    {jn.upper()} {label:11s}: mean={np.abs(arr).mean():.3f} Nm, "
-                      f"max={np.abs(arr).max():.3f} Nm", flush=True)
-
-    print(f"\n  EE REACH (world frame):", flush=True)
-    for c in ["ee_x_m", "ee_y_m", "ee_z_m"]:
-        vals = []
-        for r in summary_rows:
-            try:
-                v = float(r.get(c, ""))
-                if math.isfinite(v): vals.append(v)
-            except (ValueError, TypeError):
-                pass
-        if vals:
-            ax = c.split("_")[1]
-            print(f"    {ax}: [{min(vals):.3f}, {max(vals):.3f}] m", flush=True)
-
-    errs = []
-    for r in summary_rows:
-        try:
-            v = float(r.get("position_error_deg", ""))
-            if math.isfinite(v): errs.append(v)
-        except (ValueError, TypeError):
-            pass
-    if errs:
-        errs_arr = np.array(errs)
-        print(f"\n  POSITION ERROR: mean={errs_arr.mean():.3f}°, "
-              f"max={errs_arr.max():.3f}°, p95={np.percentile(errs_arr, 95):.3f}°", flush=True)
-
-except Exception as e:
-    print(f"  (Could not generate summary: {e})", flush=True)
-
-# Write JSON summary
+# Save summary
 summary = {
-    "config": config_tag,
-    "arm_reach_in": ARM_REACH_IN,
-    "loaded": ARM_LOADED,
-    "environment": env_label,
-    "grid": {"j2": [J2_MIN, J2_MAX, J2_STEP],
-             "j3": [J3_MIN, J3_MAX, J3_STEP],
-             "j4": [J4_MIN, J4_MAX, J4_STEP]},
-    "total_poses": total_poses,
-    "n_done": n_done,
-    "n_converged": n_converged,
-    "n_nan": n_nan,
-    "elapsed_s": elapsed_total,
-    "started_utc": start_utc,
-    "csv_path": csv_path,
-    "test_mode": args.test,
+    "config": config_name,
+    "measured_tilt_deg": measured_tilt_deg,
+    "measured_tilt_rad": measured_tilt_rad,
+    "margin_threshold_mm": args.margin_mm,
+    "settle_s": args.settle_s,
+    "hold_s": args.hold_s,
+    "total_geom_valid": len(geom_valid_rows),
+    "total_below_threshold": len(test_poses),
+    "total_tested": n_total,
+    "stable": n_stable,
+    "tipping": n_tipping,
+    "borderline": n_borderline,
+    "resets": n_reset,
+    "elapsed_s": elapsed,
+    "thresholds": {
+        "stable_quat_deg": STABLE_QUAT_THRESH,
+        "tipping_quat_deg": TIPPING_QUAT_THRESH,
+        "stable_lift_mm": STABLE_LIFT_THRESH,
+        "tipping_lift_mm": TIPPING_LIFT_THRESH,
+    },
 }
-with open(json_path, "w") as jf:
-    json.dump(summary, jf, indent=2)
-print(f"\nResults: {csv_path}", flush=True)
+with open(json_path, "w") as f:
+    json.dump(summary, f, indent=2)
 print(f"Summary: {json_path}", flush=True)
+print(f"CSV: {csv_path}", flush=True)
 
 app.close()

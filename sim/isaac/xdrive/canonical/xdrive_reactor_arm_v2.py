@@ -1,24 +1,31 @@
 """
-FORTIS X-drive chassis + 4-DOF parallel-link arm (configurable reach).
+FORTIS X-drive chassis + 4-DOF parallel-link arm — V2 HARDWARE (2026-04-11).
 
-Built on xdrive_realwheel.py (canonical arched chassis + real Kaya omni wheel
-meshes). Adds a 4-DOF arm (J1 yaw + J2-J4 pitch) with flat-stowed zigzag
-layout, mounted at chassis back edge.
+Same structure as canonical/xdrive_reactor_arm.py but with the new
+heterogeneous-motor hardware spec:
+
+  J1 yaw     : NEMA 17 + Cricket MK II 25:1                (0.580 kg, 12 Nm)
+  J2 shoulder: NEMA 23 + EG23-G20-D10 20:1 + adapter       (2.665 kg, 30 Nm cont)
+  J3 elbow   : NEMA 17 + Cricket MK II 25:1 + adapter      (0.655 kg, 12 Nm)
+  J4 wrist   : D845WP servo + adapter                      (0.302 kg, 4.9 Nm)
+  Links      : CF square tube 1.25"x1.38" OD, 0.065" wall  (0.226 lb/ft)
+  Camera     : Orbbec Gemini 2 (98 g) on L4 midpoint, 1.5" from J4
+  Gripper    : ServoCity parallel kit + D645MW + adapter   (0.216 kg)
+  Payload    : 3 lb (1361 g) at L4 tip when --armloaded
+
+Joint limits:
+  J1: +/- 180 deg (software limited)
+  J2: -30 to 150 deg (physical limit)
+  J3: +/- 180 deg (self-collision limited)
+  J4: +/- 101 deg (hardware limit)
 
 Arm configs (--36arm / --30arm / --24arm):
   36": L2=17" L3=15" L4=4"   (default)
   30": L2=15" L3=12" L4=3"
   24": L2=12" L3=10" L4=2"
 
---armloaded adds max payload (3 lb / 1361g) to gripper (500g) at EE tip.
-
-Links: CF square tube 0.79"x0.79", 0.0053 lb/in linear density (STD).
-Joints: 0.629 kg each (NEMA 17 0.80Nm + Cricket MK II 25:1 + hardware).
-Camera: Orbbec Gemini 2, 98g, on J2 shoulder.
-
-Usage: IsaacSim\\python.bat canonical/xdrive_reactor_arm.py --gui --36arm
-       IsaacSim\\python.bat canonical/xdrive_reactor_arm.py --gui --reactor --30arm
-       IsaacSim\\python.bat canonical/xdrive_reactor_arm.py --gui --24arm --armloaded
+Usage: IsaacSim\\python.bat canonical/xdrive_reactor_arm_v2.py --gui --30arm --armloaded
+       IsaacSim\\python.bat canonical/xdrive_reactor_arm_v2.py --gui --reactor --30arm
 """
 import os, sys, math, argparse
 import numpy as np
@@ -100,7 +107,8 @@ SCALE_Y = TARGET_WIDTH_MM / SRC_WIDTH_MM
 SCALE_UNIFORM = SCALE_XZ
 
 # Mass
-CHASSIS_MASS = 13.6  # 30 lb — reduced so total robot (chassis + 30" loaded arm) = 40 lb
+# V2: chassis at true realwheel hardware mass (20.4 kg = 45 lb).
+CHASSIS_MASS = 20.4
 WHEEL_MASS = 1.0
 ROLLER_MASS_FRAC = 0.3
 NUM_ROLLERS = 10
@@ -171,40 +179,49 @@ L_L3 = _l3_in * IN
 L_L4 = _l4_in * IN
 ARM_REACH_IN = _l2_in + _l3_in + _l4_in
 
-# Joint mass: motor (0.58 kg) + hardware (49g) = 0.629 kg each
-M_JOINT = 0.629
+# ----------------------------------------------------------------------
+# V2 per-joint masses (heterogeneous hardware)
+# ----------------------------------------------------------------------
+M_J1 = 0.580   # NEMA 17 (500 g) + Cricket MK II 25:1 (80 g)
+M_J2 = 2.665   # NEMA 23 (1500 g) + EG23-G20-D10 20:1 (1090 g) + adapter (75 g)
+M_J3 = 0.655   # NEMA 17 (500 g) + Cricket MK II 25:1 (80 g) + adapter (75 g)
+M_J4 = 0.302   # D845WP servo (227 g) + adapter (75 g)
 
-# Link tube material densities (square 0.79"x0.79")
-# CF: 0.0053 lb/in (STD, in BOM)
-# Aluminum: 0.013 lb/in
-CF_DENSITY_LB_PER_IN = 0.0053
-CF_DENSITY_KG_PER_M = CF_DENSITY_LB_PER_IN * 0.453592 / IN
+# Link tube: RockWest Composites CF square 1.25" x 1.38" OD, 0.065" wall
+# Linear density 0.226 lb/ft.  Metal fallback kept for parity with v1 CLI.
+CF_DENSITY_LB_PER_FT = 0.226
+CF_DENSITY_KG_PER_M = CF_DENSITY_LB_PER_FT * 0.453592 / (12.0 * IN)  # ~0.3362 kg/m
 METAL_DENSITY_LB_PER_IN = 0.013
 METAL_DENSITY_KG_PER_M = METAL_DENSITY_LB_PER_IN * 0.453592 / IN
 
 # Default to CF unless --metal is specified (mutually exclusive with --cf)
 _link_density = METAL_DENSITY_KG_PER_M if args.metal else CF_DENSITY_KG_PER_M
-LINK_MATERIAL = "aluminum" if args.metal else "carbon_fiber"
+LINK_MATERIAL = "aluminum" if args.metal else "carbon_fiber_v2"
 M_L2 = _link_density * L_L2
 M_L3 = _link_density * L_L3
 M_L4 = _link_density * L_L4
 
 
 # End-effector tip mass
-M_GRIPPER_BARE = 0.500   # gripper hardware: 500g
-M_PAYLOAD = 1.361         # max payload: 3 lb = 1361g
+# Gripper total: ServoCity parallel kit 81g + D645MW servo 60g + adapter 75g
+M_GRIPPER_BARE = 0.216
+M_PAYLOAD = 1.361         # max payload: 3 lb = 1361 g
 if args.armloaded:
-    M_GRIPPER = M_GRIPPER_BARE + M_PAYLOAD  # 1.861 kg
+    M_GRIPPER = M_GRIPPER_BARE + M_PAYLOAD
 else:
-    M_GRIPPER = M_GRIPPER_BARE              # 0.500 kg
+    M_GRIPPER = M_GRIPPER_BARE
 ARM_LOADED = args.armloaded
 
-# Depth camera on J2 shoulder (near joint, looking down the arm)
-M_CAMERA = 0.098  # Orbbec Gemini 2
-CAM_X_ON_L2 = 2.0 * IN  # 2" from J2 joint along L2 (not too close to joint pivot)
+# Depth camera: Orbbec Gemini 2, 98 g, now mounted on L4 at its midpoint
+# (1.5" from the J4 pivot, not on J2 shoulder as in v1).
+M_CAMERA = 0.098
+CAM_X_ON_L4 = 1.5 * IN
 
-# CF tube cross-section (for visual boxes)
-CF_TUBE_SIZE = 0.79 * IN  # 20.07mm
+# CF tube cross-section: rectangular 1.25" (Y) x 1.38" (Z)
+CF_TUBE_Y = 1.25 * IN
+CF_TUBE_Z = 1.38 * IN
+# Used for parallel Y-lane spacing only; inertia/visuals use the two dims.
+CF_TUBE_SIZE_MAX = max(CF_TUBE_Y, CF_TUBE_Z)
 
 # Arm mount: 3" forward from back edge, centerline, flush on top
 ARM_MOUNT_X = -CHASSIS_L / 2.0 + 3.0 * IN
@@ -212,19 +229,20 @@ ARM_MOUNT_Y = 0.0
 ARM_MOUNT_Z = CHASSIS_H / 2.0
 
 # Parallel layout: links side-by-side in Y on chassis top, all at same Z.
-# Each link is CF_TUBE_SIZE wide (~20mm), add 5mm gap between tubes.
-LINK_Y_SPACING = CF_TUBE_SIZE + 0.005  # ~25mm center-to-center
+# Each link is CF_TUBE_Y wide (~32 mm), add 5 mm gap between tubes.
+LINK_Y_SPACING = CF_TUBE_Y + 0.005  # ~37 mm center-to-center
 # Center 3 links around Y=0: offsets at -1, 0, +1 * spacing
 LINK_Y = [(-1.0) * LINK_Y_SPACING,   # L2
           ( 0.0) * LINK_Y_SPACING,   # L3
           (+1.0) * LINK_Y_SPACING]   # L4
 
 # DriveAPI for arm joints (position mode, Nm units via USD deg convention)
-ARM_STIFFNESS = 50.0     # Nm/deg — converges with <0.5° error, no oscillation
-ARM_DAMPING   = 10.0     # Nm*s/deg — critically damped for arm inertia
+# Heavier arm (especially J2 carrying 6 kg payload stack) needs stiffer PD.
+ARM_STIFFNESS = 80.0     # Nm/deg
+ARM_DAMPING   = 20.0     # Nm*s/deg
 ARM_MAX_FORCE = 500.0    # Nm — high so we measure what's NEEDED, not clamp it
 
-# Joint limits: all +-180 for testing. Real limits applied in sweep later.
+# Joint limits: all +-180 for GUI testing. Real hardware limits enforced in sweep.
 ARM_LIMITS_DEG = {
     "ArmJ1": (-180.0, 180.0),
     "ArmJ2": (-180.0, 180.0),
@@ -540,17 +558,26 @@ def build_arched_chassis(stage, path, half_h, color):
 def build_chassis(stage, chassis_path):
     half_h = CHASSIS_H / 2.0
 
+    # Visual mesh — full octagonal body, NO collision on this mesh
     build_arched_chassis(stage, chassis_path + "/body", half_h, (0.25, 0.25, 0.35))
 
+    # Collision: inset box so roller spheres never reach it even with flush wheels.
+    # Inset 1" from each side — rollers orbit ~76mm from hub with ~22mm sphere
+    # radius, so innermost roller point is ~54mm from hub center. With flush
+    # wheel offset (~30mm from chamfer face), the rollers reach ~24mm inside
+    # the chamfer face. A 1" (25.4mm) inset keeps the collision box clear.
     INSET = 1.0 * IN
+    col_hx = SL - INSET
+    col_hy = SW - INSET
     col = UsdGeom.Cube.Define(stage, chassis_path + "/collider")
     col.GetSizeAttr().Set(1.0)
     cxf = UsdGeom.Xformable(col.GetPrim())
     cxf.ClearXformOpOrder()
-    cxf.AddScaleOp().Set(Gf.Vec3d((SL - INSET) * 2.0, (SW - INSET) * 2.0, CHASSIS_H))
+    cxf.AddScaleOp().Set(Gf.Vec3d(col_hx * 2.0, col_hy * 2.0, CHASSIS_H))
     UsdPhysics.CollisionAPI.Apply(col.GetPrim())
-    UsdGeom.Imageable(col.GetPrim()).CreatePurposeAttr("guide")
+    UsdGeom.Imageable(col.GetPrim()).CreatePurposeAttr("guide")  # invisible
 
+    # Forward arrow indicator
     arrow = UsdGeom.Cube.Define(stage, chassis_path + "/fwd")
     arrow.GetSizeAttr().Set(1.0)
     axf = UsdGeom.Xformable(arrow.GetPrim())
@@ -691,9 +718,9 @@ def _apply_arm_body_mass_x(prim, joint_mass, link_mass, link_length, link_dir,
     """Set mass, COM, and inertia for an arm body with link along X.
 
     joint_mass: concentrated at body origin (joint pivot).
-    link_mass:  uniform box (CF_TUBE_SIZE x CF_TUBE_SIZE x link_length) along
+    link_mass:  uniform box (CF_TUBE_Y x CF_TUBE_Z x link_length) along
                 link_dir * X.
-    extra_mass: point mass at extra_x (e.g. camera).
+    extra_mass: point mass at extra_x (e.g. camera or gripper).
     """
     total = joint_mass + link_mass + extra_mass
     link_cx = link_dir * link_length / 2.0
@@ -703,10 +730,10 @@ def _apply_arm_body_mass_x(prim, joint_mass, link_mass, link_length, link_dir,
     mapi.CreateMassAttr(float(total))
     mapi.CreateCenterOfMassAttr(Gf.Vec3f(float(com_x), 0.0, 0.0))
 
-    # Link box inertia about its own center
+    # Link box inertia about its own center (rectangular tube)
     Lx = max(float(link_length), 0.01)
-    Ly = CF_TUBE_SIZE
-    Lz = CF_TUBE_SIZE
+    Ly = CF_TUBE_Y
+    Lz = CF_TUBE_Z
     Ixx_link = link_mass / 12.0 * (Ly**2 + Lz**2)
     Iyy_link = link_mass / 12.0 * (Lx**2 + Lz**2)
     Izz_link = link_mass / 12.0 * (Lx**2 + Ly**2)
@@ -825,14 +852,14 @@ def build_arm(stage, robot_path, chassis_path):
     C_L3 = (0.25, 0.75, 0.30)  # green
     C_L4 = (0.25, 0.30, 0.85)  # blue
 
-    # ---- Body 1: J1 base (vertical motor stack, +Z) ----
+    # ---- Body 1: J1 base (motor stack inside chassis, mass at top) ----
     UsdGeom.Xform.Define(stage, j1_path)
     p1 = stage.GetPrimAtPath(j1_path)
     xf1 = UsdGeom.Xformable(p1); xf1.ClearXformOpOrder()
     xf1.AddTranslateOp().Set(Gf.Vec3d(ARM_MOUNT_X, ARM_MOUNT_Y, ARM_MOUNT_Z))
     UsdPhysics.RigidBodyAPI.Apply(p1)
     PhysxSchema.PhysxRigidBodyAPI.Apply(p1).CreateMaxDepenetrationVelocityAttr(1.0)
-    _apply_arm_j1_mass(p1, mass=M_JOINT, stack_h=J1_STACK_H)
+    _apply_arm_j1_mass(p1, mass=M_J1, stack_h=J1_STACK_H)
     _add_arm_link_visual(stage, j1_path + "/vis",
                          center=(0.0, 0.0, J1_STACK_H / 2.0),
                          size=(0.057, 0.057, J1_STACK_H),
@@ -841,55 +868,55 @@ def build_arm(stage, robot_path, chassis_path):
                            center=(0.0, 0.0, J1_STACK_H / 2.0),
                            size=(0.057, 0.057, J1_STACK_H))
 
-    # ---- Body 2: J2 shoulder (L2 17", +X) at Y=y_l2, depth camera near joint ----
+    # ---- Body 2: J2 shoulder (NEMA 23 + L2, +X) at Y=y_l2 ----
+    # No camera on L2 in v2 (camera moved to L4 midpoint).
     UsdGeom.Xform.Define(stage, j2_path)
     p2 = stage.GetPrimAtPath(j2_path)
     xf2 = UsdGeom.Xformable(p2); xf2.ClearXformOpOrder()
     xf2.AddTranslateOp().Set(Gf.Vec3d(ARM_MOUNT_X, y_l2, z_arm))
     UsdPhysics.RigidBodyAPI.Apply(p2)
     PhysxSchema.PhysxRigidBodyAPI.Apply(p2).CreateMaxDepenetrationVelocityAttr(1.0)
-    _apply_arm_body_mass_x(p2, joint_mass=M_JOINT, link_mass=M_L2,
-                           link_length=L_L2, link_dir=+1,
-                           extra_mass=M_CAMERA, extra_x=CAM_X_ON_L2)
+    _apply_arm_body_mass_x(p2, joint_mass=M_J2, link_mass=M_L2,
+                           link_length=L_L2, link_dir=+1)
     _add_arm_link_visual(stage, j2_path + "/vis",
                          center=(+L_L2 / 2.0, 0.0, 0.0),
-                         size=(L_L2, CF_TUBE_SIZE, CF_TUBE_SIZE),
+                         size=(L_L2, CF_TUBE_Y, CF_TUBE_Z),
                          color=C_L2)
     _add_arm_collision_box(stage, j2_path + "/col",
                            center=(+L_L2 / 2.0, 0.0, 0.0),
-                           size=(L_L2, CF_TUBE_SIZE, CF_TUBE_SIZE))
-    # Depth camera visual (dark box on top of L2, near J2 joint)
-    cam = UsdGeom.Cube.Define(stage, j2_path + "/camera")
-    cam.GetSizeAttr().Set(1.0)
-    cxf = UsdGeom.Xformable(cam.GetPrim()); cxf.ClearXformOpOrder()
-    cxf.AddTranslateOp().Set(Gf.Vec3d(CAM_X_ON_L2, 0.0, CF_TUBE_SIZE / 2.0 + 0.015))
-    cxf.AddScaleOp().Set(Gf.Vec3d(0.060, 0.025, 0.025))  # ~60x25x25mm camera body
-    cam.GetDisplayColorAttr().Set(Vt.Vec3fArray([Gf.Vec3f(0.05, 0.05, 0.05)]))
+                           size=(L_L2, CF_TUBE_Y, CF_TUBE_Z))
+    # NEMA 23 + gearbox visual stub at J2 origin (~70x70x100 mm)
+    nema23 = UsdGeom.Cube.Define(stage, j2_path + "/motor")
+    nema23.GetSizeAttr().Set(1.0)
+    nxf = UsdGeom.Xformable(nema23.GetPrim()); nxf.ClearXformOpOrder()
+    nxf.AddTranslateOp().Set(Gf.Vec3d(-0.02, 0.0, 0.0))
+    nxf.AddScaleOp().Set(Gf.Vec3d(0.070, 0.070, 0.100))
+    nema23.GetDisplayColorAttr().Set(Vt.Vec3fArray([Gf.Vec3f(0.35, 0.35, 0.40)]))
     jsph = UsdGeom.Sphere.Define(stage, j2_path + "/joint_vis")
     jsph.GetRadiusAttr().Set(0.020)
     jsph.GetDisplayColorAttr().Set(Vt.Vec3fArray([Gf.Vec3f(*C_L2)]))
 
-    # ---- Body 3: J3 elbow (L3 15", -X) at Y=y_l3 ----
+    # ---- Body 3: J3 elbow (NEMA 17 + L3, -X zigzag) at Y=y_l3 ----
     UsdGeom.Xform.Define(stage, j3_path)
     p3 = stage.GetPrimAtPath(j3_path)
     xf3 = UsdGeom.Xformable(p3); xf3.ClearXformOpOrder()
     xf3.AddTranslateOp().Set(Gf.Vec3d(ARM_MOUNT_X + L_L2, y_l3, z_arm))
     UsdPhysics.RigidBodyAPI.Apply(p3)
     PhysxSchema.PhysxRigidBodyAPI.Apply(p3).CreateMaxDepenetrationVelocityAttr(1.0)
-    _apply_arm_body_mass_x(p3, joint_mass=M_JOINT, link_mass=M_L3,
+    _apply_arm_body_mass_x(p3, joint_mass=M_J3, link_mass=M_L3,
                            link_length=L_L3, link_dir=-1)
     _add_arm_link_visual(stage, j3_path + "/vis",
                          center=(-L_L3 / 2.0, 0.0, 0.0),
-                         size=(L_L3, CF_TUBE_SIZE, CF_TUBE_SIZE),
+                         size=(L_L3, CF_TUBE_Y, CF_TUBE_Z),
                          color=C_L3)
     _add_arm_collision_box(stage, j3_path + "/col",
                            center=(-L_L3 / 2.0, 0.0, 0.0),
-                           size=(L_L3, CF_TUBE_SIZE, CF_TUBE_SIZE))
+                           size=(L_L3, CF_TUBE_Y, CF_TUBE_Z))
     jsph = UsdGeom.Sphere.Define(stage, j3_path + "/joint_vis")
     jsph.GetRadiusAttr().Set(0.020)
     jsph.GetDisplayColorAttr().Set(Vt.Vec3fArray([Gf.Vec3f(*C_L3)]))
 
-    # ---- Body 4: J4 wrist (L4 4", +X, gripper at tip) at Y=y_l4 ----
+    # ---- Body 4: J4 wrist (D845WP + L4, +X, camera at midpoint, gripper at tip) ----
     UsdGeom.Xform.Define(stage, j4_path)
     p4 = stage.GetPrimAtPath(j4_path)
     xf4 = UsdGeom.Xformable(p4); xf4.ClearXformOpOrder()
@@ -897,18 +924,33 @@ def build_arm(stage, robot_path, chassis_path):
         ARM_MOUNT_X + L_L2 - L_L3, y_l4, z_arm))
     UsdPhysics.RigidBodyAPI.Apply(p4)
     PhysxSchema.PhysxRigidBodyAPI.Apply(p4).CreateMaxDepenetrationVelocityAttr(1.0)
-    _apply_arm_body_mass_x(p4, joint_mass=M_JOINT, link_mass=M_L4,
+    # J4 body carries: wrist motor + L4 link + camera (at midpoint) + gripper (at tip)
+    # We lump camera and gripper as two "extras" by composing them: approximate
+    # via a single effective extra at the mass-weighted position, then add
+    # their individual contributions to inertia in _apply_arm_body_mass_x.
+    # Simpler: two sequential calls would require refactor — instead, pre-
+    # compute the combined extra mass + its COM x and pass it.
+    _m_extra = M_GRIPPER + M_CAMERA
+    _x_extra = (M_GRIPPER * L_L4 + M_CAMERA * CAM_X_ON_L4) / _m_extra
+    _apply_arm_body_mass_x(p4, joint_mass=M_J4, link_mass=M_L4,
                            link_length=L_L4, link_dir=+1,
-                           extra_mass=M_GRIPPER, extra_x=L_L4)
+                           extra_mass=_m_extra, extra_x=_x_extra)
     _add_arm_link_visual(stage, j4_path + "/vis",
                          center=(+L_L4 / 2.0, 0.0, 0.0),
-                         size=(L_L4, CF_TUBE_SIZE, CF_TUBE_SIZE),
+                         size=(L_L4, CF_TUBE_Y, CF_TUBE_Z),
                          color=C_L4)
+    # Depth camera visual (dark box on top of L4, at midpoint)
+    cam = UsdGeom.Cube.Define(stage, j4_path + "/camera")
+    cam.GetSizeAttr().Set(1.0)
+    cxf = UsdGeom.Xformable(cam.GetPrim()); cxf.ClearXformOpOrder()
+    cxf.AddTranslateOp().Set(Gf.Vec3d(CAM_X_ON_L4, 0.0, CF_TUBE_Z / 2.0 + 0.015))
+    cxf.AddScaleOp().Set(Gf.Vec3d(0.060, 0.025, 0.025))
+    cam.GetDisplayColorAttr().Set(Vt.Vec3fArray([Gf.Vec3f(0.05, 0.05, 0.05)]))
     # Collision for L4 link + gripper (one box covering both)
     grip_col_len = L_L4 + 0.030  # link + gripper extent
     _add_arm_collision_box(stage, j4_path + "/col",
                            center=(grip_col_len / 2.0, 0.0, 0.0),
-                           size=(grip_col_len, 0.040, CF_TUBE_SIZE))
+                           size=(grip_col_len, max(0.040, CF_TUBE_Y), CF_TUBE_Z))
     # Gripper visual (small box at tip)
     grip = UsdGeom.Cube.Define(stage, j4_path + "/gripper")
     grip.GetSizeAttr().Set(1.0)
@@ -952,16 +994,20 @@ def build_arm(stage, robot_path, chassis_path):
                    axis="Y", limit_deg=ARM_LIMITS_DEG["ArmJ4"])
 
     # Print arm summary
-    total_arm_mass = 4 * M_JOINT + M_L2 + M_L3 + M_L4 + M_GRIPPER + M_CAMERA
+    total_arm_mass = (M_J1 + M_J2 + M_J3 + M_J4
+                      + M_L2 + M_L3 + M_L4 + M_GRIPPER + M_CAMERA)
     load_label = "LOADED" if ARM_LOADED else "UNLOADED"
-    print(f"\n{'='*50}", flush=True)
-    print(f"ARM BUILD SUMMARY ({ARM_REACH_IN:.0f}\" reach, {load_label})", flush=True)
-    print(f"{'='*50}", flush=True)
+    print(f"\n{'='*60}", flush=True)
+    print(f"ARM BUILD SUMMARY v2 ({ARM_REACH_IN:.0f}\" reach, {load_label})", flush=True)
+    print(f"{'='*60}", flush=True)
     print(f"  J1 stack height: {J1_STACK_H*1000:.0f}mm ({J1_STACK_H/IN:.2f}\")", flush=True)
     print(f"  L2={L_L2/IN:.0f}\"  L3={L_L3/IN:.0f}\"  L4={L_L4/IN:.0f}\"", flush=True)
     print(f"  Total reach: {(L_L2+L_L3+L_L4)/IN:.1f}\"", flush=True)
-    print(f"  Joint mass: {M_JOINT:.3f} kg x 4 = {4*M_JOINT:.3f} kg", flush=True)
-    print(f"  Link masses: L2={M_L2*1000:.1f}g  L3={M_L3*1000:.1f}g  "
+    print(f"  Joint masses:  J1={M_J1:.3f}  J2={M_J2:.3f}  J3={M_J3:.3f}  "
+          f"J4={M_J4:.3f} kg", flush=True)
+    print(f"  Link tube: CF {CF_TUBE_Y/IN:.2f}\"x{CF_TUBE_Z/IN:.2f}\" OD, "
+          f"{CF_DENSITY_LB_PER_FT:.3f} lb/ft -> {CF_DENSITY_KG_PER_M*1000:.1f} g/m", flush=True)
+    print(f"  Link masses:   L2={M_L2*1000:.1f}g  L3={M_L3*1000:.1f}g  "
           f"L4={M_L4*1000:.1f}g", flush=True)
     if ARM_LOADED:
         print(f"  EE tip: {M_GRIPPER*1000:.0f}g at L4 tip "
@@ -969,16 +1015,17 @@ def build_arm(stage, robot_path, chassis_path):
               flush=True)
     else:
         print(f"  EE tip: {M_GRIPPER*1000:.0f}g at L4 tip (gripper only)", flush=True)
-    print(f"  Camera: {M_CAMERA*1000:.0f}g on J2 shoulder ({CAM_X_ON_L2/IN:.1f}\" from J2)", flush=True)
-    m_j1 = M_JOINT
-    m_j2 = M_JOINT + M_L2 + M_CAMERA
-    m_j3 = M_JOINT + M_L3
-    m_j4 = M_JOINT + M_L4 + M_GRIPPER
+    print(f"  Camera: {M_CAMERA*1000:.0f}g on L4 midpoint "
+          f"({CAM_X_ON_L4/IN:.1f}\" from J4)", flush=True)
+    m_j1 = M_J1
+    m_j2 = M_J2 + M_L2
+    m_j3 = M_J3 + M_L3
+    m_j4 = M_J4 + M_L4 + M_GRIPPER + M_CAMERA
     print(f"\n  Per-body masses (joint + link + extras):", flush=True)
-    print(f"    J1_base:     {m_j1:.3f} kg ({m_j1*2.205:.2f} lb)  [motor+gearbox]", flush=True)
-    print(f"    J2_shoulder: {m_j2:.3f} kg ({m_j2*2.205:.2f} lb)  [joint + L2 {M_L2*1000:.1f}g + camera {M_CAMERA*1000:.0f}g]", flush=True)
-    print(f"    J3_elbow:    {m_j3:.3f} kg ({m_j3*2.205:.2f} lb)  [joint + L3 {M_L3*1000:.1f}g]", flush=True)
-    print(f"    J4_wrist:    {m_j4:.3f} kg ({m_j4*2.205:.2f} lb)  [joint + L4 {M_L4*1000:.1f}g + EE {M_GRIPPER*1000:.0f}g]", flush=True)
+    print(f"    J1_base:     {m_j1:.3f} kg ({m_j1*2.205:.2f} lb)  [NEMA 17 + Cricket]", flush=True)
+    print(f"    J2_shoulder: {m_j2:.3f} kg ({m_j2*2.205:.2f} lb)  [NEMA 23 + EG23 + L2 {M_L2*1000:.1f}g]", flush=True)
+    print(f"    J3_elbow:    {m_j3:.3f} kg ({m_j3*2.205:.2f} lb)  [NEMA 17 + Cricket + L3 {M_L3*1000:.1f}g]", flush=True)
+    print(f"    J4_wrist:    {m_j4:.3f} kg ({m_j4*2.205:.2f} lb)  [D845WP + L4 {M_L4*1000:.1f}g + cam {M_CAMERA*1000:.0f}g + EE {M_GRIPPER*1000:.0f}g]", flush=True)
     print(f"\n  Total arm mass: {total_arm_mass:.3f} kg ({total_arm_mass*2.205:.2f} lb)", flush=True)
     print(f"  Mount: back edge x={ARM_MOUNT_X/IN:+.2f}\" z={ARM_MOUNT_Z/IN:+.2f}\"", flush=True)
     print(f"  Link Y lanes (side-by-side): "
@@ -1035,36 +1082,47 @@ def read_ee_contacts(cs, ee_path):
 
 
 def compute_tipping_margins(stage, chassis_path, arm_joint_names_local):
-    """Compute tipping stability: arm CG vs wheel support polygon.
+    """Compute tipping stability: COMBINED (chassis + arm) CG vs wheel support polygon.
 
     Returns dict with:
-      arm_cg_world:  [x,y,z] of lumped arm CG in world
+      combined_cg:   [x,y,z] of the whole-robot CG in world
+      arm_cg:        [x,y,z] of lumped arm CG in world
+      arm_mass:      total arm mass (kg)
+      total_mass:    chassis + arm mass (kg)
       wheel_xy:      list of 4 wheel ground-contact [x,y] in world
       margin_front, margin_back, margin_left, margin_right:
-          signed distance from arm CG projection to support edge (m).
+          signed distance from COMBINED CG projection to support edge (m).
           Positive = stable, negative = tipping.
-      tipping_moment_Nm:  arm_mass * g * max_overhang (worst-case edge)
+      tipping_moment_Nm:  total_mass * g * max_overhang (worst-case edge)
     """
     GRAV = 9.81
     arm_bodies = [
-        ("/World/Robot/ArmJ1base",     M_JOINT),
-        ("/World/Robot/ArmJ2shoulder", M_JOINT + M_L2 + M_CAMERA),
-        ("/World/Robot/ArmJ3elbow",    M_JOINT + M_L3),
-        ("/World/Robot/ArmJ4wrist",    M_JOINT + M_L4 + M_GRIPPER),
+        ("/World/Robot/ArmJ1base",     M_J1),
+        ("/World/Robot/ArmJ2shoulder", M_J2 + M_L2),
+        ("/World/Robot/ArmJ3elbow",    M_J3 + M_L3),
+        ("/World/Robot/ArmJ4wrist",    M_J4 + M_L4 + M_CAMERA + M_GRIPPER),
     ]
-    total_m = 0.0
-    cg = np.zeros(3)
+    arm_m = 0.0
+    arm_cg = np.zeros(3)
     for path, mass in arm_bodies:
         p = arm_body_world_pos(stage, path)
         if p is not None:
-            cg += mass * p
-            total_m += mass
-    if total_m > 0:
-        cg /= total_m
+            arm_cg += mass * p
+            arm_m += mass
+    if arm_m > 0:
+        arm_cg /= arm_m
 
-    # Wheel ground contact points (world frame) — use chassis transform
+    # Chassis CG in world frame (COM at chassis body origin)
     cprim = stage.GetPrimAtPath(chassis_path)
     cmat = UsdGeom.Xformable(cprim).ComputeLocalToWorldTransform(Usd.TimeCode.Default())
+    chassis_world = cmat.ExtractTranslation()
+    chassis_cg = np.array([chassis_world[0], chassis_world[1], chassis_world[2]])
+
+    # Combined (chassis + arm) CG
+    total_m = CHASSIS_MASS + arm_m
+    combined_cg = (CHASSIS_MASS * chassis_cg + arm_m * arm_cg) / total_m
+
+    # Wheel ground contact points (world frame)
     wheel_world = []
     for wn in WHEEL_ORDER:
         wx, wy = WHEEL_XY[wn]
@@ -1079,19 +1137,21 @@ def compute_tipping_margins(stage, chassis_path, arm_joint_names_local):
     y_min, y_max = min(wys), max(wys)
 
     # Margins: positive = CG inside polygon, negative = outside (tipping)
-    margin_front = x_max - cg[0]   # front edge
-    margin_back  = cg[0] - x_min   # back edge
-    margin_left  = y_max - cg[1]   # left edge
-    margin_right = cg[1] - y_min   # right edge
+    margin_front = x_max - combined_cg[0]
+    margin_back  = combined_cg[0] - x_min
+    margin_left  = y_max - combined_cg[1]
+    margin_right = combined_cg[1] - y_min
 
     worst_overhang = -min(margin_front, margin_back, margin_left, margin_right)
     if worst_overhang < 0:
-        worst_overhang = 0.0  # all margins positive = no overhang
+        worst_overhang = 0.0
     tipping_moment = total_m * GRAV * worst_overhang
 
     return {
-        "arm_cg": cg,
-        "arm_mass": total_m,
+        "combined_cg": combined_cg,
+        "arm_cg": arm_cg,
+        "arm_mass": arm_m,
+        "total_mass": total_m,
         "wheel_xy": wheel_world,
         "margin_front": margin_front,
         "margin_back": margin_back,
@@ -1132,12 +1192,15 @@ def log_comprehensive(frame, hz, art, stage, chassis_path, arm_joint_names_local
         print(f"  EE tip: ({tip[0]/IN:+.2f}, {tip[1]/IN:+.2f}, {tip[2]/IN:+.2f})\"",
               flush=True)
 
-    # Tipping analysis
+    # Tipping analysis (combined chassis + arm CG)
     tip_data = compute_tipping_margins(stage, chassis_path, arm_joint_names_local)
-    cg = tip_data["arm_cg"]
+    ccg = tip_data["combined_cg"]
+    acg = tip_data["arm_cg"]
     status = "STABLE" if tip_data["stable"] else "TIPPING"
-    print(f"  Arm CG: ({cg[0]/IN:+.2f}, {cg[1]/IN:+.2f}, {cg[2]/IN:+.2f})\"  "
-          f"mass={tip_data['arm_mass']:.2f}kg", flush=True)
+    print(f"  Arm CG: ({acg[0]/IN:+.2f}, {acg[1]/IN:+.2f}, {acg[2]/IN:+.2f})\"  "
+          f"arm={tip_data['arm_mass']:.2f}kg", flush=True)
+    print(f"  Robot CG: ({ccg[0]/IN:+.2f}, {ccg[1]/IN:+.2f}, {ccg[2]/IN:+.2f})\"  "
+          f"total={tip_data['total_mass']:.2f}kg", flush=True)
     print(f"  Margins: F={tip_data['margin_front']/IN:+.2f}\"  "
           f"B={tip_data['margin_back']/IN:+.2f}\"  "
           f"L={tip_data['margin_left']/IN:+.2f}\"  "
@@ -1177,8 +1240,7 @@ def build_robot(stage, src_parts, src_center):
     physx_art = PhysxSchema.PhysxArticulationAPI.Apply(cp)
     # Self-collisions ON: non-adjacent bodies in the articulation collide
     # (e.g. arm links vs chassis, J2 vs J4). PhysX automatically filters
-    # parent-child pairs (bodies connected by a joint) so adjacent links
-    # won't explode at hinges.
+    # parent-child pairs (bodies connected by a joint).
     physx_art.CreateEnabledSelfCollisionsAttr(True)
 
     build_chassis(stage, chassis_path)
@@ -1192,6 +1254,8 @@ def build_robot(stage, src_parts, src_center):
     wheel_mat = UsdShade.Material(stage.GetPrimAtPath("/World/WheelMat"))
 
     wheel_z = WHEEL_RADIUS - (BELLY_HEIGHT + CHASSIS_H / 2.0)
+    # Flush mount: chassis collision is an inset box, so rollers can't clip it.
+    # Offset = half wheel width + 5mm air gap (inner wheel face flush with chamfer).
     wheel_offset = WHEEL_WIDTH / 2.0 + 0.005
 
     drive_joint_paths = []
@@ -1206,7 +1270,7 @@ def build_robot(stage, src_parts, src_center):
         wx = cx + nx * wheel_offset
         wy = cy + ny * wheel_offset
 
-        # Visual bracket: thin strut from chamfer face to wheel hub
+        # Visual bracket: strut from chamfer face to wheel hub
         bracket_path = chassis_path + f"/bracket_{wname}"
         bracket = UsdGeom.Cube.Define(stage, bracket_path)
         bracket.GetSizeAttr().Set(1.0)
@@ -1400,7 +1464,7 @@ class KB:
 # ============================================================================
 print("=" * 60, flush=True)
 _load_str = " LOADED (gripper+payload)" if ARM_LOADED else ""
-print(f"FORTIS X-Drive + 4-DOF Parallel Link Arm "
+print(f"FORTIS X-Drive + 4-DOF Parallel Link Arm v2 "
       f"({ARM_REACH_IN:.0f}\" reach){_load_str}", flush=True)
 print("=" * 60, flush=True)
 

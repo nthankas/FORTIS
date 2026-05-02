@@ -1,25 +1,19 @@
 """
-Post-processing filter for FORTIS arm collision-free sweep results.
+Post-processing filter for FORTIS arm collision-free sweep results (v2).
 
-Reads raw CSV from arm_continuous_sweep.py, applies analytical filters,
-outputs filtered CSV with rejection reasons and summary statistics.
-
-Filters applied:
-  1. Self-collision (L4 vs L2, L4 vs J1 base)
-  2. Chassis collision (link segments vs chassis bounding box)
-  3. Floor collision (any joint/EE below ground)
-  4. Convergence (position error threshold)
+Same logic as tools/arm_sweep_filter.py but imports arm_ik_v2 so the
+collision envelope (1.25"x1.38" tube) and per-joint tipping masses match
+the v2 hardware spec. Writes <input>_filtered.csv in the same directory.
 
 Usage:
-  python tools/arm_sweep_filter.py results/arm_continuous_sweep/36in_bare_step.csv
-  python tools/arm_sweep_filter.py results/arm_continuous_sweep/36in_bare_step.csv --margin 0.015
+  python tools/arm_sweep_filter_v2.py results/arm_continuous_sweep/30in_loaded_step_v2.csv
 """
 import os, sys, math, argparse, csv, json
 import numpy as np
 
 XDRIVE_ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 sys.path.insert(0, os.path.join(XDRIVE_ROOT, "lib"))
-import arm_ik
+import arm_ik_v2 as arm_ik
 
 parser = argparse.ArgumentParser(description="Filter arm sweep results")
 parser.add_argument("csv_path", help="Path to raw sweep CSV")
