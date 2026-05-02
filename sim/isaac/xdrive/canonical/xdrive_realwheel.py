@@ -18,8 +18,8 @@ os.environ["PYTHONIOENCODING"] = "utf-8"
 parser = argparse.ArgumentParser()
 parser.add_argument("--gui", action="store_true")
 parser.add_argument("--headless", action="store_true")
-parser.add_argument("--belly", type=float, default=2.5,
-                    help="Belly height above ground in inches (default 2.5)")
+parser.add_argument("--belly", type=float, default=2.0,
+                    help="Belly height above ground in inches (default 2.0)")
 parser.add_argument("--hz", type=int, default=360,
                     help="Physics Hz (360-480, default 360)")
 parser.add_argument("--reactor", action="store_true",
@@ -66,20 +66,22 @@ sys.path.insert(0, os.path.join(XDRIVE_ROOT, "lib"))
 # --- end bootstrap ---
 OMNIWHEEL_USD = os.path.join(ASSETS_DIR, "omniwheels.usd")
 
-# Chassis: straight-edge rectangular body
-CHASSIS_L = 15.354 * IN     # front-to-back (X)
-CHASSIS_W = 9.353 * IN      # side-to-side (Y)
-CHASSIS_H = 7.1 * IN        # height (Z)
+# Chassis skeleton (octagonal with 3" chamfer faces)
+CHASSIS_L = 13.082 * IN     # bounding box front-to-back (X)
+CHASSIS_W = 8.54 * IN       # bounding box side-to-side (Y)
+CHASSIS_H = 6.0 * IN        # height (Z)
 CHAMFER_FACE = 3.0 * IN     # 45-deg chamfer face for wheel mounting
 CHAMFER_CUT = CHAMFER_FACE / math.sqrt(2)
+# Straight edges: 8.757" (length sides) x 4.257" (width faces)
+# Total footprint with wheels: 19.022" L x 14.5" W
 
 # Motor mount flats at front/rear (where gearbox sits, along X axis)
-MOTOR_MOUNT_LEN = 2.5 * IN  # flat area at each end for gearbox + motor
+MOTOR_MOUNT_LEN = 1.272 * IN # flat area at each end for gearbox + motor
 
 # Belly arch (recessed center section for step clearance)
 BELLY_HEIGHT = args.belly * IN  # how high the belly center is raised above chassis bottom
 # The arch is between the motor mount flats. Ramps connect the flat to the raised center.
-ARCH_FLAT_WIDTH = 3.0 * IN  # flat section at the raised belly center
+ARCH_FLAT_WIDTH = 2.059 * IN # flat section at the raised belly center
 
 # Reactor USD
 REACTOR_USD = os.path.join(ASSETS_DIR, "diiid_reactor.usd")
@@ -122,7 +124,7 @@ SL = CHASSIS_L / 2.0
 SW = CHASSIS_W / 2.0
 C = CHAMFER_CUT
 
-# Octagon vertices (top view, for wheel mounting positions)
+# Octagon vertices (top view, wheels mount at chamfer face midpoints)
 OCT_XY = [
     ( SL,       -(SW - C)),
     ( SL,        (SW - C)),
@@ -381,11 +383,18 @@ def build_chassis(stage, chassis_path):
     """Arched chassis with chamfered corners and recessed belly."""
     half_h = CHASSIS_H / 2.0
 
-    chassis_mesh = build_arched_chassis(stage, chassis_path + "/body",
-                                        half_h, (0.25, 0.25, 0.35))
-    UsdPhysics.CollisionAPI.Apply(chassis_mesh.GetPrim())
-    # convexDecomposition preserves the belly recess (convexHull fills it in)
-    UsdPhysics.MeshCollisionAPI.Apply(chassis_mesh.GetPrim()).CreateApproximationAttr("convexDecomposition")
+    # Visual mesh — full octagonal body, NO collision on visual mesh
+    build_arched_chassis(stage, chassis_path + "/body", half_h, (0.25, 0.25, 0.35))
+
+    # Collision: inset box so roller spheres never clip it with flush wheels
+    INSET = 1.0 * IN
+    col = UsdGeom.Cube.Define(stage, chassis_path + "/collider")
+    col.GetSizeAttr().Set(1.0)
+    cxf = UsdGeom.Xformable(col.GetPrim())
+    cxf.ClearXformOpOrder()
+    cxf.AddScaleOp().Set(Gf.Vec3d((SL - INSET) * 2.0, (SW - INSET) * 2.0, CHASSIS_H))
+    UsdPhysics.CollisionAPI.Apply(col.GetPrim())
+    UsdGeom.Imageable(col.GetPrim()).CreatePurposeAttr("guide")
 
     # Forward arrow indicator
     arrow = UsdGeom.Cube.Define(stage, chassis_path + "/fwd")
@@ -596,16 +605,8 @@ def build_robot(stage, src_parts, src_center):
     wpm.CreateRestitutionAttr(0.1)
     wheel_mat = UsdShade.Material(stage.GetPrimAtPath("/World/WheelMat"))
 
-    # Wheel Z position relative to chassis center
-    # On flat ground: chassis center at Z = BELLY_HEIGHT + CHASSIS_H/2
-    # Wheel axle at Z = WHEEL_RADIUS (above ground)
-    # Wheel Z in chassis frame = WHEEL_RADIUS - (BELLY_HEIGHT + CHASSIS_H/2)
     wheel_z = WHEEL_RADIUS - (BELLY_HEIGHT + CHASSIS_H / 2.0)
-
-    # Wheel offset: must clear roller orbit radius from chassis
-    # Roller centers orbit at ~76mm from wheel hub in the rotation plane.
-    # Offset must prevent inner rollers from overlapping chassis collision.
-    wheel_offset = WHEEL_WIDTH / 2.0 + 0.04  # half of 51.8mm + 40mm clearance
+    wheel_offset = WHEEL_WIDTH / 2.0 + 0.005
 
     drive_joint_paths = []
 
@@ -614,13 +615,25 @@ def build_robot(stage, src_parts, src_center):
         angle_deg = AXLE_ANGLES[wname]
         angle_rad = math.radians(angle_deg)
 
-        # Offset wheel outward along chamfer normal
         norm_len = math.sqrt(cx * cx + cy * cy)
         nx, ny = cx / norm_len, cy / norm_len
         wx = cx + nx * wheel_offset
         wy = cy + ny * wheel_offset
 
-        # Wheel Xform: translate + rotateZ (same pattern as original xdrive_o3dyn.py)
+        # Visual bracket: thin strut from chamfer face to wheel hub
+        bracket_path = chassis_path + f"/bracket_{wname}"
+        bracket = UsdGeom.Cube.Define(stage, bracket_path)
+        bracket.GetSizeAttr().Set(1.0)
+        bxf = UsdGeom.Xformable(bracket.GetPrim())
+        bxf.ClearXformOpOrder()
+        bxf.AddTranslateOp().Set(Gf.Vec3d(
+            (cx + wx) / 2.0, (cy + wy) / 2.0, float(wheel_z)))
+        bxf.AddRotateZOp().Set(float(math.degrees(math.atan2(ny, nx))))
+        bxf.AddScaleOp().Set(Gf.Vec3d(
+            float(wheel_offset), 0.03, 0.03))
+        bracket.GetDisplayColorAttr().Set(
+            Vt.Vec3fArray([Gf.Vec3f(0.35, 0.35, 0.40)]))
+
         wp = robot_path + f"/Wheel_{wname}"
         wxf = UsdGeom.Xform.Define(stage, wp)
         wxf.ClearXformOpOrder()
@@ -680,7 +693,7 @@ def build_robot(stage, src_parts, src_center):
             SPAWN_X = 0.0
             SPAWN_Y = -1.59                   # 62.7" from center
             SPAWN_FLOOR_Z = cfg.Z_OUTER_IN * IN  # -49.3"
-            spawn_z = SPAWN_FLOOR_Z + WHEEL_RADIUS + CHASSIS_H / 2.0 + 0.10
+            spawn_z = SPAWN_FLOOR_Z + BELLY_HEIGHT + CHASSIS_H / 2.0 + 0.02
             spawn_yaw = math.degrees(math.atan2(0 - SPAWN_Y, 0 - SPAWN_X))
         rxf = UsdGeom.Xformable(stage.GetPrimAtPath(robot_path))
         rxf.ClearXformOpOrder()

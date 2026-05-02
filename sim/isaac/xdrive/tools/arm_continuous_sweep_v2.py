@@ -25,7 +25,6 @@ parser.add_argument("--armloaded", action="store_true")
 parser.add_argument("--step", action="store_true")
 parser.add_argument("--reactor", action="store_true")
 parser.add_argument("--hz", type=int, default=360)
-parser.add_argument("--belly", type=float, default=2.5)
 parser.add_argument("--fine", action="store_true", help="Fine grid (5/5/10 deg)")
 parser.add_argument("--coarse", action="store_true", help="Coarse grid (15/15/30 deg)")
 parser.add_argument("--resume", action="store_true", help="Resume from existing CSV")
@@ -57,14 +56,14 @@ OMNIWHEEL_USD = os.path.join(ASSETS_DIR, "omniwheels.usd")
 REACTOR_USD = os.path.join(ASSETS_DIR, "diiid_reactor.usd")
 
 # Chassis
-CHASSIS_L = 15.354 * IN
-CHASSIS_W = 9.353 * IN
-CHASSIS_H = 7.1 * IN
+CHASSIS_L = 13.082 * IN
+CHASSIS_W = 8.54 * IN
+CHASSIS_H = 6.0 * IN
 CHAMFER_FACE = 3.0 * IN
 CHAMFER_CUT = CHAMFER_FACE / math.sqrt(2)
-MOTOR_MOUNT_LEN = 2.5 * IN
-BELLY_HEIGHT = args.belly * IN
-ARCH_FLAT_WIDTH = 3.0 * IN
+MOTOR_MOUNT_LEN = 1.272 * IN
+BELLY_HEIGHT = 2.0 * IN
+ARCH_FLAT_WIDTH = 2.059 * IN
 FRICTION_MU = 0.5
 
 # Wheels
@@ -171,7 +170,7 @@ CAM_X_ON_L4 = 1.5 * IN
 CF_TUBE_Y = 1.25 * IN
 CF_TUBE_Z = 1.38 * IN
 
-ARM_MOUNT_X = -CHASSIS_L / 2.0
+ARM_MOUNT_X = -CHASSIS_L / 2.0 + 3.0 * IN
 ARM_MOUNT_Y = 0.0
 ARM_MOUNT_Z = CHASSIS_H / 2.0
 
@@ -390,8 +389,11 @@ def build_arched_chassis(stage, path, half_h, color):
     z_high = -half_h + BELLY_HEIGHT
 
     x_stations = sorted(set([
-        -SL, -(SL - C), -ramp_end, -ramp_start, 0.0,
-        ramp_start, ramp_end, (SL - C), SL,
+        -SL, -(SL - C),
+        -ramp_end, -ramp_start,
+        0.0,
+        ramp_start, ramp_end,
+        (SL - C), SL,
     ]))
 
     def bottom_z(x):
@@ -404,7 +406,8 @@ def build_arched_chassis(stage, path, half_h, color):
 
     def half_width_at(x):
         ax = abs(x)
-        if ax <= (SL - C): return SW
+        if ax <= (SL - C):
+            return SW
         else:
             t = (ax - (SL - C)) / C
             return SW - t * C
