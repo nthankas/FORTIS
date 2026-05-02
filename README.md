@@ -29,6 +29,8 @@ Hardware selections are tracked in the OnShape model and BOM, which live outside
 docker/             Dockerfile.dev + docker-compose.yml (ROS 2 Humble desktop)
 src/                ROS 2 packages (colcon workspace)
   fortis_safety/    Mission-level state machine + ROS node + REPL console
+  fortis_msgs/      Custom message types (ChassisCamClick, GraspCandidate, MissionState, WheelVelocities)
+  fortis_drive/     X-drive ROS node wrapping fortis_comms kinematics, gated by mission state
 control/            Pure-Python libraries (pre-ROS, non-ROS, or ROS-adjacent)
   fortis_comms/     Motor abstractions, ODrive S1 wrapper, X-drive kinematics, EKF
 sim/                Simulation work (Isaac Sim)
@@ -118,15 +120,16 @@ See `control/fortis_comms/README.md` for the integration assessment.
 |---|---|
 | Dev container | working |
 | `fortis_safety` (mission state machine) | working, 27 unit tests pass, end-to-end ROS round trip verified |
-| `fortis_comms` (motor abstractions, kinematics, EKF) | pre-ROS library, tests pass in isolation, not yet wrapped as a ROS node |
+| `fortis_msgs` (custom messages) | working, 4 message types (ChassisCamClick, GraspCandidate, MissionState, WheelVelocities) |
+| `fortis_drive` (X-drive ROS node) | working, gated by mission state, 5 rclpy tests pass |
+| `fortis_comms` (motor abstractions, kinematics, EKF) | pre-ROS library, tests pass in isolation, kinematics consumed by `fortis_drive` via sys.path shim |
 | Isaac Sim 1 (xdrive flat ground + reactor) | working in `sim/isaac/xdrive/canonical/` |
 | Isaac Sim 2 (R0 port entry) | not started |
 | `fortis_description` (URDF) | blocked on Adrian's OnShape model |
-| `fortis_drive` ROS package | blocked on URDF |
 | `fortis_arm` ROS package | blocked on URDF |
-| `fortis_perception`, `fortis_localization`, `fortis_msgs`, `fortis_bringup` | planned, not started |
+| `fortis_perception`, `fortis_localization`, `fortis_bringup` | planned, not started |
 
-The full set of intended ROS 2 packages is `fortis_description`, `fortis_drive`, `fortis_arm`, `fortis_perception`, `fortis_localization`, `fortis_msgs`, `fortis_bringup`, `fortis_safety`. Only `fortis_safety` exists today.
+The full set of intended ROS 2 packages is `fortis_description`, `fortis_drive`, `fortis_arm`, `fortis_perception`, `fortis_localization`, `fortis_msgs`, `fortis_bringup`, `fortis_safety`. As of this branch, `fortis_safety`, `fortis_msgs`, and `fortis_drive` exist.
 
 ## Documentation
 
