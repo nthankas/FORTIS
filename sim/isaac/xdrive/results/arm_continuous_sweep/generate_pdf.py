@@ -8,22 +8,18 @@ PDF_PATH = os.path.join(OUT_DIR, "sweep_report.pdf")
 
 class Report(FPDF):
     MARGIN = 18
-    ACCENT = (33, 76, 134)       # dark blue
-    ACCENT_LIGHT = (220, 232, 245)  # light blue fill
-    ROW_ALT = (245, 247, 250)    # very light grey
     WHITE = (255, 255, 255)
     BLACK = (30, 30, 30)
     GREY = (110, 110, 110)
-    WARN_BG = (255, 243, 224)    # light orange
-    WARN_BORDER = (230, 160, 60)
+    ROW_ALT = (240, 240, 240)
+    NOTE_BG = (235, 235, 235)
 
     def __init__(self):
         super().__init__(orientation="P", unit="mm", format="letter")
-        self.set_auto_page_break(auto=True, margin=20)
+        self.set_auto_page_break(auto=False, margin=20)
         self.set_margins(self.MARGIN, self.MARGIN, self.MARGIN)
         self.alias_nb_pages()
 
-    # -- chrome --
     def header(self):
         if self.page_no() == 1:
             return
@@ -34,29 +30,41 @@ class Report(FPDF):
         self.ln(2)
 
     def footer(self):
-        self.set_y(-14)
+        self.set_y(-12)
         self.set_font("Helvetica", "I", 7)
         self.set_text_color(*self.GREY)
-        self.cell(0, 5, "Generated from Isaac Sim collision-free sweep data", align="C")
+        self.cell(0, 5, f"Page {self.page_no()}/{{nb}}", align="C")
 
-    # -- helpers --
+    # -- layout helpers --
+
+    def _space_left(self):
+        """Mm remaining before bottom margin."""
+        return self.h - 20 - self.get_y()
+
+    def _table_height(self, nrows):
+        return 6.5 * (nrows + 1) + 2
+
+    def ensure_space(self, needed_mm):
+        """Add a new page if needed_mm won't fit."""
+        if self._space_left() < needed_mm:
+            self.add_page()
+
     def section(self, title):
-        self.ln(4)
-        self.set_font("Helvetica", "B", 14)
-        self.set_text_color(*self.ACCENT)
+        self.ln(3)
+        self.set_font("Helvetica", "B", 13)
+        self.set_text_color(*self.BLACK)
         self.cell(0, 8, title, new_x="LMARGIN", new_y="NEXT")
-        # underline
         y = self.get_y()
-        self.set_draw_color(*self.ACCENT)
-        self.set_line_width(0.6)
+        self.set_draw_color(0, 0, 0)
+        self.set_line_width(0.5)
         self.line(self.MARGIN, y, self.w - self.MARGIN, y)
-        self.ln(4)
+        self.ln(3)
 
     def subsection(self, title):
         self.ln(2)
-        self.set_font("Helvetica", "B", 11)
+        self.set_font("Helvetica", "B", 10.5)
         self.set_text_color(*self.BLACK)
-        self.cell(0, 7, title, new_x="LMARGIN", new_y="NEXT")
+        self.cell(0, 6, title, new_x="LMARGIN", new_y="NEXT")
         self.ln(1)
 
     def body(self, text):
@@ -66,76 +74,57 @@ class Report(FPDF):
         self.ln(1)
 
     def note(self, text):
-        """Yellow/orange callout box."""
-        self.set_fill_color(*self.WARN_BG)
-        self.set_draw_color(*self.WARN_BORDER)
-        x0 = self.get_x()
-        y0 = self.get_y()
+        x0, y0 = self.get_x(), self.get_y()
         w = self.w - 2 * self.MARGIN
         self.set_font("Helvetica", "I", 9)
-        self.set_text_color(100, 70, 10)
-        # measure height
-        h = self.get_string_width(text) / (w - 8) * 5 + 10
-        h = max(h, 12)
+        self.set_text_color(60, 60, 60)
+        # estimate height
+        h = max(self.get_string_width(text) / (w - 8) * 5 + 10, 12)
+        self.set_fill_color(*self.NOTE_BG)
+        self.set_draw_color(160, 160, 160)
         self.rect(x0, y0, w, h, style="FD")
         self.set_xy(x0 + 4, y0 + 3)
         self.multi_cell(w - 8, 4.5, text)
         self.set_y(y0 + h + 2)
 
-    def table(self, headers, rows, col_widths=None, bold_col0=True, highlight_max_row=False):
+    def table(self, headers, rows, col_widths=None, bold_col0=True):
         usable = self.w - 2 * self.MARGIN
         n = len(headers)
         if col_widths is None:
             col_widths = [usable / n] * n
         else:
-            # scale to fit
             s = sum(col_widths)
             col_widths = [w / s * usable for w in col_widths]
 
         row_h = 6.5
+        self.ensure_space(self._table_height(len(rows)))
 
-        # check if table fits on current page, if not add page
-        needed = row_h * (len(rows) + 1) + 4
-        if self.get_y() + needed > self.h - 25:
-            self.add_page()
-
-        # header row
+        # header
         self.set_font("Helvetica", "B", 8.5)
-        self.set_fill_color(*self.ACCENT)
-        self.set_text_color(*self.WHITE)
-        self.set_draw_color(*self.ACCENT)
+        self.set_fill_color(0, 0, 0)
+        self.set_text_color(255, 255, 255)
+        self.set_draw_color(0, 0, 0)
         for i, h in enumerate(headers):
             align = "L" if i == 0 else "C"
             self.cell(col_widths[i], row_h, f"  {h}" if i == 0 else h,
                       border=1, fill=True, align=align)
         self.ln()
 
-        # data rows
-        self.set_draw_color(200, 200, 200)
+        # rows
+        self.set_draw_color(180, 180, 180)
         for ri, row in enumerate(rows):
-            if ri % 2 == 1:
-                self.set_fill_color(*self.ROW_ALT)
-            else:
-                self.set_fill_color(*self.WHITE)
-            fill = True
+            self.set_fill_color(*(self.ROW_ALT if ri % 2 == 1 else self.WHITE))
             for ci, val in enumerate(row):
                 if ci == 0 and bold_col0:
                     self.set_font("Helvetica", "B", 8.5)
-                    self.set_text_color(*self.BLACK)
                 else:
                     self.set_font("Helvetica", "", 8.5)
-                    self.set_text_color(*self.BLACK)
+                self.set_text_color(*self.BLACK)
                 align = "L" if ci == 0 else "C"
                 self.cell(col_widths[ci], row_h,
                           f"  {val}" if ci == 0 else str(val),
-                          border="LR", fill=fill, align=align)
+                          border="LRB", fill=True, align=align)
             self.ln()
-
-        # bottom border
-        self.set_draw_color(*self.ACCENT)
-        self.set_line_width(0.4)
-        y = self.get_y()
-        self.line(self.MARGIN, y, self.MARGIN + sum(col_widths), y)
         self.ln(2)
 
 
@@ -144,77 +133,35 @@ def build():
 
     # ===================== TITLE PAGE =====================
     pdf.add_page()
-    pdf.ln(45)
+    pdf.ln(50)
     pdf.set_font("Helvetica", "B", 28)
-    pdf.set_text_color(*Report.ACCENT)
+    pdf.set_text_color(*Report.BLACK)
     pdf.cell(0, 14, "Arm Torque Sweep Report", align="C", new_x="LMARGIN", new_y="NEXT")
-    pdf.ln(4)
-    pdf.set_font("Helvetica", "", 13)
+    pdf.ln(3)
+    pdf.set_font("Helvetica", "", 12)
     pdf.set_text_color(*Report.GREY)
     pdf.cell(0, 7, "FORTIS Tokamak Inspection Robot", align="C", new_x="LMARGIN", new_y="NEXT")
-    pdf.cell(0, 7, "4-DOF Arm  |  Isaac Sim Physics Validation", align="C", new_x="LMARGIN", new_y="NEXT")
-    pdf.ln(12)
-    pdf.set_draw_color(*Report.ACCENT)
-    pdf.set_line_width(0.8)
+    pdf.ln(14)
+    pdf.set_draw_color(0, 0, 0)
+    pdf.set_line_width(0.5)
     cx = pdf.w / 2
-    pdf.line(cx - 40, pdf.get_y(), cx + 40, pdf.get_y())
-    pdf.ln(12)
+    pdf.line(cx - 35, pdf.get_y(), cx + 35, pdf.get_y())
+    pdf.ln(14)
     pdf.set_font("Helvetica", "", 10)
     pdf.set_text_color(*Report.BLACK)
-    lines = [
-        "3 arm lengths (36\", 30\", 24\")  x  2 loading configs (bare / 3 lb payload)",
-        "2574 poses per configuration  |  Step environment (deployment scenario)",
-        "Collision-free sweep + analytical post-filter",
-        "Physics-measured torques validated against analytical gravity to < 0.5%",
-    ]
-    for l in lines:
+    for l in [
+        "3 arm lengths (36\", 30\", 24\")  x  2 loading (bare / 3 lb payload)",
+        "2574 poses per config  |  Step environment (deployment scenario)",
+        "Physics torques validated against analytical gravity to < 0.5%",
+    ]:
         pdf.cell(0, 6, l, align="C", new_x="LMARGIN", new_y="NEXT")
 
-    # ===================== METHOD =====================
+    # ===================== RESULTS =====================
     pdf.add_page()
-    pdf.section("Method")
+    pdf.section("Filtered Results")
     pdf.body(
-        "The arm is simulated in Isaac Sim with collision disabled on all arm links. "
-        "This lets every joint combination be reached regardless of geometry. For each pose, "
-        "the arm is teleported to the target angles, a PD controller holds position for ~0.4 s, "
-        "then joint torques are measured over ~0.1 s."
-    )
-    pdf.body(
-        "Because collision is off, many recorded poses are physically impossible (arm through "
-        "the chassis, through itself, underground, etc.). A post-processing filter removes these "
-        "using geometry checks. The result is two datasets per configuration: raw (every pose) "
-        "and filtered (only physically realizable poses)."
-    )
-    pdf.body(
-        "All 6 step-environment configurations achieved 2574/2574 poses converged with 0 NaN. "
-        "Physics-measured torques match independent analytical gravity calculations to within 0.5%."
-    )
-
-    # ===================== ARM CONFIG =====================
-    pdf.section("Arm Configuration")
-    pdf.table(
-        ["Parameter", "Value"],
-        [
-            ["Joint mass (J3, J4)", "629 g each"],
-            ["Gripper mass", "500 g"],
-            ["Camera mass", "98 g (Orbbec Gemini 2, on L1)"],
-            ["Link tube", "0.79\" x 0.79\" pultruded CF square tube"],
-            ["Loaded payload", "3 lb (1360 g) at end effector"],
-        ],
-        col_widths=[45, 55],
-        bold_col0=False,
-    )
-    pdf.ln(1)
-    pdf.body(
-        "The camera is fixed to L1, primarily affecting J2 torque. The gripper sits at the arm tip "
-        "and dominates J3/J4 loading. Adding the 3 lb payload roughly doubles peak torques across all joints."
-    )
-
-    # ===================== FILTERED RESULTS =====================
-    pdf.section("Filtered Results (Valid Poses Only)")
-    pdf.body(
-        "Poses that pass all geometry and stability filters. These are the torques for physically "
-        "realizable arm configurations on the step environment."
+        "Torques for physically realizable poses on the step environment. "
+        "All values in Nm. Peak = worst case for motor sizing. Avg = relevant for power/thermal."
     )
     pdf.table(
         ["Config", "Valid", "J2 Peak", "J3 Peak", "J4 Peak", "J2 Avg", "J3 Avg", "J4 Avg"],
@@ -228,18 +175,9 @@ def build():
         ],
         col_widths=[18, 22, 14, 14, 14, 14, 14, 14],
     )
-    pdf.body(
-        "All torque values in Nm. Peak torques are the worst case across all valid poses -- "
-        "these are what motors must be sized for. Average torques are relevant for power and thermal sizing."
-    )
 
-    # ===================== MOTOR SIZING =====================
     pdf.section("Motor Sizing")
-    pdf.body(
-        "Design-against numbers from the filtered step-environment data. "
-        "The 36\" loaded configuration is the hardest case: J2 must hold ~19.4 Nm and J3 ~11.1 Nm. "
-        "J4 requirements are modest across all configs (< 2 Nm)."
-    )
+    pdf.body("Design-against peak torques. 36\" loaded is the hardest case.")
     pdf.table(
         ["Config", "J2 Peak", "J3 Peak", "J4 Peak"],
         [
@@ -253,18 +191,35 @@ def build():
         col_widths=[25, 25, 25, 25],
     )
 
-    # ===================== LINK DEFLECTION =====================
+    pdf.section("Arm Configuration")
+    pdf.table(
+        ["Parameter", "Value"],
+        [
+            ["Joint mass (J3, J4)", "629 g each"],
+            ["Gripper", "500 g"],
+            ["Camera", "98 g (Orbbec Gemini 2, on L1)"],
+            ["Link tube", "0.79\" x 0.79\" pultruded CF square"],
+            ["Loaded payload", "3 lb (1360 g) at end effector"],
+        ],
+        col_widths=[40, 60],
+        bold_col0=False,
+    )
+    pdf.body(
+        "Camera on L1 affects J2. Gripper at the tip dominates J3/J4. "
+        "The 3 lb payload roughly doubles peak torques."
+    )
+
+    # ===================== DEFLECTION =====================
+    pdf.add_page()
     pdf.section("Link Deflection Under Load")
     pdf.body(
-        "Computed using the 25492 square CF tube (1.250\" ID, 1.380\" OD, 0.065\" wall, "
-        "E = 80.7 GPa, I = 2.42e-8 m4). "
-        "Link masses estimated from the tube's linear density (0.226 lb/ft = 0.336 kg/m)."
+        "CF tube: 25492 square (1.250\" ID, 1.380\" OD, 0.065\" wall, "
+        "E = 80.7 GPa, I = 2.42e-8 m4). Linear density 0.226 lb/ft."
     )
 
     pdf.subsection("Tip Load on L1 (Loaded Configs)")
     pdf.body(
-        "Everything outboard of J2 hangs off L1: J3 joint (629 g) + L2 mass + J4 joint (629 g) "
-        "+ L3 mass + end effector (gripper 500 g + payload 1360 g = 1860 g)."
+        "Outboard of J2: J3 (629 g) + L2 + J4 (629 g) + L3 + EE (1860 g)."
     )
     pdf.table(
         ["Config", "L2 Mass", "L3 Mass", "Total Load"],
@@ -288,7 +243,7 @@ def build():
     )
 
     pdf.subsection("L2 Deflection")
-    pdf.body("Outboard of J3: J4 joint (629 g) + L3 mass + end effector (1860 g).")
+    pdf.body("Outboard of J3: J4 (629 g) + L3 + EE (1860 g).")
     pdf.table(
         ["Config", "Force (N)", "Length (m)", "Deflection (mm)"],
         [
@@ -299,9 +254,9 @@ def build():
         col_widths=[22, 26, 26, 26],
     )
 
-    pdf.subsection("Total End-Effector Sag (Loaded, Stacked)")
+    pdf.subsection("Total EE Sag (Loaded, Stacked)")
     pdf.table(
-        ["Config", "L1", "L2", "L3", "Total Sag"],
+        ["Config", "L1", "L2", "L3", "Total"],
         [
             ["36\" loaded", "0.44 mm", "0.23 mm", "~0.02 mm", "~0.7 mm"],
             ["30\" loaded", "0.30 mm", "0.12 mm", "~0.01 mm", "~0.4 mm"],
@@ -309,18 +264,18 @@ def build():
         ],
         col_widths=[20, 20, 20, 20, 20],
     )
-    pdf.body("Total sag is under 1 mm even in the worst case (36\" loaded, arm fully extended). The CF tube is more than stiff enough.")
+    pdf.body("Under 1 mm worst case. CF tube stiffness is not a concern.")
 
     # ===================== STABILITY =====================
+    pdf.add_page()
     pdf.section("Chassis Stability")
     pdf.body(
-        "Static tipping analysis: the combined center of gravity of the chassis (20.4 kg) plus all "
-        "arm masses is projected onto the ground plane and checked against the wheel support polygon. "
-        "J1 is swept from 0 to 345 deg in 15 deg steps; the worst-case J1 angle is reported."
+        "Static CG projection of chassis (20.4 kg) + arm onto the ground plane, "
+        "checked against the wheel support polygon. J1 swept 0-345 deg in 15 deg steps."
     )
     pdf.note(
-        "This assumes a level chassis. The 4.5\" step creates a permanent tilt that shifts the CG "
-        "projection and reduces stability margins on the downhill side. Step tilt correction is a follow-up."
+        "Assumes level chassis. The 4.5\" step tilt will reduce margins on the downhill side. "
+        "Step tilt correction is a follow-up."
     )
     pdf.ln(2)
     pdf.table(
@@ -336,61 +291,49 @@ def build():
         col_widths=[20, 18, 25, 20, 22],
     )
     pdf.body(
-        "The rejected poses are all fully-extended configurations with the arm reaching sideways "
-        "(J1 ~ 90 deg), perpendicular to the long axis of the chassis. The chassis is narrower side-to-side "
-        "(~9.4\") than front-to-back (~15.4\"), so sideways reach is the worst case."
-    )
-    pdf.body(
-        "The 24\" arm is unconditionally stable. The 30\" arm has a small number of marginal poses when "
-        "loaded. The 36\" loaded arm has ~10% of poses rejected for tipping, all at full extension."
+        "Rejected poses are fully-extended with J1 ~ 90 deg (arm sideways). "
+        "24\" is unconditionally stable. 36\" loaded rejects ~10% at full extension."
     )
 
-    # ===================== FILTER DETAILS =====================
+    # ===================== FILTERING =====================
     pdf.section("Filtering Details")
-    pdf.body(
-        "A pose is rejected if any of the following checks fail:"
-    )
-    filters = [
-        ("Chassis collision", "10 sample points along each link. If any point falls inside the chassis bounding box (10 mm clearance), the pose is rejected."),
-        ("Self-collision (L3 vs L1)", "Minimum distance between L3 and L1 segments, sampled at 12 points each. Rejected if closer than 15 mm."),
-        ("Self-collision (L3 vs J1)", "8 sample points along L3 checked against the J1 base volume. Rejected if any point enters the base."),
-        ("Floor collision", "Any joint position or link midpoint below the floor plane (10 mm + tube half-width margin)."),
-        ("Tipping", "CG projection outside the wheel support polygon at any J1 angle."),
-    ]
-    for name, desc in filters:
+    pdf.body("A pose is rejected if any check fails:")
+    for name, desc in [
+        ("Chassis collision", "Link sample points inside chassis bounding box (10 mm margin)."),
+        ("Self-collision (L3-L1)", "L3 and L1 segments closer than 15 mm."),
+        ("Self-collision (L3-J1)", "L3 enters J1 base volume."),
+        ("Floor collision", "Any joint or link midpoint below floor (10 mm margin)."),
+        ("Tipping", "CG projection outside wheel polygon at any J1 angle."),
+    ]:
         pdf.set_font("Helvetica", "B", 9.5)
         pdf.set_text_color(*Report.BLACK)
         pdf.cell(pdf.get_string_width(name + "  "), 5, name + "  ")
         pdf.set_font("Helvetica", "", 9.5)
-        # Use remaining width for description
         pdf.multi_cell(0, 5, desc)
-        pdf.ln(1)
+        pdf.ln(0.5)
 
+    pdf.ln(1)
     pdf.subsection("Rejection Breakdown")
     pdf.table(
-        ["Arm", "Loading", "Total", "Valid", "Chassis", "Self L3-L1", "Self L3-J1", "Floor", "Tip"],
+        ["Arm", "Loading", "Valid", "Chassis", "Self L3-L1", "Self L3-J1", "Floor", "Tip"],
         [
-            ["24\"", "bare",   "2574", "1845 (71.7%)", "487", "100", "0",   "142", "0"],
-            ["24\"", "loaded", "2574", "1845 (71.7%)", "487", "100", "0",   "142", "0"],
-            ["30\"", "bare",   "2574", "1890 (73.4%)", "380", "100", "0",   "204", "0"],
-            ["30\"", "loaded", "2574", "1867 (72.5%)", "380", "100", "0",   "204", "23"],
-            ["36\"", "bare",   "2574", "1880 (73.0%)", "353",  "74", "4",   "263", "0"],
-            ["36\"", "loaded", "2574", "1694 (65.8%)", "353",  "74", "4",   "263", "186"],
+            ["24\"", "bare",   "1845 (71.7%)", "487", "100", "0",   "142", "0"],
+            ["24\"", "loaded", "1845 (71.7%)", "487", "100", "0",   "142", "0"],
+            ["30\"", "bare",   "1890 (73.4%)", "380", "100", "0",   "204", "0"],
+            ["30\"", "loaded", "1867 (72.5%)", "380", "100", "0",   "204", "23"],
+            ["36\"", "bare",   "1880 (73.0%)", "353",  "74", "4",   "263", "0"],
+            ["36\"", "loaded", "1694 (65.8%)", "353",  "74", "4",   "263", "186"],
         ],
-        col_widths=[10, 14, 12, 22, 14, 16, 16, 12, 10],
+        col_widths=[10, 14, 22, 14, 16, 16, 12, 10],
         bold_col0=False,
     )
-    pdf.body(
-        "Loading doesn't change geometry rejections (chassis, self-collision, floor) because the "
-        "geometry is the same. It only affects tipping, because the 3 lb payload shifts the CG further outboard."
-    )
 
-    # ===================== RAW DATA =====================
-    pdf.section("Raw Torque Data (Unfiltered)")
-    pdf.body(
-        "For reference: torques before filtering. Includes poses where the arm passes through "
-        "the chassis, through itself, or underground. Step environment only."
-    )
+    # ===================== RAW + FLAT (APPENDIX) =====================
+    pdf.add_page()
+    pdf.section("Appendix: Raw and Flat Data")
+
+    pdf.subsection("Raw Torques (Unfiltered, Step)")
+    pdf.body("All 2574 poses including impossible configurations.")
     pdf.table(
         ["Config", "J2 Peak", "J3 Peak", "J4 Peak", "J2 Avg", "J3 Avg", "J4 Avg"],
         [
@@ -404,13 +347,10 @@ def build():
         col_widths=[20, 16, 16, 16, 16, 16, 16],
     )
 
-    # ===================== FLAT SUPPLEMENTARY =====================
-    pdf.section("Supplementary: Flat Environment Data")
+    pdf.subsection("Flat Environment (Filtered)")
     pdf.note(
-        "This data is NOT reliable for motor sizing. On the flat surface, the chassis is held in place "
-        "only by wheel friction. When the arm teleports to each pose, the chassis slides and the measured "
-        "torques include dynamic forces from the moving base -- not just gravity. Physics-vs-analytical "
-        "agreement is off by 100-200%, compared to < 0.5% on the step. Use step numbers for all design decisions."
+        "NOT reliable for motor sizing. Chassis slides on flat ground during arm teleport, "
+        "inflating measured torques by 100-200%. Use step data for all design decisions."
     )
     pdf.ln(2)
     pdf.table(
@@ -425,7 +365,19 @@ def build():
         ],
         col_widths=[20, 16, 16, 16, 16, 16, 16],
     )
-    pdf.body("All values in Nm. Filtered, flat environment.")
+
+    # ===================== METHOD (last) =====================
+    pdf.add_page()
+    pdf.section("Method")
+    pdf.body(
+        "Isaac Sim headless, 360 Hz. Collision disabled on arm links so every joint combo is reachable. "
+        "Each pose: teleport to target angles, PD holds ~0.4 s, measure torques ~0.1 s. "
+        "Post-filter removes impossible poses (chassis/self/floor collision, tipping)."
+    )
+    pdf.body(
+        "All 6 step configs: 2574/2574 converged, 0 NaN. "
+        "Physics torques match analytical gravity to < 0.5%."
+    )
 
     pdf.output(PDF_PATH)
     print(f"PDF written to {PDF_PATH}")
