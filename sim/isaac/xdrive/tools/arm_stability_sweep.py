@@ -25,10 +25,14 @@ parser.add_argument("--36arm", action="store_true", dest="arm36", help="36\" arm
 parser.add_argument("--30arm", action="store_true", dest="arm30", help="30\" arm")
 parser.add_argument("--24arm", action="store_true", dest="arm24", help="24\" arm")
 parser.add_argument("--armloaded", action="store_true")
+_link_grp = parser.add_mutually_exclusive_group()
+_link_grp.add_argument("--metal", action="store_true",
+                       help="Link material: aluminum (0.013 lb/in)")
+_link_grp.add_argument("--cf", action="store_true",
+                       help="Link material: carbon fiber (0.0053 lb/in, default)")
 parser.add_argument("--step", action="store_true", default=True)
 parser.add_argument("--reactor", action="store_true")
 parser.add_argument("--hz", type=int, default=360)
-parser.add_argument("--belly", type=float, default=2.5)
 parser.add_argument("--measure-tilt", action="store_true", dest="measure_tilt",
                     help="Just measure chassis tilt on step and exit")
 parser.add_argument("--test", action="store_true", help="Run ~20 test poses")
@@ -66,14 +70,14 @@ OMNIWHEEL_USD = os.path.join(ASSETS_DIR, "omniwheels.usd")
 REACTOR_USD = os.path.join(ASSETS_DIR, "diiid_reactor.usd")
 
 # Chassis
-CHASSIS_L = 15.354 * IN
-CHASSIS_W = 9.353 * IN
-CHASSIS_H = 7.1 * IN
+CHASSIS_L = 13.082 * IN
+CHASSIS_W = 8.54 * IN
+CHASSIS_H = 6.0 * IN
 CHAMFER_FACE = 3.0 * IN
 CHAMFER_CUT = CHAMFER_FACE / math.sqrt(2)
-MOTOR_MOUNT_LEN = 2.5 * IN
-BELLY_HEIGHT = args.belly * IN
-ARCH_FLAT_WIDTH = 3.0 * IN
+MOTOR_MOUNT_LEN = 1.272 * IN
+BELLY_HEIGHT = 2.0 * IN
+ARCH_FLAT_WIDTH = 2.059 * IN
 FRICTION_MU = 0.5
 
 # Wheels
@@ -150,11 +154,19 @@ L_L4 = _l4_in * IN
 ARM_REACH_IN = _l2_in + _l3_in + _l4_in
 
 M_JOINT = 0.629
+# Link tube material densities (square 0.79"x0.79")
+# CF: 0.0053 lb/in (STD, in BOM)
+# Aluminum: 0.013 lb/in
 CF_DENSITY_LB_PER_IN = 0.0053
 CF_DENSITY_KG_PER_M = CF_DENSITY_LB_PER_IN * 0.453592 / IN
-M_L2 = CF_DENSITY_KG_PER_M * L_L2
-M_L3 = CF_DENSITY_KG_PER_M * L_L3
-M_L4 = CF_DENSITY_KG_PER_M * L_L4
+METAL_DENSITY_LB_PER_IN = 0.013
+METAL_DENSITY_KG_PER_M = METAL_DENSITY_LB_PER_IN * 0.453592 / IN
+# Default to CF unless --metal is specified (mutually exclusive with --cf)
+_link_density = METAL_DENSITY_KG_PER_M if args.metal else CF_DENSITY_KG_PER_M
+LINK_MATERIAL = "aluminum" if args.metal else "carbon_fiber"
+M_L2 = _link_density * L_L2
+M_L3 = _link_density * L_L3
+M_L4 = _link_density * L_L4
 
 M_GRIPPER_BARE = 0.500
 M_PAYLOAD = 1.361
@@ -168,7 +180,7 @@ M_CAMERA = 0.098
 CAM_X_ON_L2 = 2.0 * IN
 CF_TUBE_SIZE = 0.79 * IN
 
-ARM_MOUNT_X = -CHASSIS_L / 2.0
+ARM_MOUNT_X = -CHASSIS_L / 2.0 + 3.0 * IN
 ARM_MOUNT_Y = 0.0
 ARM_MOUNT_Z = CHASSIS_H / 2.0
 
@@ -382,8 +394,11 @@ def build_arched_chassis(stage, path, half_h, color):
     z_high = -half_h + BELLY_HEIGHT
 
     x_stations = sorted(set([
-        -SL, -(SL - C), -ramp_end, -ramp_start, 0.0,
-        ramp_start, ramp_end, (SL - C), SL,
+        -SL, -(SL - C),
+        -ramp_end, -ramp_start,
+        0.0,
+        ramp_start, ramp_end,
+        (SL - C), SL,
     ]))
 
     def bottom_z(x):
@@ -396,7 +411,8 @@ def build_arched_chassis(stage, path, half_h, color):
 
     def half_width_at(x):
         ax = abs(x)
-        if ax <= (SL - C): return SW
+        if ax <= (SL - C):
+            return SW
         else:
             t = (ax - (SL - C)) / C
             return SW - t * C
@@ -879,7 +895,9 @@ if args.arm36: _arm_sel = 36
 
 env_label = "step"
 load_label = "loaded" if args.armloaded else "bare"
-config_name = f"{_arm_sel}in_{load_label}_step"
+# CF is the historical default; only suffix when metal so existing CF results stay intact
+mat_suffix = "_metal" if args.metal else ""
+config_name = f"{_arm_sel}in_{load_label}_step{mat_suffix}"
 
 RESULTS_DIR = os.path.join(RESULTS_ROOT, "arm_stability_sweep")
 PHYSICS_DIR = os.path.join(RESULTS_DIR, "physics")
@@ -888,8 +906,9 @@ os.makedirs(PHYSICS_DIR, exist_ok=True)
 csv_path = os.path.join(PHYSICS_DIR, f"{config_name}_stability.csv")
 json_path = os.path.join(PHYSICS_DIR, f"{config_name}_stability_summary.json")
 
-# Input: filtered CSV from torque sweep
-INPUT_CSV = os.path.join(RESULTS_ROOT, "arm_continuous_sweep", f"{config_name}_filtered.csv")
+# Input: filtered CSV from torque sweep (same pose set as CF — metal reuses CF-filtered poses)
+_input_config_name = f"{_arm_sel}in_{load_label}_step"
+INPUT_CSV = os.path.join(RESULTS_ROOT, "arm_continuous_sweep", f"{_input_config_name}_filtered.csv")
 
 print(f"\n{'='*60}", flush=True)
 print(f"FORTIS Arm Stability Sweep", flush=True)

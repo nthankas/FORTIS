@@ -35,8 +35,8 @@ os.environ["PYTHONIOENCODING"] = "utf-8"
 parser = argparse.ArgumentParser()
 parser.add_argument("--gui", action="store_true")
 parser.add_argument("--headless", action="store_true")
-parser.add_argument("--belly", type=float, default=2.5,
-                    help="Belly height above ground in inches (default 2.5)")
+parser.add_argument("--belly", type=float, default=2.0,
+                    help="Belly height above ground in inches (default 2.0)")
 parser.add_argument("--hz", type=int, default=360,
                     help="Physics Hz (360-480, default 360)")
 parser.add_argument("--reactor", action="store_true",
@@ -83,15 +83,15 @@ sys.path.insert(0, os.path.join(XDRIVE_ROOT, "lib"))
 # --- end bootstrap ---
 OMNIWHEEL_USD = os.path.join(ASSETS_DIR, "omniwheels.usd")
 
-# Chassis
-CHASSIS_L = 15.354 * IN
-CHASSIS_W = 9.353 * IN
-CHASSIS_H = 7.1 * IN
+# Chassis skeleton (octagonal with 3" chamfer faces)
+CHASSIS_L = 13.082 * IN     # bounding box length
+CHASSIS_W = 8.54 * IN       # bounding box width
+CHASSIS_H = 6.0 * IN        # height
 CHAMFER_FACE = 3.0 * IN
 CHAMFER_CUT = CHAMFER_FACE / math.sqrt(2)
-MOTOR_MOUNT_LEN = 2.5 * IN
+MOTOR_MOUNT_LEN = 1.272 * IN
 BELLY_HEIGHT = args.belly * IN
-ARCH_FLAT_WIDTH = 3.0 * IN
+ARCH_FLAT_WIDTH = 2.059 * IN
 REACTOR_USD = os.path.join(ASSETS_DIR, "diiid_reactor.usd")
 
 # Wheels (AndyMark 8" Dualie)
@@ -223,8 +223,8 @@ CF_TUBE_Z = 1.38 * IN
 # Used for parallel Y-lane spacing only; inertia/visuals use the two dims.
 CF_TUBE_SIZE_MAX = max(CF_TUBE_Y, CF_TUBE_Z)
 
-# Arm mount: back edge of chassis, centerline, top surface
-ARM_MOUNT_X = -CHASSIS_L / 2.0
+# Arm mount: 3" forward from back edge, centerline, flush on top
+ARM_MOUNT_X = -CHASSIS_L / 2.0 + 3.0 * IN
 ARM_MOUNT_Y = 0.0
 ARM_MOUNT_Z = CHASSIS_H / 2.0
 
@@ -558,11 +558,26 @@ def build_arched_chassis(stage, path, half_h, color):
 def build_chassis(stage, chassis_path):
     half_h = CHASSIS_H / 2.0
 
-    chassis_mesh = build_arched_chassis(stage, chassis_path + "/body",
-                                        half_h, (0.25, 0.25, 0.35))
-    UsdPhysics.CollisionAPI.Apply(chassis_mesh.GetPrim())
-    UsdPhysics.MeshCollisionAPI.Apply(chassis_mesh.GetPrim()).CreateApproximationAttr("convexDecomposition")
+    # Visual mesh — full octagonal body, NO collision on this mesh
+    build_arched_chassis(stage, chassis_path + "/body", half_h, (0.25, 0.25, 0.35))
 
+    # Collision: inset box so roller spheres never reach it even with flush wheels.
+    # Inset 1" from each side — rollers orbit ~76mm from hub with ~22mm sphere
+    # radius, so innermost roller point is ~54mm from hub center. With flush
+    # wheel offset (~30mm from chamfer face), the rollers reach ~24mm inside
+    # the chamfer face. A 1" (25.4mm) inset keeps the collision box clear.
+    INSET = 1.0 * IN
+    col_hx = SL - INSET
+    col_hy = SW - INSET
+    col = UsdGeom.Cube.Define(stage, chassis_path + "/collider")
+    col.GetSizeAttr().Set(1.0)
+    cxf = UsdGeom.Xformable(col.GetPrim())
+    cxf.ClearXformOpOrder()
+    cxf.AddScaleOp().Set(Gf.Vec3d(col_hx * 2.0, col_hy * 2.0, CHASSIS_H))
+    UsdPhysics.CollisionAPI.Apply(col.GetPrim())
+    UsdGeom.Imageable(col.GetPrim()).CreatePurposeAttr("guide")  # invisible
+
+    # Forward arrow indicator
     arrow = UsdGeom.Cube.Define(stage, chassis_path + "/fwd")
     arrow.GetSizeAttr().Set(1.0)
     axf = UsdGeom.Xformable(arrow.GetPrim())
@@ -1239,7 +1254,9 @@ def build_robot(stage, src_parts, src_center):
     wheel_mat = UsdShade.Material(stage.GetPrimAtPath("/World/WheelMat"))
 
     wheel_z = WHEEL_RADIUS - (BELLY_HEIGHT + CHASSIS_H / 2.0)
-    wheel_offset = WHEEL_WIDTH / 2.0 + 0.04
+    # Flush mount: chassis collision is an inset box, so rollers can't clip it.
+    # Offset = half wheel width + 5mm air gap (inner wheel face flush with chamfer).
+    wheel_offset = WHEEL_WIDTH / 2.0 + 0.005
 
     drive_joint_paths = []
 
@@ -1252,6 +1269,20 @@ def build_robot(stage, src_parts, src_center):
         nx, ny = cx / norm_len, cy / norm_len
         wx = cx + nx * wheel_offset
         wy = cy + ny * wheel_offset
+
+        # Visual bracket: strut from chamfer face to wheel hub
+        bracket_path = chassis_path + f"/bracket_{wname}"
+        bracket = UsdGeom.Cube.Define(stage, bracket_path)
+        bracket.GetSizeAttr().Set(1.0)
+        bxf = UsdGeom.Xformable(bracket.GetPrim())
+        bxf.ClearXformOpOrder()
+        bxf.AddTranslateOp().Set(Gf.Vec3d(
+            (cx + wx) / 2.0, (cy + wy) / 2.0, float(wheel_z)))
+        bxf.AddRotateZOp().Set(float(math.degrees(math.atan2(ny, nx))))
+        bxf.AddScaleOp().Set(Gf.Vec3d(
+            float(wheel_offset), 0.03, 0.03))
+        bracket.GetDisplayColorAttr().Set(
+            Vt.Vec3fArray([Gf.Vec3f(0.35, 0.35, 0.40)]))
 
         wp = robot_path + f"/Wheel_{wname}"
         wxf = UsdGeom.Xform.Define(stage, wp)
@@ -1297,7 +1328,7 @@ def build_robot(stage, src_parts, src_center):
         SPAWN_X = 0.0
         SPAWN_Y = -1.75
         SPAWN_FLOOR_Z = cfg.Z_OUTER_IN * IN
-        spawn_z = SPAWN_FLOOR_Z + WHEEL_RADIUS + CHASSIS_H / 2.0 + 0.10
+        spawn_z = SPAWN_FLOOR_Z + BELLY_HEIGHT + CHASSIS_H / 2.0 + 0.02
         spawn_yaw = math.degrees(math.atan2(0 - SPAWN_Y, 0 - SPAWN_X))
         rxf = UsdGeom.Xformable(stage.GetPrimAtPath(robot_path))
         rxf.ClearXformOpOrder()
@@ -1308,7 +1339,7 @@ def build_robot(stage, src_parts, src_center):
     elif args.step:
         # Straddle the step edge at Y=0. Outer floor (higher) is Y<0, inner is Y>0.
         # Yaw 90 deg so robot front (+X) faces +Y (toward lower inner floor).
-        spawn_z = WHEEL_RADIUS + CHASSIS_H / 2.0 + 0.02
+        spawn_z = BELLY_HEIGHT + CHASSIS_H / 2.0 + 0.02
         rxf = UsdGeom.Xformable(stage.GetPrimAtPath(robot_path))
         rxf.ClearXformOpOrder()
         rxf.AddTranslateOp().Set(Gf.Vec3d(0.0, 0.0, spawn_z))

@@ -79,47 +79,32 @@ CF_DENSITY_KG_PER_M = CF_DENSITY_LB_PER_FT * 0.453592 / (12.0 * IN)  # ~0.3362 k
 CF_TUBE_Y = 1.25 * IN   # tube Y dimension (~31.8 mm)
 CF_TUBE_Z = 1.38 * IN   # tube Z dimension (~35.1 mm)
 
-# Chassis geometry
-CHASSIS_L = 15.354 * IN  # 0.3900 m
-CHASSIS_W = 9.353 * IN   # 0.2376 m
-CHASSIS_H = 7.1 * IN     # 0.1803 m
+# Chassis geometry (rectangular skeleton, no chamfer)
+CHASSIS_L = 13.082 * IN  # 0.3323 m
+CHASSIS_W = 8.54 * IN    # 0.2169 m
+CHASSIS_H = 6.0 * IN     # 0.1524 m
 
-# Arm mount: back edge of chassis, centerline, top surface
-ARM_MOUNT_X = -CHASSIS_L / 2.0  # -0.195 m from chassis center
+# Arm mount: 3" forward from back edge, centerline, flush on top
+ARM_MOUNT_X = -CHASSIS_L / 2.0 + 3.0 * IN
 ARM_MOUNT_Y = 0.0
-ARM_MOUNT_Z = CHASSIS_H / 2.0   # +0.090 m from chassis center
+ARM_MOUNT_Z = CHASSIS_H / 2.0
 
 J1_STACK_H = 1.5 * IN  # 0.0381 m
 
-# Wheel positions (octagonal chassis with 3" chamfer)
-CHAMFER_CUT = 3.0 * IN
+# Wheel positions (rectangular chassis, wheels flush at corners)
 SL = CHASSIS_L / 2.0
 SW = CHASSIS_W / 2.0
-C = CHAMFER_CUT
-OCT_XY = [
-    ( SL,       -(SW - C)),
-    ( SL,        (SW - C)),
-    ( (SL - C),  SW      ),
-    (-(SL - C),  SW      ),
-    (-SL,        (SW - C)),
-    (-SL,       -(SW - C)),
-    (-(SL - C), -SW      ),
-    ( (SL - C), -SW      ),
-]
-
-def _mid(a, b):
-    return ((a[0]+b[0])/2, (a[1]+b[1])/2)
 
 WHEEL_XY = {
-    "FR": _mid(OCT_XY[0], OCT_XY[7]),
-    "FL": _mid(OCT_XY[1], OCT_XY[2]),
-    "BL": _mid(OCT_XY[3], OCT_XY[4]),
-    "BR": _mid(OCT_XY[5], OCT_XY[6]),
+    "FR": ( SL, -SW),
+    "FL": ( SL,  SW),
+    "BL": (-SL,  SW),
+    "BR": (-SL, -SW),
 }
 WHEEL_RADIUS = 203.0 / 2.0 / 1000.0  # 0.1015 m (AndyMark 8" Dualie)
 CHASSIS_MASS = 20.4  # kg
 
-BELLY_HEIGHT = 2.5 * IN  # 0.0635 m
+BELLY_HEIGHT = 2.0 * IN  # 0.0508 m
 
 
 # ==========================================================================

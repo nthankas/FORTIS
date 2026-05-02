@@ -56,9 +56,9 @@ L2, L3, L4 = arm_params["L2"], arm_params["L3"], arm_params["L4"]
 # Step env: chassis straddles 4.5" step, so J2 is higher on one side
 # For conservative check, use the minimum height
 IN = 0.0254
-CHASSIS_H = 7.1 * IN
+CHASSIS_H = 6.0 * IN
 J1_STACK_H = 1.5 * IN
-BELLY_HEIGHT = 2.5 * IN
+BELLY_HEIGHT = 2.0 * IN
 STEP_H = 4.5 * IN
 
 if args.z_j2_floor is not None:

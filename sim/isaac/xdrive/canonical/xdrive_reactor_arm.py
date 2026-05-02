@@ -28,8 +28,8 @@ os.environ["PYTHONIOENCODING"] = "utf-8"
 parser = argparse.ArgumentParser()
 parser.add_argument("--gui", action="store_true")
 parser.add_argument("--headless", action="store_true")
-parser.add_argument("--belly", type=float, default=2.5,
-                    help="Belly height above ground in inches (default 2.5)")
+parser.add_argument("--belly", type=float, default=2.0,
+                    help="Belly height above ground in inches (default 2.0)")
 parser.add_argument("--hz", type=int, default=360,
                     help="Physics Hz (360-480, default 360)")
 parser.add_argument("--reactor", action="store_true",
@@ -44,10 +44,11 @@ parser.add_argument("--24arm", action="store_true", dest="arm24",
                     help="24\" arm: 12+10+2")
 parser.add_argument("--armloaded", action="store_true",
                     help="Loaded EE: gripper 500g + max payload 3lb (1361g) at tip")
-parser.add_argument("--metal", action="store_true", dest="metal", 
-                    help="Link type: metal")
-parser.add_argument("--cf", action="store_true", dest="cf", 
-                    help="Link type: carbon fiber")
+_link_grp = parser.add_mutually_exclusive_group()
+_link_grp.add_argument("--metal", action="store_true",
+                       help="Link material: aluminum (0.013 lb/in)")
+_link_grp.add_argument("--cf", action="store_true",
+                       help="Link material: carbon fiber (0.0053 lb/in, default)")
 args, _ = parser.parse_known_args()
 headless = args.headless or not args.gui
 
@@ -75,15 +76,15 @@ sys.path.insert(0, os.path.join(XDRIVE_ROOT, "lib"))
 # --- end bootstrap ---
 OMNIWHEEL_USD = os.path.join(ASSETS_DIR, "omniwheels.usd")
 
-# Chassis
-CHASSIS_L = 15.354 * IN
-CHASSIS_W = 9.353 * IN
-CHASSIS_H = 7.1 * IN
+# Chassis skeleton (octagonal with 3" chamfer faces)
+CHASSIS_L = 13.082 * IN     # bounding box length
+CHASSIS_W = 8.54 * IN       # bounding box width
+CHASSIS_H = 6.0 * IN        # height
 CHAMFER_FACE = 3.0 * IN
 CHAMFER_CUT = CHAMFER_FACE / math.sqrt(2)
-MOTOR_MOUNT_LEN = 2.5 * IN
+MOTOR_MOUNT_LEN = 1.272 * IN
 BELLY_HEIGHT = args.belly * IN
-ARCH_FLAT_WIDTH = 3.0 * IN
+ARCH_FLAT_WIDTH = 2.059 * IN
 REACTOR_USD = os.path.join(ASSETS_DIR, "diiid_reactor.usd")
 
 # Wheels (AndyMark 8" Dualie)
@@ -99,7 +100,7 @@ SCALE_Y = TARGET_WIDTH_MM / SRC_WIDTH_MM
 SCALE_UNIFORM = SCALE_XZ
 
 # Mass
-CHASSIS_MASS = 20.4
+CHASSIS_MASS = 13.6  # 30 lb — reduced so total robot (chassis + 30" loaded arm) = 40 lb
 WHEEL_MASS = 1.0
 ROLLER_MASS_FRAC = 0.3
 NUM_ROLLERS = 10
@@ -173,21 +174,20 @@ ARM_REACH_IN = _l2_in + _l3_in + _l4_in
 # Joint mass: motor (0.58 kg) + hardware (49g) = 0.629 kg each
 M_JOINT = 0.629
 
-# CF tube: square 0.79"x0.79", linear density 0.0053 lb/in (STD) (in bom list)
+# Link tube material densities (square 0.79"x0.79")
+# CF: 0.0053 lb/in (STD, in BOM)
+# Aluminum: 0.013 lb/in
 CF_DENSITY_LB_PER_IN = 0.0053
 CF_DENSITY_KG_PER_M = CF_DENSITY_LB_PER_IN * 0.453592 / IN
-
 METAL_DENSITY_LB_PER_IN = 0.013
 METAL_DENSITY_KG_PER_M = METAL_DENSITY_LB_PER_IN * 0.453592 / IN
 
-if args.metal:
-    M_L2 = METAL_DENSITY_KG_PER_M * L_L2
-    M_L3 = METAL_DENSITY_KG_PER_M * L_L3
-    M_L4 = METAL_DENSITY_KG_PER_M * L_L4
-if args.cf:
-    M_L2 = CF_DENSITY_KG_PER_M * L_L2
-    M_L3 = CF_DENSITY_KG_PER_M * L_L3
-    M_L4 = CF_DENSITY_KG_PER_M * L_L4
+# Default to CF unless --metal is specified (mutually exclusive with --cf)
+_link_density = METAL_DENSITY_KG_PER_M if args.metal else CF_DENSITY_KG_PER_M
+LINK_MATERIAL = "aluminum" if args.metal else "carbon_fiber"
+M_L2 = _link_density * L_L2
+M_L3 = _link_density * L_L3
+M_L4 = _link_density * L_L4
 
 
 # End-effector tip mass
@@ -206,8 +206,8 @@ CAM_X_ON_L2 = 2.0 * IN  # 2" from J2 joint along L2 (not too close to joint pivo
 # CF tube cross-section (for visual boxes)
 CF_TUBE_SIZE = 0.79 * IN  # 20.07mm
 
-# Arm mount: back edge of chassis, centerline, top surface
-ARM_MOUNT_X = -CHASSIS_L / 2.0
+# Arm mount: 3" forward from back edge, centerline, flush on top
+ARM_MOUNT_X = -CHASSIS_L / 2.0 + 3.0 * IN
 ARM_MOUNT_Y = 0.0
 ARM_MOUNT_Z = CHASSIS_H / 2.0
 
@@ -540,10 +540,16 @@ def build_arched_chassis(stage, path, half_h, color):
 def build_chassis(stage, chassis_path):
     half_h = CHASSIS_H / 2.0
 
-    chassis_mesh = build_arched_chassis(stage, chassis_path + "/body",
-                                        half_h, (0.25, 0.25, 0.35))
-    UsdPhysics.CollisionAPI.Apply(chassis_mesh.GetPrim())
-    UsdPhysics.MeshCollisionAPI.Apply(chassis_mesh.GetPrim()).CreateApproximationAttr("convexDecomposition")
+    build_arched_chassis(stage, chassis_path + "/body", half_h, (0.25, 0.25, 0.35))
+
+    INSET = 1.0 * IN
+    col = UsdGeom.Cube.Define(stage, chassis_path + "/collider")
+    col.GetSizeAttr().Set(1.0)
+    cxf = UsdGeom.Xformable(col.GetPrim())
+    cxf.ClearXformOpOrder()
+    cxf.AddScaleOp().Set(Gf.Vec3d((SL - INSET) * 2.0, (SW - INSET) * 2.0, CHASSIS_H))
+    UsdPhysics.CollisionAPI.Apply(col.GetPrim())
+    UsdGeom.Imageable(col.GetPrim()).CreatePurposeAttr("guide")
 
     arrow = UsdGeom.Cube.Define(stage, chassis_path + "/fwd")
     arrow.GetSizeAttr().Set(1.0)
@@ -1186,7 +1192,7 @@ def build_robot(stage, src_parts, src_center):
     wheel_mat = UsdShade.Material(stage.GetPrimAtPath("/World/WheelMat"))
 
     wheel_z = WHEEL_RADIUS - (BELLY_HEIGHT + CHASSIS_H / 2.0)
-    wheel_offset = WHEEL_WIDTH / 2.0 + 0.04
+    wheel_offset = WHEEL_WIDTH / 2.0 + 0.005
 
     drive_joint_paths = []
 
@@ -1199,6 +1205,20 @@ def build_robot(stage, src_parts, src_center):
         nx, ny = cx / norm_len, cy / norm_len
         wx = cx + nx * wheel_offset
         wy = cy + ny * wheel_offset
+
+        # Visual bracket: thin strut from chamfer face to wheel hub
+        bracket_path = chassis_path + f"/bracket_{wname}"
+        bracket = UsdGeom.Cube.Define(stage, bracket_path)
+        bracket.GetSizeAttr().Set(1.0)
+        bxf = UsdGeom.Xformable(bracket.GetPrim())
+        bxf.ClearXformOpOrder()
+        bxf.AddTranslateOp().Set(Gf.Vec3d(
+            (cx + wx) / 2.0, (cy + wy) / 2.0, float(wheel_z)))
+        bxf.AddRotateZOp().Set(float(math.degrees(math.atan2(ny, nx))))
+        bxf.AddScaleOp().Set(Gf.Vec3d(
+            float(wheel_offset), 0.03, 0.03))
+        bracket.GetDisplayColorAttr().Set(
+            Vt.Vec3fArray([Gf.Vec3f(0.35, 0.35, 0.40)]))
 
         wp = robot_path + f"/Wheel_{wname}"
         wxf = UsdGeom.Xform.Define(stage, wp)
@@ -1244,7 +1264,7 @@ def build_robot(stage, src_parts, src_center):
         SPAWN_X = 0.0
         SPAWN_Y = -1.75
         SPAWN_FLOOR_Z = cfg.Z_OUTER_IN * IN
-        spawn_z = SPAWN_FLOOR_Z + WHEEL_RADIUS + CHASSIS_H / 2.0 + 0.10
+        spawn_z = SPAWN_FLOOR_Z + BELLY_HEIGHT + CHASSIS_H / 2.0 + 0.02
         spawn_yaw = math.degrees(math.atan2(0 - SPAWN_Y, 0 - SPAWN_X))
         rxf = UsdGeom.Xformable(stage.GetPrimAtPath(robot_path))
         rxf.ClearXformOpOrder()
@@ -1255,7 +1275,7 @@ def build_robot(stage, src_parts, src_center):
     elif args.step:
         # Straddle the step edge at Y=0. Outer floor (higher) is Y<0, inner is Y>0.
         # Yaw 90 deg so robot front (+X) faces +Y (toward lower inner floor).
-        spawn_z = WHEEL_RADIUS + CHASSIS_H / 2.0 + 0.02
+        spawn_z = BELLY_HEIGHT + CHASSIS_H / 2.0 + 0.02
         rxf = UsdGeom.Xformable(stage.GetPrimAtPath(robot_path))
         rxf.ClearXformOpOrder()
         rxf.AddTranslateOp().Set(Gf.Vec3d(0.0, 0.0, spawn_z))
