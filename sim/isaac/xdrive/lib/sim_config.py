@@ -22,9 +22,9 @@ WHEEL_WIDTH_M = 0.055  # ~55mm estimated from CAD bbox
 WHEEL_MASS_KG = 1.0
 OMNI_ROLLER_ANGLE_DEG = 90.0  # 90 for omni, 45 for mecanum
 
-# ---- Active chassis: 15x9x6" rectangular octagonal prism ----
-# Built from USD primitives in the sim scripts (not from CAD -- OnShape CAD
-# has internal gearbox joints that create closed articulation loops in PhysX).
+# ---- Active chassis: 13.082x8.54x6" rectangular skeleton ----
+# Total footprint with wheels: 19.022x14.5". No chamfer, wheels flush at corners.
+# Built from USD primitives in the sim scripts (not from CAD).
 
 # ---- X-Drive wheel orientations ----
 # Each wheel's drive axis is at 45 degrees to the chassis forward (+X) axis.

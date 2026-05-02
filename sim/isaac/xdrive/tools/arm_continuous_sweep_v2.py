@@ -1,23 +1,16 @@
 """
-FORTIS arm collision-free torque sweep — headless Isaac Sim.
+FORTIS arm collision-free torque sweep v2 — headless Isaac Sim.
 
-Sweeps ALL J2/J3/J4 poses with collision DISABLED on arm links.
-Records torques, joint positions, EE position, and chassis orientation
-for every single pose — no filtering during simulation.
+Same pipeline as tools/arm_continuous_sweep.py but with the v2 heterogeneous
+hardware spec (per-joint masses, 1.25x1.38 CF tube, camera on L4 midpoint,
+real joint limits from hardware). Output filenames carry a "_v2" suffix so
+v1 results are preserved.
 
-Post-processing (arm_sweep_filter.py) applies:
-  - Self-collision filter (L4 vs L2, L4 vs J1)
-  - Chassis collision filter (links vs chassis bbox)
-  - Tipping filter (chassis orientation change)
-  - Reactor workspace bounds
-
-This gives raw + filtered datasets. Raw guarantees readings for every pose.
+Imports arm_ik_v2 (not arm_ik) for analytical torque cross-checks.
 
 Usage:
-  IsaacSim\\python.bat tools/arm_continuous_sweep.py --36arm --step --test
-  IsaacSim\\python.bat tools/arm_continuous_sweep.py --36arm --step --coarse
-  IsaacSim\\python.bat tools/arm_continuous_sweep.py --30arm --flat --fine
-  IsaacSim\\python.bat tools/arm_continuous_sweep.py --24arm --armloaded --step --coarse
+  IsaacSim\\python.bat tools/arm_continuous_sweep_v2.py --30arm --armloaded --step --coarse
+  IsaacSim\\python.bat tools/arm_continuous_sweep_v2.py --30arm --armloaded --step --test
 """
 import os, sys, math, argparse, time, csv, json, datetime
 import numpy as np
@@ -146,14 +139,22 @@ L_L3 = _l3_in * IN
 L_L4 = _l4_in * IN
 ARM_REACH_IN = _l2_in + _l3_in + _l4_in
 
-M_JOINT = 0.629
-CF_DENSITY_LB_PER_IN = 0.0053
-CF_DENSITY_KG_PER_M = CF_DENSITY_LB_PER_IN * 0.453592 / IN
+# V2 per-joint masses (heterogeneous hardware)
+M_J1 = 0.580   # NEMA 17 + Cricket MK II 25:1
+M_J2 = 2.665   # NEMA 23 + EG23-G20-D10 20:1 + adapter
+M_J3 = 0.655   # NEMA 17 + Cricket MK II 25:1 + adapter
+M_J4 = 0.302   # D845WP servo + adapter
+M_JOINT = M_J1  # legacy placeholder
+
+# V2 CF tube: RockWest 1.25" x 1.38" OD, 0.065" wall, 0.226 lb/ft
+CF_DENSITY_LB_PER_FT = 0.226
+CF_DENSITY_KG_PER_M = CF_DENSITY_LB_PER_FT * 0.453592 / (12.0 * IN)
 M_L2 = CF_DENSITY_KG_PER_M * L_L2
 M_L3 = CF_DENSITY_KG_PER_M * L_L3
 M_L4 = CF_DENSITY_KG_PER_M * L_L4
 
-M_GRIPPER_BARE = 0.500
+# V2 gripper: ServoCity parallel kit + D645MW + adapter = 216 g
+M_GRIPPER_BARE = 0.216
 M_PAYLOAD = 1.361
 if args.armloaded:
     M_GRIPPER = M_GRIPPER_BARE + M_PAYLOAD
@@ -161,15 +162,19 @@ else:
     M_GRIPPER = M_GRIPPER_BARE
 ARM_LOADED = args.armloaded
 
+# V2 camera: Orbbec Gemini 2 on L4 midpoint (1.5" from J4)
 M_CAMERA = 0.098
-CAM_X_ON_L2 = 2.0 * IN
-CF_TUBE_SIZE = 0.79 * IN
+CAM_X_ON_L4 = 1.5 * IN
+
+# V2 rectangular tube cross-section
+CF_TUBE_Y = 1.25 * IN
+CF_TUBE_Z = 1.38 * IN
 
 ARM_MOUNT_X = -CHASSIS_L / 2.0 + 3.0 * IN
 ARM_MOUNT_Y = 0.0
 ARM_MOUNT_Z = CHASSIS_H / 2.0
 
-LINK_Y_SPACING = CF_TUBE_SIZE + 0.005
+LINK_Y_SPACING = CF_TUBE_Y + 0.005
 LINK_Y = [(-1.0) * LINK_Y_SPACING,
           ( 0.0) * LINK_Y_SPACING,
           (+1.0) * LINK_Y_SPACING]
@@ -179,11 +184,12 @@ ARM_STIFFNESS = 400.0  # Nm/deg — high for fast PD tracking
 ARM_DAMPING   = 60.0   # Nm*s/deg — high for damping oscillation
 ARM_MAX_FORCE = 1500.0  # Nm — high to avoid saturation during dynamic ramp
 
+# V2 joint limits (hardware limits). Still superset of real sweep range below.
 ARM_LIMITS_DEG = {
     "ArmJ1": (-180.0, 180.0),
-    "ArmJ2": (-180.0, 180.0),
+    "ArmJ2": (-30.0, 150.0),
     "ArmJ3": (-180.0, 180.0),
-    "ArmJ4": (-180.0, 180.0),
+    "ArmJ4": (-101.0, 101.0),
 }
 ARM_JOINT_NAMES = ["ArmJ1", "ArmJ2", "ArmJ3", "ArmJ4"]
 
@@ -203,7 +209,7 @@ else:
 
 J2_MIN, J2_MAX = -30, 150
 J3_MIN, J3_MAX = -170, 170
-J4_MIN, J4_MAX = -150, 150
+J4_MIN, J4_MAX = -100, 100  # D845WP servo hardware limit +/- 101 deg
 
 # Motion timing (collision-free: teleport + settle, no ramping needed)
 SETTLE_FRAMES = 150      # frames to settle after teleport (~417ms at 360Hz)
@@ -558,7 +564,7 @@ def _apply_arm_body_mass_x(prim, joint_mass, link_mass, link_length, link_dir,
     mapi.CreateMassAttr(float(total))
     mapi.CreateCenterOfMassAttr(Gf.Vec3f(float(com_x), 0.0, 0.0))
     Lx = max(float(link_length), 0.01)
-    Ly = CF_TUBE_SIZE; Lz = CF_TUBE_SIZE
+    Ly = CF_TUBE_Y; Lz = CF_TUBE_Z
     Ixx_link = link_mass / 12.0 * (Ly**2 + Lz**2)
     Iyy_link = link_mass / 12.0 * (Lx**2 + Lz**2)
     Izz_link = link_mass / 12.0 * (Lx**2 + Ly**2)
@@ -640,65 +646,67 @@ def build_arm(stage, robot_path, chassis_path):
     C_J1 = (0.55, 0.55, 0.60); C_L2 = (0.85, 0.30, 0.25)
     C_L3 = (0.25, 0.75, 0.30); C_L4 = (0.25, 0.30, 0.85)
 
-    # J1 base
+    # J1 base (NEMA 17 + Cricket 25:1, inside chassis, flush output)
     UsdGeom.Xform.Define(stage, j1_path)
     p1 = stage.GetPrimAtPath(j1_path)
     xf1 = UsdGeom.Xformable(p1); xf1.ClearXformOpOrder()
     xf1.AddTranslateOp().Set(Gf.Vec3d(ARM_MOUNT_X, ARM_MOUNT_Y, ARM_MOUNT_Z))
     UsdPhysics.RigidBodyAPI.Apply(p1)
     PhysxSchema.PhysxRigidBodyAPI.Apply(p1).CreateMaxDepenetrationVelocityAttr(1.0)
-    _apply_arm_j1_mass(p1, mass=M_JOINT, stack_h=J1_STACK_H)
+    _apply_arm_j1_mass(p1, mass=M_J1, stack_h=J1_STACK_H)
     _add_arm_link_visual(stage, j1_path + "/vis",
                          center=(0.0, 0.0, J1_STACK_H / 2.0),
                          size=(0.057, 0.057, J1_STACK_H), color=C_J1)
     # Collision disabled — raw sweep, filtered in post-processing
 
-    # J2 shoulder (L2, +X)
+    # J2 shoulder (NEMA 23 + EG23 + L2, +X). No camera here in v2.
     UsdGeom.Xform.Define(stage, j2_path)
     p2 = stage.GetPrimAtPath(j2_path)
     xf2 = UsdGeom.Xformable(p2); xf2.ClearXformOpOrder()
     xf2.AddTranslateOp().Set(Gf.Vec3d(ARM_MOUNT_X, y_l2, z_arm))
     UsdPhysics.RigidBodyAPI.Apply(p2)
     PhysxSchema.PhysxRigidBodyAPI.Apply(p2).CreateMaxDepenetrationVelocityAttr(1.0)
-    _apply_arm_body_mass_x(p2, joint_mass=M_JOINT, link_mass=M_L2,
-                           link_length=L_L2, link_dir=+1,
-                           extra_mass=M_CAMERA, extra_x=CAM_X_ON_L2)
+    _apply_arm_body_mass_x(p2, joint_mass=M_J2, link_mass=M_L2,
+                           link_length=L_L2, link_dir=+1)
     _add_arm_link_visual(stage, j2_path + "/vis",
                          center=(+L_L2/2.0, 0.0, 0.0),
-                         size=(L_L2, CF_TUBE_SIZE, CF_TUBE_SIZE), color=C_L2)
+                         size=(L_L2, CF_TUBE_Y, CF_TUBE_Z), color=C_L2)
     jsph = UsdGeom.Sphere.Define(stage, j2_path + "/joint_vis")
     jsph.GetRadiusAttr().Set(0.020)
     jsph.GetDisplayColorAttr().Set(Vt.Vec3fArray([Gf.Vec3f(*C_L2)]))
 
-    # J3 elbow (L3, -X zigzag)
+    # J3 elbow (NEMA 17 + Cricket + L3, -X zigzag)
     UsdGeom.Xform.Define(stage, j3_path)
     p3 = stage.GetPrimAtPath(j3_path)
     xf3 = UsdGeom.Xformable(p3); xf3.ClearXformOpOrder()
     xf3.AddTranslateOp().Set(Gf.Vec3d(ARM_MOUNT_X + L_L2, y_l3, z_arm))
     UsdPhysics.RigidBodyAPI.Apply(p3)
     PhysxSchema.PhysxRigidBodyAPI.Apply(p3).CreateMaxDepenetrationVelocityAttr(1.0)
-    _apply_arm_body_mass_x(p3, joint_mass=M_JOINT, link_mass=M_L3,
+    _apply_arm_body_mass_x(p3, joint_mass=M_J3, link_mass=M_L3,
                            link_length=L_L3, link_dir=-1)
     _add_arm_link_visual(stage, j3_path + "/vis",
                          center=(-L_L3/2.0, 0.0, 0.0),
-                         size=(L_L3, CF_TUBE_SIZE, CF_TUBE_SIZE), color=C_L3)
+                         size=(L_L3, CF_TUBE_Y, CF_TUBE_Z), color=C_L3)
     jsph = UsdGeom.Sphere.Define(stage, j3_path + "/joint_vis")
     jsph.GetRadiusAttr().Set(0.020)
     jsph.GetDisplayColorAttr().Set(Vt.Vec3fArray([Gf.Vec3f(*C_L3)]))
 
-    # J4 wrist (L4, +X)
+    # J4 wrist (D845WP + L4, +X). Camera on L4 midpoint, gripper at tip.
     UsdGeom.Xform.Define(stage, j4_path)
     p4 = stage.GetPrimAtPath(j4_path)
     xf4 = UsdGeom.Xformable(p4); xf4.ClearXformOpOrder()
     xf4.AddTranslateOp().Set(Gf.Vec3d(ARM_MOUNT_X + L_L2 - L_L3, y_l4, z_arm))
     UsdPhysics.RigidBodyAPI.Apply(p4)
     PhysxSchema.PhysxRigidBodyAPI.Apply(p4).CreateMaxDepenetrationVelocityAttr(1.0)
-    _apply_arm_body_mass_x(p4, joint_mass=M_JOINT, link_mass=M_L4,
+    # Combine camera (at midpoint) + gripper (at tip) into one extra-mass point
+    _m_extra = M_GRIPPER + M_CAMERA
+    _x_extra = (M_GRIPPER * L_L4 + M_CAMERA * CAM_X_ON_L4) / _m_extra
+    _apply_arm_body_mass_x(p4, joint_mass=M_J4, link_mass=M_L4,
                            link_length=L_L4, link_dir=+1,
-                           extra_mass=M_GRIPPER, extra_x=L_L4)
+                           extra_mass=_m_extra, extra_x=_x_extra)
     _add_arm_link_visual(stage, j4_path + "/vis",
                          center=(+L_L4/2.0, 0.0, 0.0),
-                         size=(L_L4, CF_TUBE_SIZE, CF_TUBE_SIZE), color=C_L4)
+                         size=(L_L4, CF_TUBE_Y, CF_TUBE_Z), color=C_L4)
     grip = UsdGeom.Cube.Define(stage, j4_path + "/gripper")
     grip.GetSizeAttr().Set(1.0)
     gxf = UsdGeom.Xformable(grip.GetPrim()); gxf.ClearXformOpOrder()
@@ -729,10 +737,14 @@ def build_arm(stage, robot_path, chassis_path):
                    localPos0=(-L_L3, y_l4 - y_l3, 0.0),
                    axis="Y", limit_deg=ARM_LIMITS_DEG["ArmJ4"])
 
-    total_arm_mass = 4 * M_JOINT + M_L2 + M_L3 + M_L4 + M_GRIPPER + M_CAMERA
+    total_arm_mass = (M_J1 + M_J2 + M_J3 + M_J4
+                      + M_L2 + M_L3 + M_L4 + M_GRIPPER + M_CAMERA)
     load_label = "LOADED" if ARM_LOADED else "UNLOADED"
-    print(f"\nARM: {ARM_REACH_IN:.0f}\" reach, {load_label}, "
+    print(f"\nARM v2: {ARM_REACH_IN:.0f}\" reach, {load_label}, "
           f"total mass={total_arm_mass:.3f}kg", flush=True)
+    print(f"  per-joint: J1={M_J1:.3f} J2={M_J2:.3f} J3={M_J3:.3f} J4={M_J4:.3f} kg", flush=True)
+    print(f"  links CF {CF_TUBE_Y/IN:.2f}\"x{CF_TUBE_Z/IN:.2f}\": "
+          f"L2={M_L2*1000:.1f}g L3={M_L3*1000:.1f}g L4={M_L4*1000:.1f}g", flush=True)
     return ARM_JOINT_NAMES
 
 
@@ -861,8 +873,8 @@ def usd_to_fk_angles(j2_usd, j3_usd, j4_usd):
 
 
 def compute_analytical_torques(j2_usd_deg, j3_usd_deg, j4_usd_deg):
-    """Compute gravity torques from USD joint angles using arm_ik.py FK."""
-    import arm_ik
+    """Compute gravity torques from USD joint angles using arm_ik_v2 FK."""
+    import arm_ik_v2 as arm_ik
     j2_fk, j3_fk, j4_fk = usd_to_fk_angles(j2_usd_deg, j3_usd_deg, j4_usd_deg)
     params = arm_ik.get_arm_params(_arm_sel, loaded=ARM_LOADED)
     torques = arm_ik.gravity_torques(
@@ -909,7 +921,7 @@ def generate_pose_grid():
 # ============================================================================
 env_label = "reactor" if args.reactor else ("step" if args.step else "flat")
 load_label = "loaded" if args.armloaded else "bare"
-config_tag = f"{ARM_REACH_IN:.0f}in_{load_label}_{env_label}"
+config_tag = f"{ARM_REACH_IN:.0f}in_{load_label}_{env_label}_v2"
 
 out_dir = os.path.join(RESULTS_ROOT, "arm_continuous_sweep")
 os.makedirs(out_dir, exist_ok=True)
@@ -1079,7 +1091,7 @@ init_roll, init_pitch = get_chassis_orientation(stage, chassis_path)
 print(f"Baseline chassis orientation: roll={init_roll:.1f}°, pitch={init_pitch:.1f}°", flush=True)
 
 # Analytical torques via arm_ik (for cross-validation)
-import arm_ik as _arm_ik_mod
+import arm_ik_v2 as _arm_ik_mod
 _arm_params = _arm_ik_mod.get_arm_params(_arm_sel, loaded=ARM_LOADED)
 
 # ============================================================================
