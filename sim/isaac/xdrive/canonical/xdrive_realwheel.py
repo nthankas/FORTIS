@@ -383,18 +383,11 @@ def build_chassis(stage, chassis_path):
     """Arched chassis with chamfered corners and recessed belly."""
     half_h = CHASSIS_H / 2.0
 
-    # Visual mesh — full octagonal body, NO collision on visual mesh
-    build_arched_chassis(stage, chassis_path + "/body", half_h, (0.25, 0.25, 0.35))
-
-    # Collision: inset box so roller spheres never clip it with flush wheels
-    INSET = 1.0 * IN
-    col = UsdGeom.Cube.Define(stage, chassis_path + "/collider")
-    col.GetSizeAttr().Set(1.0)
-    cxf = UsdGeom.Xformable(col.GetPrim())
-    cxf.ClearXformOpOrder()
-    cxf.AddScaleOp().Set(Gf.Vec3d((SL - INSET) * 2.0, (SW - INSET) * 2.0, CHASSIS_H))
-    UsdPhysics.CollisionAPI.Apply(col.GetPrim())
-    UsdGeom.Imageable(col.GetPrim()).CreatePurposeAttr("guide")
+    chassis_mesh = build_arched_chassis(stage, chassis_path + "/body",
+                                        half_h, (0.25, 0.25, 0.35))
+    UsdPhysics.CollisionAPI.Apply(chassis_mesh.GetPrim())
+    # convexDecomposition preserves the belly recess (convexHull fills it in)
+    UsdPhysics.MeshCollisionAPI.Apply(chassis_mesh.GetPrim()).CreateApproximationAttr("convexDecomposition")
 
     # Forward arrow indicator
     arrow = UsdGeom.Cube.Define(stage, chassis_path + "/fwd")
@@ -605,8 +598,19 @@ def build_robot(stage, src_parts, src_center):
     wpm.CreateRestitutionAttr(0.1)
     wheel_mat = UsdShade.Material(stage.GetPrimAtPath("/World/WheelMat"))
 
+    # Wheel Z position relative to chassis center
+    # On flat ground: chassis center at Z = BELLY_HEIGHT + CHASSIS_H/2
+    # Wheel axle at Z = WHEEL_RADIUS (above ground)
+    # Wheel Z in chassis frame = WHEEL_RADIUS - (BELLY_HEIGHT + CHASSIS_H/2)
     wheel_z = WHEEL_RADIUS - (BELLY_HEIGHT + CHASSIS_H / 2.0)
-    wheel_offset = WHEEL_WIDTH / 2.0 + 0.005
+
+    # Wheel offset: must clear roller orbit radius from chassis collision.
+    # Roller centers orbit at ~76mm from wheel hub in the rotation plane;
+    # the inner-side rollers will be inside the chassis bounding box if the
+    # offset is too small, causing PhysX to violently push them out. 40mm
+    # clearance was the empirically-stable value with convexDecomposition
+    # collision on the chassis mesh.
+    wheel_offset = WHEEL_WIDTH / 2.0 + 0.04
 
     drive_joint_paths = []
 

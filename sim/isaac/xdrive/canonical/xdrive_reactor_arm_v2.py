@@ -558,24 +558,10 @@ def build_arched_chassis(stage, path, half_h, color):
 def build_chassis(stage, chassis_path):
     half_h = CHASSIS_H / 2.0
 
-    # Visual mesh — full octagonal body, NO collision on this mesh
-    build_arched_chassis(stage, chassis_path + "/body", half_h, (0.25, 0.25, 0.35))
-
-    # Collision: inset box so roller spheres never reach it even with flush wheels.
-    # Inset 1" from each side — rollers orbit ~76mm from hub with ~22mm sphere
-    # radius, so innermost roller point is ~54mm from hub center. With flush
-    # wheel offset (~30mm from chamfer face), the rollers reach ~24mm inside
-    # the chamfer face. A 1" (25.4mm) inset keeps the collision box clear.
-    INSET = 1.0 * IN
-    col_hx = SL - INSET
-    col_hy = SW - INSET
-    col = UsdGeom.Cube.Define(stage, chassis_path + "/collider")
-    col.GetSizeAttr().Set(1.0)
-    cxf = UsdGeom.Xformable(col.GetPrim())
-    cxf.ClearXformOpOrder()
-    cxf.AddScaleOp().Set(Gf.Vec3d(col_hx * 2.0, col_hy * 2.0, CHASSIS_H))
-    UsdPhysics.CollisionAPI.Apply(col.GetPrim())
-    UsdGeom.Imageable(col.GetPrim()).CreatePurposeAttr("guide")  # invisible
+    chassis_mesh = build_arched_chassis(stage, chassis_path + "/body",
+                                        half_h, (0.25, 0.25, 0.35))
+    UsdPhysics.CollisionAPI.Apply(chassis_mesh.GetPrim())
+    UsdPhysics.MeshCollisionAPI.Apply(chassis_mesh.GetPrim()).CreateApproximationAttr("convexDecomposition")
 
     # Forward arrow indicator
     arrow = UsdGeom.Cube.Define(stage, chassis_path + "/fwd")
@@ -1254,9 +1240,9 @@ def build_robot(stage, src_parts, src_center):
     wheel_mat = UsdShade.Material(stage.GetPrimAtPath("/World/WheelMat"))
 
     wheel_z = WHEEL_RADIUS - (BELLY_HEIGHT + CHASSIS_H / 2.0)
-    # Flush mount: chassis collision is an inset box, so rollers can't clip it.
-    # Offset = half wheel width + 5mm air gap (inner wheel face flush with chamfer).
-    wheel_offset = WHEEL_WIDTH / 2.0 + 0.005
+    # 40mm clearance: keeps inner-side rollers outside the chassis collision
+    # mesh. Smaller offsets cause PhysX to violently push rollers out.
+    wheel_offset = WHEEL_WIDTH / 2.0 + 0.04
 
     drive_joint_paths = []
 
