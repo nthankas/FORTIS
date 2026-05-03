@@ -29,9 +29,10 @@ Hardware selections are tracked in the OnShape model and BOM, which live outside
 docker/             Dockerfile.dev + docker-compose.yml (ROS 2 Humble desktop)
 src/                ROS 2 packages (colcon workspace)
   fortis_safety/    Mission-level state machine + ROS node + REPL console
-  fortis_msgs/      Custom message types (ChassisCamClick, GraspCandidate, MissionState, WheelVelocities)
+  fortis_msgs/      Custom message + action types (ChassisCamClick, GraspCandidate, MissionState, WheelVelocities, MoveToPose)
   fortis_comms/     Motor abstractions, ODrive S1 wrapper, X-drive kinematics, EKF
   fortis_drive/     X-drive ROS node wrapping fortis_comms kinematics, gated by mission state
+  fortis_arm/       Arm controller seam (action server + gripper services), gated by mission state; kinematics deferred
 sim/                Simulation work (Isaac Sim)
   isaac/xdrive/     Canonical chassis + arm sims, tools, docs, results
 analysis/           Drivetrain and arm analysis writeups
@@ -122,6 +123,7 @@ See `src/fortis_comms/README.md` for the integration assessment.
 | `fortis_safety` (mission state machine) | working, 27 unit tests pass, end-to-end ROS round trip verified |
 | `fortis_msgs` (custom messages) | working, 4 message types (ChassisCamClick, GraspCandidate, MissionState, WheelVelocities) |
 | `fortis_drive` (X-drive ROS node) | working, gated by mission state, 5 rclpy tests pass |
+| `fortis_arm` (arm controller seam) | scaffold, gated by mission state, action + gripper services in place, kinematics deferred |
 | `fortis_comms` (motor abstractions, kinematics, EKF) | ament_python package under `src/`, consumed by `fortis_drive` as a regular `<depend>` |
 | Isaac Sim 1 (xdrive flat ground + reactor) | working in `sim/isaac/xdrive/canonical/` |
 | Isaac Sim 2 (R0 port entry) | not started |
