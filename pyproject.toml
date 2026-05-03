@@ -1,0 +1,22 @@
+# Workspace-level tool config.
+#
+# Currently only used to scope Pyright/Pylance (the type checker behind
+# the VSCode Python extension's "Problems" tab) so it does not flag the
+# Isaac Sim glue code in sim/ or the colcon-generated build/install/log
+# trees. ROS 2 ament packages still own their own setup.py / package.xml
+# and are NOT configured from this file.
+#
+# Mirrors the exclude list in .flake8 -- keep them in sync.
+
+[tool.pyright]
+exclude = [
+    "**/__pycache__",
+    "**/.pytest_cache",
+    "build",
+    "install",
+    "log",
+    "sim",
+    "legacy",
+    ".venv",
+    "venv",
+]
