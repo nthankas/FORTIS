@@ -57,6 +57,20 @@ SPIN_DURATION_S: float = 0.3
 #: after each callback rather than blocking for a full slice.
 SPIN_ONCE_TIMEOUT_S: float = 0.02
 
+#: Hard ceiling on how long publish_state will poll for the node to
+#: observe a freshly-published state. Anything > a couple seconds
+#: indicates DDS discovery has actually failed, not just that we are
+#: under load.
+STATE_PROPAGATION_TIMEOUT_S: float = 2.0
+
+#: Hard ceiling on how long publish_twist will poll for the node's
+#: wheel-output publisher to deliver a message back to the helper. Same
+#: rationale as STATE_PROPAGATION_TIMEOUT_S: cmd_vel and wheel_velocities
+#: discovery between two in-process nodes is fast on the happy path, but
+#: parallel colcon test execution on a loaded box can stall it past the
+#: 300 ms SPIN_DURATION_S used everywhere else.
+WHEEL_OUTPUT_TIMEOUT_S: float = 2.0
+
 
 # --- Fixtures ---------------------------------------------------------------
 
@@ -149,10 +163,27 @@ class _Harness:
             rclpy.spin_once(self.helper, timeout_sec=SPIN_ONCE_TIMEOUT_S)
 
     def publish_state(self, state: str) -> None:
-        """Publish a String on /fortis/mission_state with the given state name."""
+        """
+        Publish a String on /fortis/mission_state and wait for the node to see it.
+
+        We poll the node's cached _current_state instead of just sleeping
+        a fixed window. With colcon running multiple package test
+        processes in parallel, DDS discovery for the latched state topic
+        can take long enough that a fixed-duration spin races the
+        subsequent /cmd_vel publish and the test sees an empty
+        wheel_msgs list. Polling the actual state observation is the
+        only timing-stable assertion.
+        """
         msg = String()
         msg.data = state
         self.state_pub.publish(msg)
+        end = time.monotonic() + STATE_PROPAGATION_TIMEOUT_S
+        while self.node._current_state != state and time.monotonic() < end:
+            rclpy.spin_once(self.node, timeout_sec=SPIN_ONCE_TIMEOUT_S)
+            rclpy.spin_once(self.helper, timeout_sec=SPIN_ONCE_TIMEOUT_S)
+        assert self.node._current_state == state, \
+            f"state {state!r} did not propagate to node within " \
+            f"{STATE_PROPAGATION_TIMEOUT_S}s"
 
     def publish_twist(
         self,
@@ -160,12 +191,27 @@ class _Harness:
         vy: float = 0.0,
         wz: float = 0.0,
     ) -> None:
-        """Publish a Twist on /cmd_vel with the given linear and angular components."""
+        """
+        Publish a Twist on /cmd_vel and wait for the node to emit something.
+
+        Returns once either wheel_msgs or zero_msgs has grown by at
+        least one entry, or after WHEEL_OUTPUT_TIMEOUT_S. The drive
+        node always emits exactly one of the two on every accepted or
+        rejected /cmd_vel, so polling for the union is the right
+        signal. As with publish_state, fixed-duration spins race DDS
+        discovery under parallel test load.
+        """
+        initial = len(self.wheel_msgs) + len(self.zero_msgs)
         msg = Twist()
         msg.linear.x = vx
         msg.linear.y = vy
         msg.angular.z = wz
         self.cmd_pub.publish(msg)
+        end = time.monotonic() + WHEEL_OUTPUT_TIMEOUT_S
+        while (len(self.wheel_msgs) + len(self.zero_msgs)) == initial \
+                and time.monotonic() < end:
+            rclpy.spin_once(self.node, timeout_sec=SPIN_ONCE_TIMEOUT_S)
+            rclpy.spin_once(self.helper, timeout_sec=SPIN_ONCE_TIMEOUT_S)
 
     def cleanup(self) -> None:
         """Tear down both nodes. Safe to call once after the test finishes."""
