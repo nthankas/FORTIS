@@ -33,6 +33,7 @@ src/                ROS 2 packages (colcon workspace)
   fortis_comms/     Motor abstractions, ODrive S1 wrapper, X-drive kinematics, EKF
   fortis_drive/     X-drive ROS node wrapping fortis_comms kinematics, gated by mission state
   fortis_arm/       Arm controller seam (action server + gripper services), gated by mission state; kinematics deferred
+  fortis_integration_tests/  Cross-package launch_testing integration tests (test-only, no runtime code)
 sim/                Simulation work (Isaac Sim)
   isaac/xdrive/     Canonical chassis + arm sims, tools, docs, results
 analysis/           Drivetrain and arm analysis writeups
