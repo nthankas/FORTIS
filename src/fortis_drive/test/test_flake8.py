@@ -12,14 +12,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from pathlib import Path
+
 from ament_flake8.main import main_with_errors
 import pytest
+
+
+# Lint only the source tree this scaffold belongs to. Resolved from
+# __file__ so the lint target is independent of the cwd pytest was
+# launched from -- without this, running pytest from the workspace root
+# would scan every .py file in the repo (sim/, build/, install/, ...).
+PKG_DIR = Path(__file__).resolve().parent.parent
 
 
 @pytest.mark.flake8
 @pytest.mark.linter
 def test_flake8():
-    rc, errors = main_with_errors(argv=[])
+    rc, errors = main_with_errors(argv=[str(PKG_DIR)])
     assert rc == 0, \
         'Found %d code style errors / warnings:\n' % len(errors) + \
         '\n'.join(errors)

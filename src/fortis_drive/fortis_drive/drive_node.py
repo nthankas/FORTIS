@@ -1,6 +1,5 @@
 """
-ROS 2 wrapper around the FORTIS X-drive inverse kinematics, gated by mission
-state.
+ROS 2 wrapper around the FORTIS X-drive inverse kinematics, gated by mission state.
 
 Subscribes
 ----------
@@ -85,7 +84,8 @@ from std_msgs.msg import String
 # install/<pkg>/lib/python3.10/site-packages/ (after colcon build).
 
 def _ensure_fortis_comms_importable() -> None:
-    """Add <repo>/control to sys.path if fortis_comms is not already importable.
+    """
+    Add <repo>/control to sys.path if fortis_comms is not already importable.
 
     Walks up from this file looking for control/fortis_comms/xdrive_kinematics.py
     -- this finds the workspace root whether we are running from a colcon
@@ -163,7 +163,8 @@ class WheelCommand:
 
 
 def _twist_to_wheel_command(cmd: Twist) -> WheelCommand:
-    """Map a Twist (Vx, Vy, omega) to per-wheel angular velocities (rad/s).
+    """
+    Map a Twist (Vx, Vy, omega) to per-wheel angular velocities (rad/s).
 
     Calls into xdrive_kinematics.xdrive_ik_solver (which returns wheel linear
     speeds in m/s, already saturated to MAX_WHEEL_SPEED) and divides by the
@@ -198,7 +199,8 @@ def _wheel_command_to_msg(cmd: WheelCommand, stamp: TimeMsg) -> WheelVelocities:
 
 
 class DriveNode(Node):
-    """ROS node that converts /cmd_vel to wheel velocities, gated by mission state.
+    """
+    ROS node that converts /cmd_vel to wheel velocities, gated by mission state.
 
     The node holds two pieces of runtime state: the most recent mission state
     string (or None if none has been received) and a per-state timestamp of
