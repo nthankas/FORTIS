@@ -67,7 +67,8 @@ SPIN_ONCE_TIMEOUT_S: float = 0.02
 
 @pytest.fixture(scope="module")
 def rclpy_session():
-    """Module-scoped rclpy.init / shutdown.
+    """
+    Module-scoped rclpy.init / shutdown.
 
     We init once and shut down once per test module so individual tests
     pay only the node create/destroy cost. rclpy.init can only be called
@@ -98,7 +99,8 @@ def harness(rclpy_session):
 
 
 class _Harness:
-    """A DriveNode under test plus a helper node for inputs and outputs.
+    """
+    A DriveNode under test plus a helper node for inputs and outputs.
 
     The helper is a separate Node (not a part of DriveNode) so the tests
     exercise the same DDS path that real publishers and subscribers will
@@ -179,7 +181,8 @@ class _Harness:
 
 
 def _expected_wheel_speeds(vx: float, vy: float, wz: float) -> list[float]:
-    """Reference computation: what the IK should produce for a given Twist.
+    """
+    Compute reference wheel speeds for a given Twist (the assertion target).
 
     Computed via the same xdrive_ik_solver that the node calls so the test
     verifies "the kinematics are being applied correctly" rather than
@@ -216,7 +219,8 @@ def test_orbit_accepts_cmd_vel_and_publishes_correct_wheel_velocities(harness):
 
 
 def test_idle_rejects_cmd_vel_and_publishes_zeros(harness):
-    """IDLE is not permitted: cmd_vel is rejected and zeros are published.
+    """
+    IDLE is not permitted: cmd_vel is rejected and zeros are published.
 
     The throttled warning is emitted on the same code path that publishes
     the zeros; we verify the observable output (the message) and rely on
@@ -296,7 +300,8 @@ def test_state_transitions_gate_motion_correctly(harness):
 
 
 def test_no_state_received_rejects_cmd_vel(harness):
-    """If /fortis/mission_state has not arrived yet, motion is rejected.
+    """
+    If /fortis/mission_state has not arrived yet, motion is rejected.
 
     This is the bring-up race: cmd_vel can be flowing before the state
     publisher has announced anything. The drive must not silently accept
