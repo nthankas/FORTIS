@@ -30,9 +30,8 @@ docker/             Dockerfile.dev + docker-compose.yml (ROS 2 Humble desktop)
 src/                ROS 2 packages (colcon workspace)
   fortis_safety/    Mission-level state machine + ROS node + REPL console
   fortis_msgs/      Custom message types (ChassisCamClick, GraspCandidate, MissionState, WheelVelocities)
-  fortis_drive/     X-drive ROS node wrapping fortis_comms kinematics, gated by mission state
-control/            Pure-Python libraries (pre-ROS, non-ROS, or ROS-adjacent)
   fortis_comms/     Motor abstractions, ODrive S1 wrapper, X-drive kinematics, EKF
+  fortis_drive/     X-drive ROS node wrapping fortis_comms kinematics, gated by mission state
 sim/                Simulation work (Isaac Sim)
   isaac/xdrive/     Canonical chassis + arm sims, tools, docs, results
 analysis/           Drivetrain and arm analysis writeups
@@ -108,11 +107,12 @@ python3 -m pytest src/fortis_safety/test/ -v
 ### fortis_comms tests (pure Python, no ROS)
 
 ```bash
-cd /workspace/control/fortis_comms
-python3 -m pytest -v
+cd /workspace
+colcon test --packages-select fortis_comms
+colcon test-result --verbose
 ```
 
-See `control/fortis_comms/README.md` for the integration assessment.
+See `src/fortis_comms/README.md` for the integration assessment.
 
 ## Status
 
@@ -122,7 +122,7 @@ See `control/fortis_comms/README.md` for the integration assessment.
 | `fortis_safety` (mission state machine) | working, 27 unit tests pass, end-to-end ROS round trip verified |
 | `fortis_msgs` (custom messages) | working, 4 message types (ChassisCamClick, GraspCandidate, MissionState, WheelVelocities) |
 | `fortis_drive` (X-drive ROS node) | working, gated by mission state, 5 rclpy tests pass |
-| `fortis_comms` (motor abstractions, kinematics, EKF) | pre-ROS library, tests pass in isolation, kinematics consumed by `fortis_drive` via sys.path shim |
+| `fortis_comms` (motor abstractions, kinematics, EKF) | ament_python package under `src/`, consumed by `fortis_drive` as a regular `<depend>` |
 | Isaac Sim 1 (xdrive flat ground + reactor) | working in `sim/isaac/xdrive/canonical/` |
 | Isaac Sim 2 (R0 port entry) | not started |
 | `fortis_description` (URDF) | blocked on Adrian's OnShape model |
