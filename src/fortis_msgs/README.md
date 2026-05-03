@@ -26,6 +26,12 @@ source install/setup.bash
 Topic names listed above are the intended use sites at the time this package
 was created. They are not enforced by the package itself.
 
+## Actions
+
+| Action | Used by | Purpose |
+|---|---|---|
+| `MoveToPose` | `fortis_arm/arm_controller` (`move_to_pose` action server) | Move the arm end-effector to a target `geometry_msgs/PoseStamped`. Goal carries the target pose; result is `bool succeeded` + `string message`; feedback is `float32 progress` in `[0.0, 1.0]`. The current `fortis_arm` implementation always returns `succeeded=false, message="kinematics not implemented"` -- the contract is the deliverable, the motion is deferred. |
+
 ## Field-naming conventions
 
 - Wheel order is always `fl, fr, bl, br` (front/back, left/right).

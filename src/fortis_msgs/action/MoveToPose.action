@@ -1,0 +1,27 @@
+# Action goal: move the arm end-effector to a target pose.
+#
+# target_pose   Desired end-effector pose. The frame_id in the header
+#               selects the reference frame (typically the robot base or
+#               a chassis-relative frame). Stamp is used for staleness
+#               checks; a goal older than the action server's freshness
+#               threshold is rejected.
+
+geometry_msgs/PoseStamped target_pose
+---
+# Action result.
+#
+# succeeded   True if the arm reached the goal within tolerance, false
+#             otherwise. The fortis_arm scaffold returns false with
+#             message="kinematics not implemented" until the IK and
+#             trajectory pipeline lands.
+# message     Human-readable explanation. Always populated.
+
+bool succeeded
+string message
+---
+# Action feedback. Published periodically while the goal is active.
+#
+# progress    Estimated fraction of the trajectory completed, in
+#             [0.0, 1.0]. The scaffold does not publish feedback.
+
+float32 progress

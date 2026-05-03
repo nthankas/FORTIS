@@ -18,8 +18,13 @@ set(msg_files
   "msg/WheelVelocities.msg"
 )
 
+set(action_files
+  "action/MoveToPose.action"
+)
+
 rosidl_generate_interfaces(${PROJECT_NAME}
   ${msg_files}
+  ${action_files}
   DEPENDENCIES builtin_interfaces geometry_msgs std_msgs
 )
 
