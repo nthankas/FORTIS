@@ -76,7 +76,7 @@ ros2 topic pub /cmd_vel geometry_msgs/msg/Twist \
 
 ```bash
 cd /workspace
-colcon build --packages-select fortis_msgs fortis_drive
+colcon build --packages-select fortis_msgs fortis_comms fortis_drive
 source install/setup.bash
 python3 -m pytest src/fortis_drive/test/test_drive_node.py -v
 ```
@@ -85,13 +85,11 @@ The test file stands up a real `DriveNode` plus a helper publisher / subscriber
 and asserts on what comes out of the wire (not on internal state). See the
 module docstring in `test_drive_node.py` for the rationale.
 
-## fortis_comms import shim
+## fortis_comms dependency
 
-The X-drive kinematics live at `<repo>/control/fortis_comms/xdrive_kinematics.py`.
-That directory is a pre-ROS Python library with no `setup.py`, so colcon does
-not put it on `PYTHONPATH`. `drive_node.py` therefore walks up from `__file__`
-at startup looking for `control/fortis_comms/xdrive_kinematics.py` and prepends
-`<repo>/control` to `sys.path` before importing it. This avoids duplicating the
-kinematics into this package, but it is a *shim* -- when `fortis_comms` gains a
-proper `setup.py` and gets installed, the shim function in `drive_node.py` can
-be deleted.
+The X-drive kinematics (`xdrive_ik_solver`, `WHEEL_RADIUS`) come from the
+`fortis_comms` ament_python package under `src/fortis_comms`. It is declared
+as a `<depend>` in `package.xml`; colcon puts it on `PYTHONPATH` automatically
+after `source install/setup.bash`. The earlier `sys.path` shim that walked up
+from `__file__` looking for `control/fortis_comms/` was removed when
+`fortis_comms` became a proper package.

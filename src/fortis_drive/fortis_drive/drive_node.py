@@ -49,75 +49,22 @@ mission_state) are short, allocate nothing significant, and have no async
 work to wait on. A MultiThreadedExecutor would add no throughput and
 introduce a data race on the cached state string. If real-time guarantees
 are ever needed, revisit -- but it should not be the default.
-
-Importing fortis_comms
-----------------------
-fortis_comms is a pre-ROS Python library at <repo>/control/fortis_comms.
-It is not yet packaged (no setup.py), so colcon doesn't put it on
-PYTHONPATH. We resolve <repo>/control at startup by walking up from this
-file looking for the kinematics module, and prepend it to sys.path. See
-_ensure_fortis_comms_importable() below for the rationale and limits of
-this approach. The follow-up is to add a proper setup.py to fortis_comms;
-when that lands, the sys.path shim here can be deleted.
 """
 
 from __future__ import annotations
 
-import sys
 from dataclasses import dataclass
-from pathlib import Path
 
 import rclpy
 from builtin_interfaces.msg import Time as TimeMsg
+from fortis_comms.xdrive_kinematics import WHEEL_RADIUS, xdrive_ik_solver
+from fortis_msgs.msg import WheelVelocities
 from geometry_msgs.msg import Twist
 from rclpy.duration import Duration
 from rclpy.node import Node
 from rclpy.qos import QoSDurabilityPolicy, QoSProfile, QoSReliabilityPolicy
 from rclpy.time import Time
 from std_msgs.msg import String
-
-
-# --- fortis_comms import shim ------------------------------------------------
-#
-# Done before importing xdrive_kinematics so the import resolves when this
-# module is loaded from either src/ (during pytest) or
-# install/<pkg>/lib/python3.10/site-packages/ (after colcon build).
-
-def _ensure_fortis_comms_importable() -> None:
-    """
-    Add <repo>/control to sys.path if fortis_comms is not already importable.
-
-    Walks up from this file looking for control/fortis_comms/xdrive_kinematics.py
-    -- this finds the workspace root whether we are running from a colcon
-    install tree or directly from src/. Falls back to /workspace (the dev
-    container mount point) if the walk fails. Idempotent and silent on the
-    happy path so it costs essentially nothing on subsequent imports.
-    """
-    try:
-        import fortis_comms.xdrive_kinematics  # noqa: F401
-        return
-    except ImportError:
-        pass
-
-    here = Path(__file__).resolve()
-    for parent in here.parents:
-        candidate = parent / "control" / "fortis_comms" / "xdrive_kinematics.py"
-        if candidate.is_file():
-            sys.path.insert(0, str(parent / "control"))
-            return
-
-    fallback = Path("/workspace/control")
-    if (fallback / "fortis_comms" / "xdrive_kinematics.py").is_file():
-        sys.path.insert(0, str(fallback))
-
-
-_ensure_fortis_comms_importable()
-
-from fortis_comms.xdrive_kinematics import (  # noqa: E402
-    WHEEL_RADIUS,
-    xdrive_ik_solver,
-)
-from fortis_msgs.msg import WheelVelocities  # noqa: E402
 
 
 # --- Constants ---------------------------------------------------------------

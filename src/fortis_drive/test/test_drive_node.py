@@ -34,10 +34,7 @@ from rclpy.node import Node
 from rclpy.qos import QoSDurabilityPolicy, QoSProfile, QoSReliabilityPolicy
 from std_msgs.msg import String
 
-# fortis_drive.drive_node must be imported before fortis_comms because
-# importing drive_node carries the sys.path shim that makes fortis_comms
-# importable when fortis_comms isn't yet packaged. After the import
-# below runs, fortis_comms is on sys.path for the rest of this module.
+from fortis_comms.xdrive_kinematics import WHEEL_RADIUS, xdrive_ik_solver
 from fortis_drive.drive_node import (
     CMD_VEL_TOPIC,
     MISSION_STATE_TOPIC,
@@ -45,7 +42,6 @@ from fortis_drive.drive_node import (
     ZERO_VELOCITIES_TOPIC,
     DriveNode,
 )
-from fortis_comms.xdrive_kinematics import WHEEL_RADIUS, xdrive_ik_solver
 from fortis_msgs.msg import WheelVelocities
 
 
