@@ -13,14 +13,15 @@ Useful for bring-up before any real planner / UI exists - lets us drive
 state transitions and toggle context flags by hand.
 """
 
+import threading
+
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import QoSProfile, QoSDurabilityPolicy, QoSReliabilityPolicy
-from std_msgs.msg import String, Empty, Bool
-from fortis_safety.mission_state_machine import (
-    Event,
-)
-import threading
+from rclpy.qos import QoSDurabilityPolicy, QoSProfile, QoSReliabilityPolicy
+from std_msgs.msg import Bool, Empty, String
+
+from fortis_safety.mission_state_machine import Event
+
 
 CONTEXT_FIELDS = [
     "target_pose_valid",
@@ -34,6 +35,7 @@ CONTEXT_FIELDS = [
     "operator_ack",
 ]
 
+
 class EventConsole(Node):
     def __init__(self):
         super().__init__("event_console")
@@ -46,21 +48,21 @@ class EventConsole(Node):
         )
         self.current_state: str = "UNKNOWN"
         self.local_ctx: dict = {}
-        
+
         self.state_sub = self.create_subscription(
             String,
             "/fortis/mission_state",
             self._state_cb,
             latched_qos,
         )
-        
+
         self.event_pubs: dict = {}
         for event in Event:
             topic = f"/fortis/events/{event.name.lower()}"
             self.event_pubs[event.name.lower()] = self.create_publisher(
                 Empty, topic, 10
             )
-        
+
         # Context publishers are also latched. The state machine only
         # consults a context field when an event arrives, so a context
         # value set five minutes ago must still be the value the node
@@ -71,8 +73,7 @@ class EventConsole(Node):
         for field in CONTEXT_FIELDS:
             topic = f"/fortis/context/{field}"
             self.ctx_pubs[field] = self.create_publisher(Bool, topic, latched_qos)
-        
-        
+
     def _state_cb(self, msg: String) -> None:
         self.current_state = msg.data
 
@@ -84,7 +85,7 @@ class EventConsole(Node):
         pub.publish(Empty())
         self.get_logger().info(f"Published event: {name}")
         return True
-    
+
     def publish_context(self, field: str, value: bool) -> bool:
         pub = self.ctx_pubs.get(field)
         if pub is None:
@@ -96,7 +97,6 @@ class EventConsole(Node):
         self.get_logger().info(f"Published context: {field} = {value}")
         self.local_ctx[field] = value
         return True
-    
 
 
 def run_cli(node):
@@ -111,7 +111,7 @@ def run_cli(node):
         parts = line.split()
         cmd = parts[0].lower()
         args = parts[1:]
-        
+
         if cmd == "state":
             print(node.current_state)
         elif cmd == "event":
@@ -147,7 +147,8 @@ def run_cli(node):
             break
         else:
             print(f"Unknown command: {cmd}. Type 'help' for a list of commands.")
-    
+
+
 def parse_bool(token: str):
     # Accept the obvious tokens for booleans. We don't use Python's
     # bool() because bool("false") is True - any non-empty string is
@@ -159,6 +160,7 @@ def parse_bool(token: str):
     if t in ("false", "f", "0"):
         return False
     return None  # invalid
+
 
 def main(args=None):
     rclpy.init(args=args)
@@ -172,7 +174,6 @@ def main(args=None):
         if rclpy.ok():
             rclpy.shutdown()
 
+
 if __name__ == "__main__":
     main()
-    
-        

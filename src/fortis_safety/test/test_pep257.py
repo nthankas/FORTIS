@@ -12,12 +12,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from pathlib import Path
+
 from ament_pep257.main import main
 import pytest
+
+
+# Lint only the source tree this scaffold belongs to. Resolved from
+# __file__ so the lint target is independent of the cwd pytest was
+# launched from -- without this, running pytest from the workspace root
+# would scan every .py file in the repo (sim/, build/, install/, ...).
+PKG_DIR = Path(__file__).resolve().parent.parent
 
 
 @pytest.mark.linter
 @pytest.mark.pep257
 def test_pep257():
-    rc = main(argv=['.', 'test'])
+    rc = main(argv=[str(PKG_DIR)])
     assert rc == 0, 'Found code style errors / warnings'

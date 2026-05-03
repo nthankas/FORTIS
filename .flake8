@@ -1,0 +1,27 @@
+# Workspace-level flake8 config.
+#
+# This applies to ad-hoc invocations like `flake8 .` from the repo root
+# and to editor integrations (VSCode "Problems" tab, etc.). Per-package
+# ament_flake8 tests scope to their own package via Path(__file__) in
+# the test scaffolds, so this file is what stops sim/, legacy/, and
+# colcon-generated build/install/log dirs from polluting the lint signal
+# for everyone else.
+#
+# Why these excludes
+# - sim/, legacy/    : research code that was never written to PEP 8.
+# - build/install/log: colcon artifacts (regenerated; not ours to fix).
+# - .venv/, venv/    : local virtualenvs; obviously not project code.
+
+[flake8]
+max-line-length = 99
+exclude =
+    .git,
+    __pycache__,
+    .pytest_cache,
+    build,
+    install,
+    log,
+    sim,
+    legacy,
+    .venv,
+    venv

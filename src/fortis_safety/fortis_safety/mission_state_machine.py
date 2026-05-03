@@ -47,7 +47,7 @@ combinatorial explosion of states.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Callable, Optional
 
@@ -135,7 +135,7 @@ def home_reached(ctx: dict) -> bool:
 
 
 def pick_pre_contact(ctx: dict) -> bool:
-    """Cancelling PICK is safe only before the gripper has touched the target."""
+    """Allow PICK cancel only before the gripper has touched the target."""
     return not ctx.get("pick_in_contact", False)
 
 
@@ -215,6 +215,7 @@ class IllegalTransition(Exception):
 @dataclass
 class StepResult:
     """Returned by step() so callers can react to what happened."""
+
     from_state: State
     to_state: State
     event: Event
@@ -254,10 +255,11 @@ class MissionStateMachine:
 
     def step(self, event: Event, ctx: Optional[dict] = None) -> StepResult:
         """
-        Process an event. If a matching transition exists and its guard
-        passes, update current state. Otherwise raise IllegalTransition.
+        Process an event and apply the matching transition.
 
-        Returns a StepResult describing what happened.
+        If a matching transition exists and its guard passes, update the
+        current state. Otherwise raise IllegalTransition. Returns a
+        StepResult describing what happened.
         """
         if ctx is None:
             ctx = {}
@@ -286,10 +288,12 @@ class MissionStateMachine:
 
     def try_step(self, event: Event, ctx: Optional[dict] = None) -> StepResult:
         """
-        Same as step() but returns a no-op StepResult instead of raising
-        when the transition is illegal. Useful for events that are noise
-        in the current state and should be silently ignored (e.g. STOP
-        when already IDLE).
+        Process an event, never raising on illegal transitions.
+
+        Behaves like step() but returns a no-op StepResult instead of
+        raising when the transition is illegal. Useful for events that are
+        noise in the current state and should be silently ignored (e.g.
+        STOP when already IDLE).
         """
         try:
             return self.step(event, ctx)
@@ -313,6 +317,7 @@ class MissionStateMachine:
 def to_mermaid(transitions: Optional[list[Transition]] = None) -> str:
     """
     Produce a Mermaid stateDiagram-v2 representation of the transition table.
+
     Useful for sanity-checking the machine visually and for documentation.
     """
     if transitions is None:

@@ -30,7 +30,6 @@ from std_msgs.msg import Bool, Empty, String
 from fortis_safety.mission_state_machine import (
     Event,
     MissionStateMachine,
-    State,
 )
 
 
