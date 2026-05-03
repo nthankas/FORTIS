@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>fortis_integration_tests</name>
+  <version>0.0.0</version>
+  <description>Cross-package integration tests for FORTIS. Each test launches one or more real nodes and exercises the contract between them.</description>
+  <maintainer email="nikhilthankasala@gmail.com">Nikhil Thankasala</maintainer>
+  <license>MIT</license>
+
+  <test_depend>ament_copyright</test_depend>
+  <test_depend>ament_flake8</test_depend>
+  <test_depend>ament_pep257</test_depend>
+  <test_depend>python3-pytest</test_depend>
+  <test_depend>launch_testing</test_depend>
+  <test_depend>launch_testing_ros</test_depend>
+  <test_depend>rclpy</test_depend>
+  <test_depend>std_msgs</test_depend>
+  <test_depend>std_srvs</test_depend>
+  <test_depend>geometry_msgs</test_depend>
+  <test_depend>fortis_msgs</test_depend>
+  <test_depend>fortis_comms</test_depend>
+  <test_depend>fortis_safety</test_depend>
+  <test_depend>fortis_drive</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>
