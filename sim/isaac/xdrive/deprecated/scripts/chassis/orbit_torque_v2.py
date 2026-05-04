@@ -1,8 +1,8 @@
 """
-FORTIS X-Drive Orbit Torque Profiling on DIII-D Reactor Floor.
+FORTIS X-Drive Orbit Torque Profiling — V2 chassis (2026-05-01).
 
-Commands the robot to orbit (toroidal strafe) around the reactor center column,
-logs per-wheel torque at each speed, and produces a summary graph.
+Rectangular skeleton 13.082x8.54x6", wheels flush at corners, 2" belly.
+Same orbit test as orbit_torque.py but with the updated chassis geometry.
 
 Two modes:
   --speed X   : Single test at X m/s (launched as subprocess by sweep mode)
@@ -10,25 +10,23 @@ Two modes:
 
 Usage:
   Sweep (orchestrator, regular python):
-    python orbit_torque.py
+    python orbit_torque_v2.py
 
   Single test (Isaac Sim python):
-    IsaacSim\\python.bat orbit_torque.py --speed 1.0 --gui
-    IsaacSim\\python.bat orbit_torque.py --speed 1.0 --headless
+    IsaacSim\\python.bat orbit_torque_v2.py --speed 1.0 --gui
+    IsaacSim\\python.bat orbit_torque_v2.py --speed 1.0 --headless
 """
 import os, sys, math, argparse, csv, json
 
 os.environ["PYTHONIOENCODING"] = "utf-8"
 
 # --- xdrive path bootstrap (reorg 2026-04-04) ---
-# orbit_torque.py lives at xdrive/tools/; assets, lib, results at xdrive root.
 BASE_DIR    = os.path.dirname(os.path.abspath(__file__))   # xdrive/tools/
 XDRIVE_ROOT = os.path.abspath(os.path.join(BASE_DIR, ".."))
 ASSETS_DIR  = os.path.join(XDRIVE_ROOT, "assets")
-RESULTS_DIR = os.path.join(XDRIVE_ROOT, "results", "orbit_torque")
+RESULTS_DIR = os.path.join(XDRIVE_ROOT, "results", "orbit_torque_v2")
 sys.path.insert(0, os.path.join(XDRIVE_ROOT, "lib"))
 # --- end bootstrap ---
-# Walks up from xdrive/tools -> xdrive -> isaac -> simulation -> FORTIS -> Projects -> Capstone
 ISAAC_PYTHON = os.path.normpath(os.path.join(
     BASE_DIR, "..", "..", "..", "..", "..", "..", "IsaacSim", "python.bat"))
 
@@ -37,15 +35,15 @@ SPEEDS = [0.1, 0.15, 0.2, 0.25, 0.3]
 # ============================================================================
 # Argument parsing
 # ============================================================================
-parser = argparse.ArgumentParser(description="FORTIS orbit torque profiling")
+parser = argparse.ArgumentParser(description="FORTIS orbit torque profiling (v2 chassis)")
 parser.add_argument("--speed", type=float, default=None,
                     help="Single-test mode: orbit speed in m/s")
 parser.add_argument("--gui", action="store_true")
 parser.add_argument("--headless", action="store_true")
 parser.add_argument("--hz", type=int, default=360,
                     help="Physics Hz (default 360)")
-parser.add_argument("--belly", type=float, default=2.5,
-                    help="Belly height in inches (default 2.5)")
+parser.add_argument("--belly", type=float, default=2.0,
+                    help="Belly height in inches (default 2.0)")
 parser.add_argument("--out-dir", type=str, default=RESULTS_DIR)
 args, _ = parser.parse_known_args()
 
@@ -63,7 +61,7 @@ if args.speed is None:
     script_path = os.path.abspath(__file__)
 
     print("=" * 70)
-    print("FORTIS X-Drive Orbit Torque Sweep")
+    print("FORTIS X-Drive Orbit Torque Sweep (V2 Chassis)")
     print(f"Speeds: {SPEEDS} m/s")
     print(f"Output: {args.out_dir}")
     print(f"Isaac Python: {ISAAC_PYTHON}")
@@ -104,7 +102,6 @@ if args.speed is None:
             reader = csv.DictReader(f)
             for row in reader:
                 rows.append({k: float(v) for k, v in row.items()})
-        # Discard first 2s of transient
         rows = [r for r in rows if r["sim_time"] >= 2.0]
         if len(rows) < 50:
             print(f"  WARNING: Only {len(rows)} rows after transient removal")
@@ -143,15 +140,19 @@ if args.speed is None:
               f"{r['mean_BL']:8.3f} {r['mean_BR']:8.3f} "
               f"{r['peak_all']:8.3f}")
     print("=" * 100)
-    print(f"Motor available: NEO 2.0 + 9:1 = 12.6 Nm")
+    # M8325s direct-drive (no gearbox). Wheel torque == motor torque.
+    # Kt = 0.083 Nm/A. Limits: 40 A cont free air = 3.32 Nm,
+    #   60 A cont forced = 4.98 Nm, 80 A peak (3s) = 6.64 Nm.
+    print(f"Motor: ODrive M8325s 100KV direct drive")
+    print(f"  Continuous free air (40 A): 3.32 Nm/wheel")
+    print(f"  Continuous forced air (60 A): 4.98 Nm/wheel")
+    print(f"  Peak (80 A, 3 s):            6.64 Nm/wheel")
 
-    # Generate summary plot (use Isaac Sim's python which has matplotlib)
+    # Generate summary plot
     if results:
-        # Save results JSON for the plot script
         results_json = os.path.join(args.out_dir, "sweep_results.json")
         with open(results_json, "w") as f:
             json.dump(results, f, indent=2)
-        # Generate plot via Isaac Sim python (has matplotlib + numpy)
         plot_script = os.path.join(args.out_dir, "_plot.py")
         with open(plot_script, "w") as f:
             f.write(f'''import json, os, sys
@@ -161,7 +162,6 @@ import matplotlib.pyplot as plt
 
 with open(r"{results_json}") as f:
     results = json.load(f)
-# JSON keys are strings, convert to float
 results = {{float(k): v for k, v in results.items()}}
 
 fig, ax = plt.subplots(figsize=(12, 7))
@@ -171,21 +171,23 @@ colors = {{"FL": "#2ca02c", "FR": "#d62728", "BL": "#1f77b4", "BR": "#ff7f0e"}}
 
 for wn in wheel_names:
     means = [results[s][f"mean_{{wn}}"] for s in speeds_ok]
-    peaks = [results[s][f"peak_{{wn}}"] for s in speeds_ok]
     ax.plot(speeds_ok, means, "-o", color=colors[wn], label=f"{{wn}} mean",
             linewidth=2, markersize=6)
-    ax.plot(speeds_ok, peaks, "--s", color=colors[wn], label=f"{{wn}} peak",
-            linewidth=1.5, markersize=5, alpha=0.7)
 
-peak_all = [results[s]["peak_all"] for s in speeds_ok]
-ax.plot(speeds_ok, peak_all, "-D", color="black", linewidth=3,
-        markersize=8, label="Max peak (all wheels)", zorder=10)
-ax.axhline(12.6, color="gray", linestyle="-.", linewidth=2,
-           label="NEO 2.0 + 9:1 available (12.6 Nm)")
+# Peaks dropped: they are sub-millisecond PhysX collision impulses
+# (tail < 0.05% of samples), not physically meaningful for sizing.
+# Use the P95 plot in plot_torques.py if you need a worst-case curve.
+# M8325s direct-drive thresholds (no gearbox; T_wheel == T_motor)
+ax.axhline(3.32, color="#2ca02c", linestyle=":",  linewidth=1.5,
+           label="M8325s cont free air (40 A = 3.32 Nm)")
+ax.axhline(4.98, color="#ff7f0e", linestyle="--", linewidth=1.5,
+           label="M8325s cont forced air (60 A = 4.98 Nm)")
+ax.axhline(6.64, color="#d62728", linestyle="-.", linewidth=1.5,
+           label="M8325s peak 3 s (80 A = 6.64 Nm)")
 
 ax.set_xlabel("Commanded Orbit Speed (m/s)", fontsize=12)
-ax.set_ylabel("Torque (Nm)", fontsize=12)
-ax.set_title("FORTIS X-Drive Orbit Torque vs Speed (40 lb, mu=0.5, reactor floor)",
+ax.set_ylabel("Wheel torque (Nm) -- direct drive == motor torque", fontsize=12)
+ax.set_title("FORTIS X-Drive Orbit Torque vs Speed (v2 chassis, mu=0.5, reactor floor)",
              fontsize=13, fontweight="bold")
 ax.legend(loc="upper left", fontsize=9, ncol=2)
 ax.grid(True, alpha=0.3)
@@ -204,7 +206,6 @@ print(f"Plot saved: {{plot_path}}")
             print(plot_result.stdout.strip())
         else:
             print(f"WARNING: Plot generation failed: {plot_result.stderr[-400:]}")
-        # Clean up temp script
         try:
             os.remove(plot_script)
         except OSError:
@@ -238,15 +239,15 @@ MM = 0.001
 OMNIWHEEL_USD = os.path.join(ASSETS_DIR, "omniwheels.usd")
 REACTOR_USD = os.path.join(ASSETS_DIR, "diiid_reactor.usd")
 
-# Chassis geometry (from xdrive_realwheel.py)
-CHASSIS_L = 15.354 * IN
-CHASSIS_W = 9.353 * IN
-CHASSIS_H = 7.1 * IN
+# Chassis geometry — octagonal with 3" chamfer faces
+CHASSIS_L = 13.082 * IN     # bounding box length
+CHASSIS_W = 8.54 * IN       # bounding box width
+CHASSIS_H = 6.0 * IN        # height
 CHAMFER_FACE = 3.0 * IN
 CHAMFER_CUT = CHAMFER_FACE / math.sqrt(2)
-MOTOR_MOUNT_LEN = 2.5 * IN
+MOTOR_MOUNT_LEN = 1.272 * IN
 BELLY_HEIGHT = args.belly * IN
-ARCH_FLAT_WIDTH = 3.0 * IN
+ARCH_FLAT_WIDTH = 2.059 * IN
 
 # Wheel (AndyMark 8" Dualie)
 TARGET_DIA_MM = 203.0
@@ -262,9 +263,15 @@ SCALE_XZ = TARGET_DIA_MM / SRC_DIA_MM
 SCALE_Y = TARGET_WIDTH_MM / SRC_WIDTH_MM
 SCALE_UNIFORM = SCALE_XZ
 
-# Mass — corrected to 40 lb (18.14 kg) total
+# Mass — 40 lb total robot (arm in stowed pose lumped onto chassis body).
+# Total robot = 40 lb = 18.144 kg.
+#   arm (J1+J2+J3+J4 + 3 CF links + gripper + 3 lb payload + camera) = 6.515 kg
+#   4 wheels @ 1.0 kg each                                            = 4.000 kg
+#   chassis frame (skeleton + electronics + arm-stowed-lumped)        = 7.629 kg
+# CHASSIS_MASS below = chassis frame + arm lumped = 14.144 kg, since the orbit
+# sim does not model arm bodies separately.
 WHEEL_MASS = 1.0
-CHASSIS_MASS = 18.14 - 4 * WHEEL_MASS  # 14.14 kg
+CHASSIS_MASS = 14.144
 ROLLER_MASS_FRAC = 0.3
 NUM_ROLLERS = 10
 HUB_MASS = WHEEL_MASS * (1.0 - ROLLER_MASS_FRAC)
@@ -303,16 +310,16 @@ ORBIT_SPEED = args.speed
 ORBIT_RADIUS = 1.59  # m (spawn radius on outer floor)
 ORBIT_CIRCUMFERENCE = 2.0 * math.pi * ORBIT_RADIUS
 TRANSIENT_S = 2.0
-ORBIT_DURATION = 2.0 * ORBIT_CIRCUMFERENCE / ORBIT_SPEED + TRANSIENT_S + 1.0  # 2 full orbits + transient + margin
+ORBIT_DURATION = 2.0 * ORBIT_CIRCUMFERENCE / ORBIT_SPEED + TRANSIENT_S + 1.0
 LOG_HZ = 100
 LOG_INTERVAL = max(1, PHYSICS_HZ // LOG_HZ)
 
 # Abort thresholds
-Z_DROP_ABORT = 0.5  # meters — abort if robot falls off floor
+Z_DROP_ABORT = 0.5
 
 
 # ============================================================================
-# Robot build functions (copied from xdrive_realwheel.py, mass corrected)
+# Robot build functions
 # ============================================================================
 
 def classify_part(name):
@@ -464,10 +471,15 @@ def build_arched_chassis(stage, path, half_h, color):
 
 def build_chassis(stage, chassis_path):
     half_h = CHASSIS_H / 2.0
-    chassis_mesh = build_arched_chassis(stage, chassis_path + "/body",
-                                        half_h, (0.25, 0.25, 0.35))
-    UsdPhysics.CollisionAPI.Apply(chassis_mesh.GetPrim())
-    UsdPhysics.MeshCollisionAPI.Apply(chassis_mesh.GetPrim()).CreateApproximationAttr("convexDecomposition")
+    build_arched_chassis(stage, chassis_path + "/body", half_h, (0.25, 0.25, 0.35))
+    INSET = 1.0 * IN
+    col = UsdGeom.Cube.Define(stage, chassis_path + "/collider")
+    col.GetSizeAttr().Set(1.0)
+    cxf = UsdGeom.Xformable(col.GetPrim())
+    cxf.ClearXformOpOrder()
+    cxf.AddScaleOp().Set(Gf.Vec3d((SL - INSET) * 2.0, (SW - INSET) * 2.0, CHASSIS_H))
+    UsdPhysics.CollisionAPI.Apply(col.GetPrim())
+    UsdGeom.Imageable(col.GetPrim()).CreatePurposeAttr("guide")
     arrow = UsdGeom.Cube.Define(stage, chassis_path + "/fwd")
     arrow.GetSizeAttr().Set(1.0)
     axf = UsdGeom.Xformable(arrow.GetPrim())
@@ -603,6 +615,10 @@ def build_robot(stage, src_parts, src_center):
     wheel_mat = UsdShade.Material(stage.GetPrimAtPath("/World/WheelMat"))
 
     wheel_z = WHEEL_RADIUS - (BELLY_HEIGHT + CHASSIS_H / 2.0)
+    # Roller centers orbit at ~76 mm from the hub in the rotation plane,
+    # so the inner-side rollers must clear the chassis convexDecomposition
+    # hull. 40 mm is the empirically-stable standoff used by canonical
+    # xdrive_realwheel.py; smaller values (e.g. 5 mm) blow up physics.
     wheel_offset = WHEEL_WIDTH / 2.0 + 0.04
     drive_joint_paths = []
 
@@ -614,6 +630,19 @@ def build_robot(stage, src_parts, src_center):
         nx, ny = cx / norm_len, cy / norm_len
         wx = cx + nx * wheel_offset
         wy = cy + ny * wheel_offset
+
+        # Visual bracket from chamfer face to wheel hub
+        bp = chassis_path + f"/bracket_{wname}"
+        bk = UsdGeom.Cube.Define(stage, bp)
+        bk.GetSizeAttr().Set(1.0)
+        bxf = UsdGeom.Xformable(bk.GetPrim())
+        bxf.ClearXformOpOrder()
+        bxf.AddTranslateOp().Set(Gf.Vec3d(
+            (cx + wx) / 2.0, (cy + wy) / 2.0, float(wheel_z)))
+        bxf.AddRotateZOp().Set(float(math.degrees(math.atan2(ny, nx))))
+        bxf.AddScaleOp().Set(Gf.Vec3d(float(wheel_offset), 0.025, 0.025))
+        bk.GetDisplayColorAttr().Set(Vt.Vec3fArray([Gf.Vec3f(0.35, 0.35, 0.40)]))
+
         wp = robot_path + f"/Wheel_{wname}"
         wxf = UsdGeom.Xform.Define(stage, wp)
         wxf.ClearXformOpOrder()
@@ -643,11 +672,11 @@ def build_robot(stage, src_parts, src_center):
                               Sdf.ValueTypeNames.Float).Set(90.0)
         drive_joint_paths.append(djp)
 
-    # Spawn on outer floor
+    # Spawn on outer floor — matches canonical/xdrive_realwheel.py
     SPAWN_X = 0.0
     SPAWN_Y = -1.59
     SPAWN_FLOOR_Z = cfg.Z_OUTER_IN * IN
-    spawn_z = SPAWN_FLOOR_Z + WHEEL_RADIUS + CHASSIS_H / 2.0 + 0.02
+    spawn_z = SPAWN_FLOOR_Z + BELLY_HEIGHT + CHASSIS_H / 2.0 + 0.02
     spawn_yaw = math.degrees(math.atan2(0 - SPAWN_Y, 0 - SPAWN_X))  # 90 deg
     rxf = UsdGeom.Xformable(stage.GetPrimAtPath(robot_path))
     rxf.ClearXformOpOrder()
@@ -658,7 +687,8 @@ def build_robot(stage, src_parts, src_center):
     total_mass = CHASSIS_MASS + 4 * WHEEL_MASS
     print(f"\nMass: chassis={CHASSIS_MASS:.2f}kg + 4x{WHEEL_MASS}kg wheels = "
           f"{total_mass:.2f}kg ({total_mass*2.205:.1f} lbs)", flush=True)
-    print(f"Chassis: {CHASSIS_L/IN:.1f}x{CHASSIS_W/IN:.1f}x{CHASSIS_H/IN:.1f}\"", flush=True)
+    print(f"Chassis: {CHASSIS_L/IN:.3f}x{CHASSIS_W/IN:.2f}x{CHASSIS_H/IN:.1f}\" "
+          f"(skeleton, no chamfer)", flush=True)
     print(f"Spawn: ({SPAWN_X/IN:.1f}\", {SPAWN_Y/IN:.1f}\", {spawn_z/IN:.1f}\") "
           f"R={r_from_origin/IN:.1f}\" yaw={spawn_yaw:.1f}deg", flush=True)
 
@@ -718,7 +748,7 @@ def normalize_angle(deg):
 # MAIN — single orbit test
 # ============================================================================
 print("=" * 60, flush=True)
-print(f"FORTIS Orbit Torque Test — {ORBIT_SPEED:.2f} m/s", flush=True)
+print(f"FORTIS Orbit Torque Test (V2 Chassis) — {ORBIT_SPEED:.2f} m/s", flush=True)
 print(f"Duration: {ORBIT_DURATION:.1f}s, Orbit circumference: {ORBIT_CIRCUMFERENCE:.2f}m", flush=True)
 print("=" * 60, flush=True)
 
@@ -817,22 +847,15 @@ csv_writer.writerow([
     "x", "y", "z", "yaw_deg", "actual_speed_mps", "heading_correction_rads"
 ])
 
-# Orbit loop — simple strafe + matched omega
-# Same approach as the proven xdrive_reactor.py orbit mode:
-#   xdrive_ik(0, strafe_speed, strafe_speed / radius)
-# The matched omega rotates the robot at the orbit rate. The strafe pushes
-# perpendicular to the heading. Together this produces a circular orbit
-# regardless of initial heading.
+# Orbit loop
 total_frames = int(ORBIT_DURATION * PHYSICS_HZ)
 prev_pos = p0.copy()
 prev_log_time = 0.0
 aborted = False
 
-# Use actual post-settle radius
 r0 = math.sqrt(p0[0]**2 + p0[1]**2)
-orbit_omega = ORBIT_SPEED / r0  # fixed orbit angular velocity
+orbit_omega = ORBIT_SPEED / r0
 
-# Precompute fixed wheel velocity targets (constant throughout the orbit)
 tv = xdrive_ik(0, ORBIT_SPEED, orbit_omega)
 va = np.zeros(ndof)
 for ii, di in enumerate(drive_dof_indices):
@@ -847,12 +870,10 @@ print(f"Starting orbit: speed={ORBIT_SPEED:.2f}m/s, duration={ORBIT_DURATION:.1f
 for frame in range(total_frames):
     t = frame / PHYSICS_HZ
 
-    # Command constant wheel velocities every frame
     if art.is_physics_handle_valid():
         art.set_joint_velocity_targets(va.reshape(1, -1))
     world.step(render=not headless)
 
-    # Read state for logging (not every frame — expensive)
     if frame % LOG_INTERVAL == 0 or frame % (2 * PHYSICS_HZ) == 0:
         s = get_state(art, stage, chassis_path)
         if not s:
@@ -863,7 +884,6 @@ for frame in range(total_frames):
         r_actual = math.sqrt(pos[0]**2 + pos[1]**2)
         r_error = r_actual - r0
 
-    # Log at LOG_HZ
     if frame % LOG_INTERVAL == 0 and s:
         dt_log = t - prev_log_time if prev_log_time > 0 else 1.0 / LOG_HZ
         if dt_log <= 0: dt_log = 1.0 / LOG_HZ
@@ -890,13 +910,11 @@ for frame in range(total_frames):
         prev_pos = pos.copy()
         prev_log_time = t
 
-    # Status every 2 seconds
     if frame % (2 * PHYSICS_HZ) == 0 and frame > 0 and s:
         orbit_angle = math.degrees(math.atan2(pos[1], pos[0]))
         print(f"[{t:.0f}s] r={r_actual/IN:.1f}\" yaw={actual_yaw:.1f} "
               f"r_err={r_error/IN:+.1f}\" orbit_ang={orbit_angle:.0f}", flush=True)
 
-    # Abort: only if robot falls off the floor
     if t > 5.0 and frame % LOG_INTERVAL == 0 and s:
         if pos[2] < initial_z - Z_DROP_ABORT:
             print(f"ABORT: Robot fell off floor at t={t:.2f}s "
