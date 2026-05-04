@@ -42,7 +42,19 @@ Older tooling (`arm_continuous_sweep_v1.py`, `arm_sweep_filter_v1.py`, `arm_stab
 
 ## Hardware spec parity
 
-`canonical/xdrive_realwheel.py` and `lib/sim_config.py` match the current spec (~15" x 9" x 6", ODrive M8325s drivetrain). Mass constant in the sim is still `20.4 kg`; the current hardware target is ~40 lb (~18 kg). Refer to the OnShape model and BOM for ground-truth dimensions, not these scripts.
+`canonical/xdrive_realwheel.py` and `lib/sim_config.py` match the current spec (~15" x 9" x 6", ODrive M8325s drivetrain).
+
+Mass budget (40 lb total robot, ~18.144 kg):
+
+| Component | Mass | Source |
+|---|---|---|
+| Chassis body (arm lumped on top) | 14.144 kg | `canonical/xdrive_realwheel.py` `CHASSIS_MASS` |
+| Wheels | 4 x 1.0 kg | `canonical/xdrive_realwheel.py` `WHEEL_MASS` |
+| Total | 18.144 kg (= 40 lb) | |
+
+Sweep range for parameter studies: `lib/sim_config.py` `MASS_VALUES_KG = [13.6, 18.1, 22.7]` (30 / 40 / 50 lb), default 18.1 kg. The arm-IK modules (`lib/arm_ik_v3.py`, deprecated `lib/arm_ik_v2.py`) carry their own `CHASSIS_MASS = 20.4` constant for analytical tipping calculations -- v3 is the active value, v2 is kept for back-comparison only.
+
+Refer to the OnShape model and BOM for ground-truth dimensions, not these scripts.
 
 ## Reactor environment
 
