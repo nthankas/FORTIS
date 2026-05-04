@@ -1,0 +1,23 @@
+{
+  "source_csv": "results/arm_continuous_sweep/30in_loaded_step_v3.csv",
+  "build": "v3_30in_CF_loaded",
+  "env": "step",
+  "margin_m": 0.01,
+  "max_pos_error_deg": 5.0,
+  "z_j2_floor_m": 0.3556,
+  "reactor_filter_enabled": true,
+  "orbit_R_in": 62.6,
+  "total": 3888,
+  "n_valid": 956,
+  "n_rej_chassis": 564,
+  "n_rej_self_l4l2": 248,
+  "n_rej_self_l4j1": 0,
+  "n_rej_floor": 1006,
+  "n_rej_reactor": 2053,
+  "n_rej_converge": 0,
+  "n_unstable_at_some_j1": 0,
+  "tip_worst_margin_m": 0.032356,
+  "tip_mean_margin_m": 0.07910294560669456,
+  "tip_n_tight_10mm": 0,
+  "tip_n_tip_at_some_j1": 0
+}

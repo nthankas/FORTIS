@@ -22,19 +22,19 @@ Rule: every script writes its output into `results/<script_name>/`. No flat dump
 
 ## Canonical scripts
 
-- `xdrive/canonical/xdrive_realwheel.py` - chassis + real Kaya omni-wheel meshes (1 hub + 10 rollers per wheel as separate rigid bodies). 44-DOF articulation, CPU physics @ 360 Hz, TGS + CCD. Loads `assets/omniwheels.usd`. Supports `--reactor` for the DIII-D environment. Rectangular skeleton `13.082" x 8.54" x 6.0"`, footprint `19.022" x 14.5"` with wheels flush at the corners, no chamfer, `2.0"` belly default.
-- `xdrive/canonical/xdrive_reactor_arm.py` - 4-DOF parallel-link arm on the realwheel chassis, flat-stowed. v1 layout: all NEMA-17 + Cricket MK II joints, square 0.79"x0.79" CF tubes. `--metal`/`--cf` flag to swap link material.
-- `xdrive/canonical/xdrive_reactor_arm_v2.py` - v2 arm: heterogeneous motors, 1.25"x1.38" rectangular CF tubes, camera moved to L4. Use this for any new arm sweep work; v1 is kept for back-comparison.
+- `xdrive/canonical/xdrive_realwheel.py` - chassis + real Kaya omni-wheel meshes (1 hub + 10 rollers per wheel as separate rigid bodies). 44-DOF articulation, CPU physics @ 360 Hz, TGS + CCD. Loads `assets/omniwheels.usd`. Supports `--reactor` for the DIII-D environment. Arched/octagonal skeleton `13.082" x 8.54" x 6.0"` with 3" chamfer faces, footprint `19.022" x 14.5"`, `2.0"` belly default.
+- `xdrive/canonical/xdrive_reactor_arm_v2.py` - 4-DOF parallel-link arm on the realwheel chassis, flat-stowed. v2 build: heterogeneous motors (NEMA 17 + Cricket at J1/J3, NEMA 23 + EG23 at J2, Hitec D845WP at J4), 1.25"x1.38" rectangular CF tubes, camera at L4 midpoint. Only the 30" carbon-fiber configuration is the active build target; 24"/36" sweep modes remain for reference but are out of scope. v1 is deprecated, see `deprecated/scripts/xdrive_reactor_arm_v1.py`.
 
 Any new sim that needs the FORTIS chassis copies its build path from `canonical/xdrive_realwheel.py`. Don't rebuild geometry from scratch and don't copy from anything in `deprecated/`.
 
 ## Tools
 
-- `tools/orbit_torque.py` / `tools/orbit_torque_v2.py` - drive-torque profiling at orbit radii (v1 = legacy chassis dims, v2 = current rectangular skeleton)
-- `tools/arm_continuous_sweep.py` / `tools/arm_continuous_sweep_v2.py` - raw torque sweep, collision-free teleport (v1 vs v2 arm)
-- `tools/arm_sweep_filter.py` / `tools/arm_sweep_filter_v2.py` - analytical post-filter on sweep CSVs (collision + tipping)
-- `tools/arm_stability_sweep.py` - physics tipping sweep with tilt-corrected CG projection (uses `arm_ik.tipping_at_j1_tilted`)
+- `tools/orbit_torque.py` / `tools/orbit_torque_v2.py` - drive-torque profiling at orbit radii (v1 = legacy chassis dims, v2 = current arched skeleton)
+- `tools/arm_continuous_sweep_v2.py` - raw torque sweep, collision-free teleport (v2 arm only; v1 deprecated)
+- `tools/arm_sweep_filter_v2.py` - analytical post-filter on sweep CSVs (collision + tipping); v1 deprecated
 - `tools/clearance_sweep.py`, `tools/measure_r0_port.py`, `tools/step_arch_optimizer.py`, `tools/test_drift.py` - standalone analytical / measurement utilities
+
+v1 arm tooling (`arm_continuous_sweep.py`, `arm_sweep_filter.py`, `arm_stability_sweep.py`, `arm_ik.py`) lives in `deprecated/scripts/` with `_v1` suffix.
 
 ## Hardware spec parity
 
@@ -62,10 +62,7 @@ IsaacSim/python.bat sim/isaac/xdrive/canonical/xdrive_realwheel.py --gui
 # Canonical chassis inside reactor (straddling the step)
 IsaacSim/python.bat sim/isaac/xdrive/canonical/xdrive_realwheel.py --gui --reactor
 
-# Chassis + flat-stowed arm in reactor (v1 arm)
-IsaacSim/python.bat sim/isaac/xdrive/canonical/xdrive_reactor_arm.py --gui
-
-# Chassis + v2 arm
+# Chassis + v2 arm (30" CF, the active build target)
 IsaacSim/python.bat sim/isaac/xdrive/canonical/xdrive_reactor_arm_v2.py --gui
 
 # Analytical clearance sweep (no Isaac Sim needed)
