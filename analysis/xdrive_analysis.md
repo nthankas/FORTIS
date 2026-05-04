@@ -22,7 +22,7 @@ Four omni wheels mounted at the 45-degree chamfered corners of an octagonal chas
 |-----------|-------|
 | Chassis | 15" x 9" x 5.5" octagonal prism |
 | Chamfers | 3" face (2.12" cut depth) at all 4 corners |
-| Mass | 45 lbs (20.4 kg) total |
+| Mass | 40 lbs (18.144 kg) total: chassis body + arm lumped 14.144 kg + 4 x 1.0 kg wheels |
 | Wheels | AndyMark 8" Dualie Plastic Omni (am-0463) |
 | Wheel diameter | 203 mm (8.0") |
 | Wheel width | 2.04" (52 mm) |
