@@ -34,12 +34,14 @@ file tracks the milestones that changed the canonical model.
   orbit-torque tools) all moved under one of the two subdirs.
   `deprecated/README.md` rewritten to reflect the split.
 
-## 2026-05-01 — V2 arm + step stability + rectangular chassis skeleton (cb74dcc)
+## 2026-05-01 — V2 arm + step stability + chassis skeleton tightened (cb74dcc)
 - Chassis skeleton pivot in `canonical/xdrive_realwheel.py` and
-  `lib/sim_config.py`: `13.082" x 8.54" x 6.0"` rectangular skeleton (was
-  `15.354" x 9.353" x 7.1"` octagonal-prism w/ chamfer). Total footprint
-  with wheels: `19.022" x 14.5"`, wheels flush at corners, no chamfer.
-  `BELLY_HEIGHT` default now `2.0"` (was `2.5"`).
+  `lib/sim_config.py`: `13.082" x 8.54" x 6.0"` octagonal-prism skeleton
+  with `3"` chamfered face diagonals at the four 45-degree corners (was
+  `15.354" x 9.353" x 7.1"` octagonal-prism with the same chamfered
+  geometry, just larger). Total footprint with wheels: `19.022" x 14.5"`,
+  wheels mount flush on the chamfered corner faces. `BELLY_HEIGHT`
+  default now `2.0"` (was `2.5"`).
 - V2 arm system added under `canonical/xdrive_reactor_arm_v2.py` +
   `lib/arm_ik_v2.py`: heterogeneous motors, `1.25" x 1.38"` rectangular CF
   tubes, camera moved to L4. v1 arm kept canonical for back-comparison.
@@ -52,8 +54,8 @@ file tracks the milestones that changed the canonical model.
   case. Results in `results/arm_stability_sweep/`.
 - `canonical/xdrive_reactor_arm.py` (v1): `--metal`/`--cf` flag to swap
   link material (CF default).
-- `tools/orbit_torque_v2.py` added: orbit torque profiling on the new
-  rectangular skeleton.
+- `tools/orbit_torque_v2.py` added: orbit torque profiling on the
+  current `13.082" x 8.54" x 6.0"` skeleton.
 - Branches consolidated: `arm-sweep-v2`, `arm-v2-torque-report`, `dev`,
   `feature/comms-library`, `orbit-torque-profiling`, `phase2-results`,
   `feature/docker-devcontainer` work all in `main` now. Old branches
