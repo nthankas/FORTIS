@@ -5,7 +5,7 @@
 - **Chassis**: 15" x 9" x 6" octagonal prism, 3" chamfers, 18.1 kg (40 lbs)
 - **Wheels**: 4x omni wheels at 45-degree chamfered corners (X-drive config)
 - **Simulation wheels**: 180mm dia sphere-approximated rollers (2 rows x 12 rollers x 2-3 spheres each)
-- **Target hardware**: AndyMark 8" Dualie Plastic (am-0463), NEO motor + 5:1 MAXPlanetary
+- **Target hardware**: AndyMark 8" Dualie Plastic (am-0463), ODrive M8325s 100KV direct drive (no gearbox)
 
 ## Scripts
 
