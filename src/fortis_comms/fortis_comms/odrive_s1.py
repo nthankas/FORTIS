@@ -1,3 +1,28 @@
+"""
+Hand-rolled ODrive S1 CAN wrapper -- INTERIM TEST HELPER, not production.
+
+Production drive will use ODrive Robotics' official ROS 2 driver
+(`odrive_can` / `odrive_ros2_control`) once CAN bus + real ODrives come
+online. This file exists to let `fortis_comms` round-trip its `Motor`
+abstraction in unit tests without pulling in the full upstream package.
+
+Do not add features here. Do not import this from production nodes
+(`fortis_drive` consumes only `xdrive_kinematics`, which stays). When
+the upstream driver lands, this module and `motor_base.py` get deleted
+in the same pass.
+
+Known issues left in place because this file is going away:
+- ``__init__`` uses ``can.Bus("can0", interface="virtual")``, which is a
+  channel/interface contradiction that crashes on python-can >= 4.x.
+  Real hardware needs ``interface="socketcan", channel="can0"``.
+- ``_stop_motor`` packs ``struct.pack('<ff', 0)``, which raises because
+  the format expects two values, not one.
+- ``_read_position`` / ``_read_velocity`` block on ``bus.recv``; a real
+  driver uses a callback notifier.
+
+See ``docs/adr/0002-arm-and-drive-use-upstream-ros2-packages.md``.
+"""
+
 from .motor_base import Motor, MotorStatus  # noqa: F401
 import struct
 
