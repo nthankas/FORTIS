@@ -68,13 +68,25 @@ DISALLOWED_STATES: list[str] = [s for s in ALL_STATES if s not in ALLOWED_ARM_ST
 # --- Fixtures ----------------------------------------------------------------
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 def rclpy_session():
     """
-    Module-scoped rclpy.init / shutdown.
+    Function-scoped rclpy.init / shutdown.
 
-    rclpy.init can only be called once per process; doing it module-wide
-    keeps individual tests cheap (just node create/destroy).
+    A fresh DDS participant per test is the only way to guarantee that a
+    prior test's TRANSIENT_LOCAL writers cannot deliver stale samples to
+    the next test's subscribers. Module scope shares one participant
+    across the whole parametrized run; a destroyed helper publisher's
+    latched mission_state sample then races into the next case's spin
+    and silently overwrites the cached gate value, producing the
+    "rejected: state IDLE not in [...]" flake on the first parametrized
+    cases after a state-changing block of tests.
+
+    Cost is ~30-50 ms per test for context init + shutdown. Cheap
+    relative to the per-test discovery wait already in __init__, and
+    the only pattern that scales as the per-test resource surface
+    grows (MoveIt 2 action clients, IK service stubs, joint_state
+    publishers, parameter clients all live or die with this context).
     """
     rclpy.init()
     yield
@@ -222,8 +234,16 @@ class _Harness:
         assert future.done(), "future did not complete within timeout"
 
     def cleanup(self) -> None:
+        # Order matters: destroy the helper (the publisher side) first so
+        # its writer-goodbye is in flight before we tear down the
+        # subscriber. Then drain briefly so DDS can process the goodbye
+        # inside this participant before rclpy.shutdown collapses it.
+        # Without the drain, a function-scoped rclpy.shutdown can race
+        # the cleanup and leave a half-destroyed writer visible to the
+        # next test's participant on some DDS implementations.
         self.helper.destroy_node()
         self.node.destroy_node()
+        time.sleep(0.05)
 
 
 # --- Action gating ----------------------------------------------------------
