@@ -26,16 +26,17 @@ Hardware selections are tracked in the OnShape model and BOM, which live outside
 
 ```
 .devcontainer/      VSCode dev container config
+.gitattributes      Force LF line endings on all text files (cross-machine hygiene)
 docker/             Dockerfile.dev + docker-compose.yml (ROS 2 Humble desktop)
 src/                ROS 2 packages (colcon workspace)
   fortis_safety/    Mission-level state machine + ROS node + REPL console
   fortis_msgs/      Custom message + action types (ChassisCamClick, GraspCandidate, MissionState, WheelVelocities, MoveToPose)
-  fortis_comms/     Motor abstractions, ODrive S1 wrapper, X-drive kinematics, EKF
+  fortis_comms/     Motor abstractions, ODrive S1 wrapper, X-drive kinematics, EKF (ament_python library)
   fortis_drive/     X-drive ROS node wrapping fortis_comms kinematics, gated by mission state
   fortis_arm/       Arm controller seam (action server + gripper services), gated by mission state; kinematics deferred
   fortis_integration_tests/  Cross-package launch_testing integration tests (test-only, no runtime code)
-sim/                Simulation work (Isaac Sim)
-  isaac/xdrive/     Canonical chassis + arm sims, tools, docs, results
+sim/                Simulation work (Isaac Sim 5.1, runs on Windows host outside the dev container)
+  isaac/xdrive/     Canonical chassis + arm sims, tools, docs, results, changelog
 analysis/           Drivetrain and arm analysis writeups
 legacy/             Reference code from earlier design iterations
 ```
@@ -98,43 +99,61 @@ Topics:
 | `/fortis/events/<name>` | `std_msgs/Empty` | subscribed | one per Event enum value |
 | `/fortis/context/<field>` | `std_msgs/Bool` | subscribed | one per known guard field |
 
-### State-machine unit tests (no ROS required)
+### Full workspace test pass
 
 ```bash
 cd /workspace
 source install/setup.bash
-python3 -m pytest src/fortis_safety/test/ -v
-```
-
-### fortis_comms tests (pure Python, no ROS)
-
-```bash
-cd /workspace
-colcon test --packages-select fortis_comms
+colcon build --symlink-install --packages-select \
+    fortis_msgs fortis_comms fortis_safety fortis_drive fortis_arm fortis_integration_tests
+colcon test --packages-select \
+    fortis_msgs fortis_comms fortis_safety fortis_drive fortis_arm fortis_integration_tests
 colcon test-result --verbose
 ```
 
-See `src/fortis_comms/README.md` for the integration assessment.
+Expected: 113 tests, 0 failures, 2 skipped. The 2 skipped are copyright-header lint scaffolds that intentionally don't run yet.
+
+### Single-package pytest
+
+For tighter feedback on one package while iterating:
+
+```bash
+cd /workspace && source install/setup.bash
+colcon test --packages-select fortis_arm   # or fortis_drive, fortis_comms, etc.
+colcon test-result --verbose
+```
+
+### Cross-package integration test
+
+The seam between `fortis_safety` and `fortis_drive` (the state machine actually gating motion) is exercised end-to-end by `fortis_integration_tests`:
+
+```bash
+launch_test src/fortis_integration_tests/test/test_safety_drive_integration.py
+```
+
+See `src/fortis_integration_tests/README.md` for what it asserts.
 
 ## Status
 
 | Subsystem | State |
 |---|---|
 | Dev container | working |
-| `fortis_safety` (mission state machine) | working, 27 unit tests pass, end-to-end ROS round trip verified |
-| `fortis_msgs` (custom messages) | working, 4 message types (ChassisCamClick, GraspCandidate, MissionState, WheelVelocities) |
-| `fortis_drive` (X-drive ROS node) | working, gated by mission state, 5 rclpy tests pass |
-| `fortis_arm` (arm controller seam) | scaffold, gated by mission state, action + gripper services in place, kinematics deferred |
-| `fortis_comms` (motor abstractions, kinematics, EKF) | ament_python package under `src/`, consumed by `fortis_drive` as a regular `<depend>` |
-| Isaac Sim 1 (xdrive flat ground + reactor) | working in `sim/isaac/xdrive/canonical/` |
-| Isaac Sim 2 (R0 port entry) | not started |
+| `fortis_safety` (mission state machine) | working, unit tests pass, end-to-end ROS round trip verified |
+| `fortis_msgs` (custom messages + actions) | working, 4 messages + 1 action (`MoveToPose`) |
+| `fortis_comms` (motor abstractions, kinematics, EKF) | ament_python library, consumed by `fortis_drive` as a regular `<depend>`; tests pass in isolation |
+| `fortis_drive` (X-drive ROS node) | working, gated by mission state, parametrized rclpy tests pass |
+| `fortis_arm` (arm controller seam) | scaffold, gated by mission state, action + gripper services in place; **kinematics, trajectory, and Teensy serial deferred** |
+| `fortis_integration_tests` (cross-package launch_testing) | seam between safety + drive verified end-to-end (gate latches motion on / off within 200 ms of state change) |
+| Isaac Sim — chassis (`xdrive_realwheel.py`) | working, real Kaya omni-wheel meshes, supports `--reactor` |
+| Isaac Sim — arm (`xdrive_reactor_arm_v3.py`) | **active build target**: 30" CF, NEMA 17 + Cricket J1/J3, NEMA 23 + EG23 J2, Hitec D845WP J4, always 3 lb loaded |
+| Isaac Sim — R0 port entry | not started |
 | `fortis_description` (URDF) | blocked on Adrian's OnShape model |
-| `fortis_arm` ROS package | blocked on URDF |
 | `fortis_perception`, `fortis_localization`, `fortis_bringup` | planned, not started |
 
-The full set of intended ROS 2 packages is `fortis_description`, `fortis_drive`, `fortis_arm`, `fortis_perception`, `fortis_localization`, `fortis_msgs`, `fortis_bringup`, `fortis_safety`. As of this branch, `fortis_safety`, `fortis_msgs`, and `fortis_drive` exist.
+The full set of intended ROS 2 packages is `fortis_description`, `fortis_drive`, `fortis_arm`, `fortis_perception`, `fortis_localization`, `fortis_msgs`, `fortis_bringup`, `fortis_safety`, plus `fortis_comms` and `fortis_integration_tests` for the library and test-only roles. Today: `fortis_safety`, `fortis_msgs`, `fortis_comms`, `fortis_drive`, `fortis_arm`, and `fortis_integration_tests` exist.
 
 ## Documentation
 
 - `sim/isaac/xdrive/CHANGELOG.md` and `sim/isaac/xdrive/docs/` - simulation history and specs
 - `analysis/` - drivetrain rationale (x-drive vs skid-steer, orbit, torque, pivot)
+- Per-package READMEs under `src/<pkg>/README.md` cover topic / service / action contracts and per-package test instructions.

@@ -7,10 +7,13 @@ Simulation work for FORTIS. Currently all sims are in `isaac/` (NVIDIA Isaac Sim
 ```
 sim/isaac/
   xdrive/                 Active drivetrain + arm sims
-    canonical/            THE scripts to copy from
+    canonical/            THE scripts to copy from (xdrive_realwheel.py, xdrive_reactor_arm_v3.py)
     deprecated/           Old scripts kept for history (do NOT copy from these)
+      scripts/arm/        Deprecated arm scripts + IK (v1 arm, pose/torque/workspace sweeps)
+      scripts/chassis/    Deprecated chassis scripts (early reactor sims, v1/v2 arm-on-chassis builds, rejected realwheel variants)
+      results/            Old result dirs from deprecated scripts (data unreliable, kept for history)
     tools/                Analysis / measurement / standalone utilities
-    lib/                  Shared modules (sim_config.py, arm_ik.py, arm_ik_v2.py)
+    lib/                  Shared modules (sim_config.py, arm_ik_v2.py, arm_ik_v3.py)
     assets/               USD files (diiid_reactor.usd, omniwheels.usd)
     docs/                 Spec docs, summaries, R0 plan
     results/              Per-script output (results/<script_name>/...)
@@ -22,19 +25,20 @@ Rule: every script writes its output into `results/<script_name>/`. No flat dump
 
 ## Canonical scripts
 
-- `xdrive/canonical/xdrive_realwheel.py` - chassis + real Kaya omni-wheel meshes (1 hub + 10 rollers per wheel as separate rigid bodies). 44-DOF articulation, CPU physics @ 360 Hz, TGS + CCD. Loads `assets/omniwheels.usd`. Supports `--reactor` for the DIII-D environment. Arched/octagonal skeleton `13.082" x 8.54" x 6.0"` with 3" chamfer faces, footprint `19.022" x 14.5"`, `2.0"` belly default.
-- `xdrive/canonical/xdrive_reactor_arm_v2.py` - 4-DOF parallel-link arm on the realwheel chassis, flat-stowed. v2 build: heterogeneous motors (NEMA 17 + Cricket at J1/J3, NEMA 23 + EG23 at J2, Hitec D845WP at J4), 1.25"x1.38" rectangular CF tubes, camera at L4 midpoint. Only the 30" carbon-fiber configuration is the active build target; 24"/36" sweep modes remain for reference but are out of scope. v1 is deprecated, see `deprecated/scripts/xdrive_reactor_arm_v1.py`.
+- `xdrive/canonical/xdrive_realwheel.py` -- chassis + real Kaya omni-wheel meshes (1 hub + 10 rollers per wheel as separate rigid bodies, after the 5-sphere roller-collider fix). 44-DOF articulation, CPU physics @ 360 Hz, TGS + CCD. Loads `assets/omniwheels.usd`. Supports `--reactor` for the DIII-D environment. Rectangular skeleton `13.082" x 8.54" x 6.0"`, footprint `19.022" x 14.5"` with wheels flush at corners (no chamfer), `2.0"` belly default.
+- `xdrive/canonical/xdrive_reactor_arm_v3.py` -- **active build target.** 4-DOF parallel-link arm on the realwheel chassis, flat-stowed. Single-config: 30" carbon-fiber arm, always loaded with 3 lb payload. No `--24arm` / `--36arm` / `--metal` / `--armloaded` flags -- those collapsed into one fixed build. Heterogeneous motors (NEMA 17 + Cricket J1/J3, NEMA 23 + EG23 + adapter J2, Hitec D845WP J4), 1.128"x1.128" CF tubes, OAK-D Pro camera at L4 midpoint. v2 (`xdrive_reactor_arm_v2.py`) was deprecated when the heavier J2 stack landed -- see `deprecated/scripts/chassis/xdrive_reactor_arm_v2.py` for back-comparison.
 
 Any new sim that needs the FORTIS chassis copies its build path from `canonical/xdrive_realwheel.py`. Don't rebuild geometry from scratch and don't copy from anything in `deprecated/`.
 
 ## Tools
 
-- `tools/orbit_torque.py` / `tools/orbit_torque_v2.py` - drive-torque profiling at orbit radii (v1 = legacy chassis dims, v2 = current arched skeleton)
-- `tools/arm_continuous_sweep_v2.py` - raw torque sweep, collision-free teleport (v2 arm only; v1 deprecated)
-- `tools/arm_sweep_filter_v2.py` - analytical post-filter on sweep CSVs (collision + tipping); v1 deprecated
-- `tools/clearance_sweep.py`, `tools/measure_r0_port.py`, `tools/step_arch_optimizer.py`, `tools/test_drift.py` - standalone analytical / measurement utilities
+- `tools/arm_continuous_sweep_v3.py` -- raw torque sweep, collision-free teleport (v3 arm). v2 (`arm_continuous_sweep_v2.py`) is kept alongside for back-comparison; v1 is deprecated.
+- `tools/arm_sweep_filter_v3.py` -- analytical post-filter on v3 sweep CSVs (collision + tipping). v2 kept; v1 deprecated.
+- `tools/arm_sweep_plot_v3.py` -- plots and tables for the v3 sweep (poloidal / stability / torque histograms / per-joint torque tables).
+- `tools/sweep_orbit_realwheel.py` -- orbit-mode torque sweep on the canonical realwheel chassis. Used to validate the 5-sphere roller collider against the previous single-sphere baseline; results live under `results/orbit_realwheel_5sphere/` and `results/orbit_realwheel_singlesphere/`.
+- `tools/clearance_sweep.py`, `tools/measure_r0_port.py`, `tools/test_drift.py` -- standalone analytical / measurement utilities (no Isaac Sim needed).
 
-v1 arm tooling (`arm_continuous_sweep.py`, `arm_sweep_filter.py`, `arm_stability_sweep.py`, `arm_ik.py`) lives in `deprecated/scripts/` with `_v1` suffix.
+Older tooling (`arm_continuous_sweep_v1.py`, `arm_sweep_filter_v1.py`, `arm_stability_sweep_v1.py`, `arm_ik_v1.py`, `orbit_torque.py`, `orbit_torque_v2.py`, `step_arch_optimizer.py`, `sweep_orbit_variant.py`) lives under `deprecated/scripts/arm/` or `deprecated/scripts/chassis/` -- see `deprecated/README.md` for what each was and why it was retired.
 
 ## Hardware spec parity
 
@@ -62,8 +66,15 @@ IsaacSim/python.bat sim/isaac/xdrive/canonical/xdrive_realwheel.py --gui
 # Canonical chassis inside reactor (straddling the step)
 IsaacSim/python.bat sim/isaac/xdrive/canonical/xdrive_realwheel.py --gui --reactor
 
-# Chassis + v2 arm (30" CF, the active build target)
-IsaacSim/python.bat sim/isaac/xdrive/canonical/xdrive_reactor_arm_v2.py --gui
+# Chassis + v3 arm (30" CF + 3 lb loaded -- the active build target)
+IsaacSim/python.bat sim/isaac/xdrive/canonical/xdrive_reactor_arm_v3.py --gui
+IsaacSim/python.bat sim/isaac/xdrive/canonical/xdrive_reactor_arm_v3.py --gui --reactor
+IsaacSim/python.bat sim/isaac/xdrive/canonical/xdrive_reactor_arm_v3.py --gui --step
+
+# v3 torque sweep + post-filter + plots
+IsaacSim/python.bat sim/isaac/xdrive/tools/arm_continuous_sweep_v3.py
+python sim/isaac/xdrive/tools/arm_sweep_filter_v3.py
+python sim/isaac/xdrive/tools/arm_sweep_plot_v3.py
 
 # Analytical clearance sweep (no Isaac Sim needed)
 python sim/isaac/xdrive/tools/clearance_sweep.py

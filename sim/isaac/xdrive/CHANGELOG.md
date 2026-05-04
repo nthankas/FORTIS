@@ -5,6 +5,35 @@ file tracks the milestones that changed the canonical model.
 
 ---
 
+## 2026-05-04 — V3 arm + 5-sphere realwheel collider + deprecated/ split (abe4d84)
+- V3 arm canonical: `canonical/xdrive_reactor_arm_v3.py` + `lib/arm_ik_v3.py`.
+  Single-config build -- 30" carbon-fiber arm, always loaded with 3 lb
+  payload. The `--24arm` / `--36arm` / `--metal` / `--armloaded` flags from
+  v1/v2 are gone. Joint stack pivoted: J2 is now NEMA 23 + EG23-G20-D10
+  20:1 + adapter (was NEMA 23 + EG23 in v2; the adapter is new); J1/J3 stay
+  NEMA 17 + Cricket 25:1; J4 stays Hitec D845WP. Link tubes changed to
+  `1.128" x 1.128"` square CF (was `1.25" x 1.38"` rectangular in v2). v2
+  is preserved at `deprecated/scripts/chassis/xdrive_reactor_arm_v2.py` so
+  v3 sweep results can be back-compared.
+- V3 sweep tooling: `tools/arm_continuous_sweep_v3.py`,
+  `tools/arm_sweep_filter_v3.py`, `tools/arm_sweep_plot_v3.py`. Per-weight
+  result splits at 30/35/40 lb. Outputs land in
+  `results/arm_continuous_sweep/30in_loaded_step_v3*` alongside the v2 CSVs.
+- 5-sphere roller collider in `canonical/xdrive_realwheel.py`. Replaces
+  the single-sphere approximation that was sinking through the wheel hub
+  under load, and the rejected 7-sphere variant that over-torqued.
+  Validated against the single-sphere baseline via
+  `tools/sweep_orbit_realwheel.py`; results in
+  `results/orbit_realwheel_5sphere/` (current) and
+  `results/orbit_realwheel_singlesphere/` (baseline).
+- `deprecated/scripts/` reorganised into `arm/` and `chassis/` subdirs.
+  Old arm IK + sweep tools (v1) and the obsolete chassis variants
+  (`xdrive_realwheel_axial.py`, `xdrive_realwheel_pid.py`,
+  `xdrive_realwheel_7sphere.py`, `xdrive_realwheel_v2_REJECTED.py`,
+  `xdrive_o3dyn.py`, plus the v1/v2 reactor-arm scripts and the legacy
+  orbit-torque tools) all moved under one of the two subdirs.
+  `deprecated/README.md` rewritten to reflect the split.
+
 ## 2026-05-01 — V2 arm + step stability + rectangular chassis skeleton (cb74dcc)
 - Chassis skeleton pivot in `canonical/xdrive_realwheel.py` and
   `lib/sim_config.py`: `13.082" x 8.54" x 6.0"` rectangular skeleton (was
