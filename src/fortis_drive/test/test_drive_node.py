@@ -75,15 +75,23 @@ WHEEL_OUTPUT_TIMEOUT_S: float = 2.0
 # --- Fixtures ---------------------------------------------------------------
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 def rclpy_session():
     """
-    Module-scoped rclpy.init / shutdown.
+    Function-scoped rclpy.init / shutdown.
 
-    We init once and shut down once per test module so individual tests
-    pay only the node create/destroy cost. rclpy.init can only be called
-    once per process; multiple init/shutdown cycles are technically
-    supported but historically flaky.
+    A fresh DDS participant per test prevents the previous test's
+    TRANSIENT_LOCAL mission_state writer from delivering a stale sample
+    to the next test's drive_node subscriber after the publisher has
+    already been destroyed. fortis_arm's gating tests hit this same
+    flake under module scope; we use the same fix here proactively
+    before the parametrized surface grows (planned ODrive ROS 2 driver
+    wrap, motor-controller stubs, additional QoS profiles).
+
+    Cost is ~30-50 ms per test for context init + shutdown. Multi-init
+    in the same process is supported by current rclpy (the older
+    "historically flaky" warning predates fixes that have since landed
+    upstream).
     """
     rclpy.init()
     yield
@@ -215,8 +223,15 @@ class _Harness:
 
     def cleanup(self) -> None:
         """Tear down both nodes. Safe to call once after the test finishes."""
+        # Destroy helper (publisher side) first so its writer-goodbye is
+        # in flight before the subscriber goes away. Drain briefly so DDS
+        # processes the goodbye inside this participant before
+        # rclpy.shutdown collapses it -- without this, function-scoped
+        # shutdown can leave a half-destroyed writer visible to the next
+        # test's participant on some DDS implementations.
         self.helper.destroy_node()
         self.node.destroy_node()
+        time.sleep(0.05)
 
 
 # --- Reference computation --------------------------------------------------
