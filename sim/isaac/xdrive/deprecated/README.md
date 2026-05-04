@@ -48,7 +48,7 @@ is `canonical/xdrive_reactor_arm_v3.py`.
 | `xdrive_realwheel_7sphere.py` | Realwheel roller collider with 7-sphere approximation | Replaced by the 5-sphere collider in `canonical/xdrive_realwheel.py` -- 5 sphere matched single-sphere baseline torques while preventing the wheel-sink failure mode. |
 | `xdrive_realwheel_v2_REJECTED.py` | Realwheel v2 prototype | Self-explanatory; never made canonical. |
 | `orbit_torque.py` | Drive-torque profiling at orbit radii on the legacy chassis dims | Superseded by `tools/sweep_orbit_realwheel.py` (validates the canonical realwheel chassis with the 5-sphere collider). |
-| `orbit_torque_v2.py` | Orbit-torque profiling on the rectangular-skeleton chassis | Same -- superseded by `sweep_orbit_realwheel.py`, which runs on the canonical realwheel directly. |
+| `orbit_torque_v2.py` | Orbit-torque profiling on the current-skeleton chassis (`13.082" x 8.54" x 6.0"` octagonal w/ 3" chamfers) | Same -- superseded by `sweep_orbit_realwheel.py`, which runs on the canonical realwheel directly. |
 | `step_arch_optimizer.py` | Auto-tuning belly-arch geometry against step-clearance | Belly geometry is now locked in `canonical/xdrive_realwheel.py`; tool kept for archival. |
 | `sweep_orbit_variant.py` | Earlier orbit-sweep tool, variant-based | Replaced by `sweep_orbit_realwheel.py`. |
 
