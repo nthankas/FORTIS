@@ -30,6 +30,7 @@ Four omni wheels mounted at the 45-degree chamfered corners of an octagonal chas
 | Roller count | 36 rollers per wheel, 80A durometer |
 | Motors | ODrive M8325s brushless (x4) |
 | Motor controllers | ODrive S1 (x4) over CAN bus |
+| Drivetrain | Direct drive (motor shaft to wheel hub, no gearbox) |
 | Wheel drop | 2.0" (wheels extend below motor mount plane) |
 
 ### Simulation Model
