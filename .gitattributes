@@ -1,0 +1,6 @@
+# Normalize line endings to LF on commit and on checkout, regardless
+# of host OS. Without this, Windows tools (VS Code, Git for Windows
+# with core.autocrlf=true) silently re-terminate lines as CRLF on save,
+# producing large "dirty" working trees of pure line-ending churn.
+# text=auto lets git decide text vs binary by content inspection.
+* text=auto eol=lf
