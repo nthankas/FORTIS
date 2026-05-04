@@ -1,3 +1,11 @@
+"""
+``Motor`` abstract base + ``MotorStatus`` enum -- INTERIM scaffolding.
+
+Pairs with ``odrive_s1.py``. Both get deleted when production drive
+moves to ODrive Robotics' official ROS 2 driver. See ``odrive_s1.py``'s
+module docstring and ``docs/adr/0002-arm-and-drive-use-upstream-ros2-packages.md``.
+"""
+
 from abc import ABC, abstractmethod
 from enum import Enum
 import logging

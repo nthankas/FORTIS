@@ -1,4 +1,13 @@
-"""Six-state EKF (x, y, theta, vx, vy, omega) for X-drive odometry."""
+"""
+Six-state EKF (x, y, theta, vx, vy, omega) for X-drive odometry.
+
+INTERIM module. Production localization will use the ``robot_localization``
+ROS 2 package's ``ekf_node`` once IMU + wheel-encoder topics exist and
+the EKF noise covariances have been re-tuned against real hardware
+data. This file's math has been validated in isolation and stays here
+as a reference / unit-test fixture; do not extend it. See
+``docs/adr/0002-arm-and-drive-use-upstream-ros2-packages.md``.
+"""
 
 from __future__ import annotations
 
