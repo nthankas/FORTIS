@@ -20,16 +20,16 @@ Four omni wheels mounted at the 45-degree chamfered corners of an octagonal chas
 
 | Parameter | Value |
 |-----------|-------|
-| Chassis | 15" x 9" x 5.5" octagonal prism |
-| Chamfers | 3" face (2.12" cut depth) at all 4 corners |
+| Chassis | 13.082" x 8.54" x 6.0" octagonal prism |
+| Chamfers | 3" face diagonals at the four 45-degree corners (where the wheels mount) |
 | Mass | 40 lbs (18.144 kg) total: chassis body + arm lumped 14.144 kg + 4 x 1.0 kg wheels |
 | Wheels | AndyMark 8" Dualie Plastic Omni (am-0463) |
 | Wheel diameter | 203 mm (8.0") |
 | Wheel width | 2.04" (52 mm) |
 | Wheel mass | 2.2 lbs (1.0 kg) each |
 | Roller count | 36 rollers per wheel, 80A durometer |
-| Motors | REV NEO 2.0 Brushless (x4) |
-| Gearbox | REV MAXPlanetary (5:1 or 9:1) |
+| Motors | ODrive M8325s brushless (x4) |
+| Motor controllers | ODrive S1 (x4) over CAN bus |
 | Wheel drop | 2.0" (wheels extend below motor mount plane) |
 
 ### Simulation Model
