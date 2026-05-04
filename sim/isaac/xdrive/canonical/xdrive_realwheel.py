@@ -32,7 +32,19 @@ parser.add_argument("--drive-speed", type=float, default=0.2,
                     help="Forward drive speed for contact test in m/s (default 0.2)")
 parser.add_argument("--drive-time", type=float, default=15.0,
                     help="How long to drive forward in seconds (default 15)")
+parser.add_argument("--orbit-speed", type=float, default=None,
+                    help="Headless orbit at this speed (m/s). Implies --reactor.")
+parser.add_argument("--orbit-orbits", type=float, default=2.0,
+                    help="Number of orbits to run (default 2)")
+parser.add_argument("--orbit-radius", type=float, default=1.59,
+                    help="Orbit radius in meters (default 1.59 = outer floor)")
+parser.add_argument("--orbit-csv", type=str, default=None,
+                    help="Output CSV path for orbit test (default: auto)")
 args, _ = parser.parse_known_args()
+if args.orbit_speed is not None:
+    args.reactor = True
+    if not args.gui:
+        args.headless = True
 if args.tunnel:
     args.reactor = True  # tunnel implies reactor
 if args.contact:
@@ -101,8 +113,8 @@ SCALE_XZ = TARGET_DIA_MM / SRC_DIA_MM   # 2.46
 SCALE_Y = TARGET_WIDTH_MM / SRC_WIDTH_MM  # 1.155
 SCALE_UNIFORM = SCALE_XZ                  # uniform scale for roller geometry (keeps proportions)
 
-# Mass
-CHASSIS_MASS = 20.4         # kg (45 lbs)
+# Mass — 40 lb total robot (chassis+arm+wheels): 14.144 + 4*1.0 = 18.144 kg
+CHASSIS_MASS = 14.144       # kg (chassis body, arm lumped on top)
 WHEEL_MASS = 1.0            # kg per wheel
 ROLLER_MASS_FRAC = 0.3
 NUM_ROLLERS = 10
@@ -492,27 +504,47 @@ def build_omniwheel(stage, wheel_path, src_parts, src_center, wheel_mat, wname):
         rxf.AddTranslateOp().Set(Gf.Vec3d(
             float(scaled_center[0]), float(scaled_center[1]), float(scaled_center[2])))
 
-        # Roller collision: sphere at roller center
+        # Roller collision: 5-sphere chain along the tangent direction.
         # GPU PhysX limits convex hulls to 64 verts -- mesh collision fails.
-        # Sphere gives correct roller physics via the revolute joint.
-        # Size: must not overlap adjacent rollers AND must reach wheel surface
+        # A sphere CHAIN gives a near-continuous contact arc (each sphere
+        # overlaps neighbours along the chain) and lives on the same
+        # revolute-jointed roller body so omni anisotropic rolling is
+        # preserved.
         roller_center_dist = float(np.sqrt(scaled_center[0]**2 + scaled_center[2]**2))
-        # Max radius before adjacent rollers overlap:
-        max_nonoverlap_r = roller_center_dist * math.sin(math.pi / NUM_ROLLERS) - 0.002
-        # Radius to just reach wheel surface:
-        surface_r = float(WHEEL_RADIUS - roller_center_dist)
-        roller_coll_r = min(max_nonoverlap_r, surface_r)
+        # Tangent direction in wheel/roller-body frame.
+        theta = math.atan2(scaled_center[2], scaled_center[0])
+        tang_x = -math.sin(theta)
+        tang_z =  math.cos(theta)
+        chord = 2.0 * roller_center_dist * math.sin(math.pi / NUM_ROLLERS)
 
-        bmp = rp + "/collider"
-        sphere = UsdGeom.Sphere.Define(stage, bmp)
-        sphere.GetRadiusAttr().Set(roller_coll_r_global)
-        UsdPhysics.CollisionAPI.Apply(sphere.GetPrim())
-        UsdShade.MaterialBindingAPI.Apply(sphere.GetPrim()).Bind(
-            wheel_mat, UsdShade.Tokens.weakerThanDescendants, "physics")
-        UsdGeom.Imageable(sphere.GetPrim()).CreatePurposeAttr("guide")
-        pcoll = PhysxSchema.PhysxCollisionAPI.Apply(sphere.GetPrim())
-        pcoll.CreateContactOffsetAttr(0.001)
-        pcoll.CreateRestOffsetAttr(0.0005)
+        N_SUB = 5
+        sub_r = max(0.005, chord * 0.25)
+        spacing = max(0.0, (chord - 2.0 * sub_r) / float(N_SUB - 1))
+        sub_r = min(sub_r, float(WHEEL_RADIUS - roller_center_dist) + 0.002)
+
+        for si in range(N_SUB):
+            off = (si - (N_SUB - 1) / 2.0) * spacing
+            smp = rp + f"/collider_{si}"
+            sphere = UsdGeom.Sphere.Define(stage, smp)
+            sphere.GetRadiusAttr().Set(float(sub_r))
+            sxf = UsdGeom.Xformable(sphere.GetPrim())
+            sxf.ClearXformOpOrder()
+            if abs(off) > 1e-9:
+                sxf.AddTranslateOp().Set(Gf.Vec3d(
+                    float(off * tang_x), 0.0, float(off * tang_z)))
+            UsdPhysics.CollisionAPI.Apply(sphere.GetPrim())
+            UsdShade.MaterialBindingAPI.Apply(sphere.GetPrim()).Bind(
+                wheel_mat, UsdShade.Tokens.weakerThanDescendants, "physics")
+            UsdGeom.Imageable(sphere.GetPrim()).CreatePurposeAttr("guide")
+            pcoll = PhysxSchema.PhysxCollisionAPI.Apply(sphere.GetPrim())
+            pcoll.CreateContactOffsetAttr(0.001)
+            pcoll.CreateRestOffsetAttr(0.0005)
+        if ri == 0:
+            outer_off = (N_SUB - 1) / 2.0 * spacing
+            print(f"  Roller chain: {N_SUB} spheres r={sub_r*1000:.1f}mm "
+                  f"spacing={spacing*1000:.1f}mm "
+                  f"(outer @ {outer_off*1000:.1f}mm, chord={chord*1000:.1f}mm)",
+                  flush=True)
 
         # Visual barrel mesh (no collision) — real Kaya geometry, uniform scale
         bvp = rp + "/barrel_vis"
@@ -1206,6 +1238,145 @@ if args.contact:
         except Exception as ex:
             print(f"WARNING: Could not generate plot: {ex}", flush=True)
 
+    omni.timeline.get_timeline_interface().stop()
+    app.close()
+    sys.exit(0)
+
+if args.orbit_speed is not None:
+    import csv as _csv
+    speed = args.orbit_speed
+    r0 = args.orbit_radius
+    omega = speed / r0
+    duration = args.orbit_orbits * 2.0 * math.pi * r0 / speed + 1.0
+    settle_s = 2.0
+    out_csv = args.orbit_csv or os.path.join(
+        RESULTS_ROOT, "orbit_realwheel_5sphere",
+        f"orbit_realwheel_{speed:.2f}mps.csv")
+    os.makedirs(os.path.dirname(out_csv), exist_ok=True)
+
+    print(f"\nOrbit test: {speed:.2f} m/s @ R={r0:.3f}m  -> "
+          f"omega={omega:.4f} rad/s, duration={duration:.1f}s", flush=True)
+    print(f"CSV: {out_csv}", flush=True)
+
+    art.set_joint_velocity_targets(np.zeros((1, ndof)))
+    _orbit_render = not headless
+    for _ in range(int(settle_s * PHYSICS_HZ)):
+        world.step(render=_orbit_render)
+
+    def _chassis_mat():
+        prim = stage.GetPrimAtPath(chassis_path)
+        return UsdGeom.Xformable(prim).ComputeLocalToWorldTransform(Usd.TimeCode.Default())
+    def _yaw_deg(mat):
+        return math.degrees(math.atan2(mat[1][0], mat[0][0]))
+
+    s0 = get_state(art, stage, chassis_path)
+    p0 = s0["pos"]
+    yaw0 = _yaw_deg(_chassis_mat())
+    print(f"Initial: ({p0[0]:.3f}, {p0[1]:.3f}, {p0[2]:.3f})m  yaw={yaw0:.1f}", flush=True)
+
+    K_pos = 0.5
+    V_MAX_FACTOR = 1.4
+    print(f"Tracker gains: K_pos={K_pos}, vmax={V_MAX_FACTOR}xspeed", flush=True)
+    va = np.zeros(ndof)
+    init_phase = math.atan2(p0[1], p0[0])
+
+    fcsv = open(out_csv, "w", newline="")
+    writer = _csv.writer(fcsv)
+    writer.writerow(["sim_time", "torque_FR", "torque_FL", "torque_BL",
+                     "torque_BR", "x", "y", "z", "yaw_deg",
+                     "actual_speed_mps", "R_m"])
+
+    log_hz = 100
+    log_interval = max(1, PHYSICS_HZ // log_hz)
+    total_frames = int(duration * PHYSICS_HZ)
+    prev_pos = np.array(p0)
+    prev_t = 0.0
+
+    for frame in range(total_frames):
+        t = frame / PHYSICS_HZ
+
+        phase_t = init_phase + omega * t
+        tgt_x = r0 * math.cos(phase_t)
+        tgt_y = r0 * math.sin(phase_t)
+        tgt_vx = -r0 * omega * math.sin(phase_t)
+        tgt_vy =  r0 * omega * math.cos(phase_t)
+
+        mat_now = _chassis_mat()
+        pos_now = mat_now.ExtractTranslation()
+        yaw_now = math.atan2(mat_now[1][0], mat_now[0][0])
+
+        ex = tgt_x - pos_now[0]
+        ey = tgt_y - pos_now[1]
+        v_world_x = tgt_vx + K_pos * ex
+        v_world_y = tgt_vy + K_pos * ey
+
+        vmag = math.sqrt(v_world_x * v_world_x + v_world_y * v_world_y)
+        vcap = V_MAX_FACTOR * speed
+        if vmag > vcap:
+            v_world_x *= vcap / vmag
+            v_world_y *= vcap / vmag
+
+        cy = math.cos(-yaw_now)
+        sy = math.sin(-yaw_now)
+        vx_chs = cy * v_world_x - sy * v_world_y
+        vy_chs = sy * v_world_x + cy * v_world_y
+
+        tv = xdrive_ik(vx_chs, vy_chs, omega)
+        for ii, di in enumerate(drive_dof_indices):
+            va[di] = tv[ii]
+
+        art.set_joint_velocity_targets(va.reshape(1, -1))
+        world.step(render=_orbit_render)
+
+        if frame % log_interval == 0:
+            s = get_state(art, stage, chassis_path)
+            if not s:
+                continue
+            pos = s["pos"]
+            yaw = _yaw_deg(_chassis_mat())
+            R = math.sqrt(pos[0] ** 2 + pos[1] ** 2)
+            dt_log = t - prev_t if prev_t > 0 else 1.0 / log_hz
+            if dt_log <= 0: dt_log = 1.0 / log_hz
+            ddx = pos[0] - prev_pos[0]
+            ddy = pos[1] - prev_pos[1]
+            inst_v = math.sqrt(ddx * ddx + ddy * ddy) / dt_log
+
+            torques = [0.0] * 4
+            try:
+                je = art.get_measured_joint_efforts()
+            except Exception:
+                je = None
+            if je is not None:
+                je_flat = np.asarray(je).flatten()
+                for ii, di in enumerate(drive_dof_indices):
+                    if di < len(je_flat):
+                        torques[ii] = float(je_flat[di])
+
+            writer.writerow([
+                f"{t:.4f}",
+                f"{torques[0]:.4f}", f"{torques[1]:.4f}",
+                f"{torques[2]:.4f}", f"{torques[3]:.4f}",
+                f"{pos[0]:.5f}", f"{pos[1]:.5f}", f"{pos[2]:.5f}",
+                f"{yaw:.2f}", f"{inst_v:.4f}", f"{R:.4f}",
+            ])
+            prev_pos = np.array(pos)
+            prev_t = t
+
+        if frame % (PHYSICS_HZ * 2) == 0 and frame > 0:
+            s = get_state(art, stage, chassis_path)
+            if s:
+                pos = s["pos"]
+                R = math.sqrt(pos[0] ** 2 + pos[1] ** 2)
+                ang = math.degrees(math.atan2(pos[1], pos[0]))
+                print(f"  t={t:5.1f}s  R={R:.3f}m  ang={ang:+.1f}deg  "
+                      f"yaw={_yaw_deg(_chassis_mat()):+.1f}", flush=True)
+
+    fcsv.close()
+    sf = get_state(art, stage, chassis_path)
+    if sf:
+        pf = sf["pos"]
+        net = math.sqrt((pf[0] - p0[0]) ** 2 + (pf[1] - p0[1]) ** 2)
+        print(f"\nDone. Net displacement {net:.3f}m. CSV: {out_csv}", flush=True)
     omni.timeline.get_timeline_interface().stop()
     app.close()
     sys.exit(0)
