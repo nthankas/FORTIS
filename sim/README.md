@@ -32,13 +32,19 @@ Any new sim that needs the FORTIS chassis copies its build path from `canonical/
 
 ## Tools
 
-- `tools/arm_continuous_sweep_v3.py` -- raw torque sweep, collision-free teleport (v3 arm). v2 (`arm_continuous_sweep_v2.py`) is kept alongside for back-comparison; v1 is deprecated.
-- `tools/arm_sweep_filter_v3.py` -- analytical post-filter on v3 sweep CSVs (collision + tipping). v2 kept; v1 deprecated.
-- `tools/arm_sweep_plot_v3.py` -- plots and tables for the v3 sweep (poloidal / stability / torque histograms / per-joint torque tables).
+- `tools/arm_mc_sweep_v4.py` -- **canonical arm sim.** Headless 5k Monte Carlo sweep of (J1, J2, J3, J4); chassis 10.144 kg + arm 6.515 kg + wheels 4 kg = 20.66 kg total (~45 lb). Records analytical and physics tipping per pose. Supersedes the Cartesian-grid `arm_continuous_sweep_v*` pipeline (J1 was fixed at 0; v4 sweeps all four joints).
+- `tools/arm_mc_filter_v4.py` -- analytical post-filter for the MC sweep (chassis/self/floor + reactor envelope + tipping); does NOT drop unstable poses.
+- `tools/arm_mc_plot_v4.py` -- sampling histogram, torque table, per-joint torque bar chart (J1-J4), and poloidal cross-section.
 - `tools/sweep_orbit_realwheel.py` -- orbit-mode torque sweep on the canonical realwheel chassis. Used to validate the 5-sphere roller collider against the previous single-sphere baseline; results live under `results/orbit_realwheel_5sphere/` and `results/orbit_realwheel_singlesphere/`.
 - `tools/clearance_sweep.py`, `tools/measure_r0_port.py`, `tools/test_drift.py` -- standalone analytical / measurement utilities (no Isaac Sim needed).
 
-Older tooling (`arm_continuous_sweep_v1.py`, `arm_sweep_filter_v1.py`, `arm_stability_sweep_v1.py`, `arm_ik_v1.py`, `orbit_torque.py`, `orbit_torque_v2.py`, `step_arch_optimizer.py`, `sweep_orbit_variant.py`) lives under `deprecated/scripts/arm/` or `deprecated/scripts/chassis/` -- see `deprecated/README.md` for what each was and why it was retired.
+The arm continuous-sweep pipeline (Cartesian grid, J1 fixed at 0) is fully deprecated -- use the v4 Monte Carlo pipeline above. Older tooling under `deprecated/scripts/arm/` and `deprecated/scripts/chassis/`:
+- v1 arm: `arm_continuous_sweep_v1.py`, `arm_sweep_filter_v1.py`, `arm_stability_sweep_v1.py`, `arm_ik_v1.py`, `arm_pose_sweep.py`, `arm_torque_sweep.py`, `arm_workspace_sweep.py`
+- v2 arm: `arm_continuous_sweep_v2.py`, `arm_sweep_filter_v2.py`
+- v3 arm: `arm_continuous_sweep_v3.py`, `arm_sweep_filter_v3.py`, `arm_sweep_plot_v3.py`
+- chassis: `orbit_torque.py`, `orbit_torque_v2.py`, `step_arch_optimizer.py`, `sweep_orbit_variant.py`
+
+See `deprecated/README.md` for what each was and why it was retired.
 
 ## Hardware spec parity
 
@@ -83,10 +89,10 @@ IsaacSim/python.bat sim/isaac/xdrive/canonical/xdrive_reactor_arm_v3.py --gui
 IsaacSim/python.bat sim/isaac/xdrive/canonical/xdrive_reactor_arm_v3.py --gui --reactor
 IsaacSim/python.bat sim/isaac/xdrive/canonical/xdrive_reactor_arm_v3.py --gui --step
 
-# v3 torque sweep + post-filter + plots
-IsaacSim/python.bat sim/isaac/xdrive/tools/arm_continuous_sweep_v3.py
-python sim/isaac/xdrive/tools/arm_sweep_filter_v3.py
-python sim/isaac/xdrive/tools/arm_sweep_plot_v3.py
+# v4 Monte Carlo arm sweep + post-filter + plots
+IsaacSim/python.bat sim/isaac/xdrive/tools/arm_mc_sweep_v4.py
+python sim/isaac/xdrive/tools/arm_mc_filter_v4.py
+python sim/isaac/xdrive/tools/arm_mc_plot_v4.py
 
 # Analytical clearance sweep (no Isaac Sim needed)
 python sim/isaac/xdrive/tools/clearance_sweep.py
