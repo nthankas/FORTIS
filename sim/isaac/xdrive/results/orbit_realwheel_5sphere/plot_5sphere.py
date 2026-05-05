@@ -46,7 +46,7 @@ axes[0].set_ylabel("|Torque| (Nm)")
 
 plt.suptitle(
     "FORTIS realwheel 5-sphere -- orbit torque sweep "
-    "(40 lb total, 14.144 kg chassis + 4x 1 kg wheels, R=1.59 m)",
+    "(45 lb total, 16.659 kg chassis+stowed-arm + 4x 1 kg wheels, R=1.59 m)",
     fontsize=12, fontweight="bold")
 plt.tight_layout(rect=(0, 0, 1, 0.95))
 
