@@ -28,8 +28,9 @@ for ax, stat, label in zip(axes, ("mean", "p95"), ("Mean torque", "P95 torque"))
                 markersize=8, label=w)
         for s, v in zip(speeds, vals):
             ax.annotate(f"{v:.2f}", (s, v),
-                        xytext=(0, 8), textcoords="offset points",
-                        ha="center", fontsize=8, color=COLORS[w])
+                        xytext=(0, 10), textcoords="offset points",
+                        ha="center", fontsize=12, fontweight="bold",
+                        color=COLORS[w])
     for t, lab, ls in THRESH:
         ax.axhline(t, color="gray", linestyle=ls, linewidth=1.0, alpha=0.7)
         ax.text(speeds[0] - 0.018, t, f"{lab}",
