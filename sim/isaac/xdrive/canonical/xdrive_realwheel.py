@@ -40,6 +40,11 @@ parser.add_argument("--orbit-radius", type=float, default=1.59,
                     help="Orbit radius in meters (default 1.59 = outer floor)")
 parser.add_argument("--orbit-csv", type=str, default=None,
                     help="Output CSV path for orbit test (default: auto)")
+parser.add_argument("--orbit-settle", type=float, default=5.0,
+                    help="Seconds to hold zero velocity before motion in orbit mode (default 5.0)")
+parser.add_argument("--chassis-mass", type=float, default=None,
+                    help="Override CHASSIS_MASS (kg). Used by orbit sweep to apply the "
+                         "chassis+stowed-arm lump (~16.659 kg) without touching the constant.")
 args, _ = parser.parse_known_args()
 if args.orbit_speed is not None:
     args.reactor = True
@@ -615,7 +620,8 @@ def build_robot(stage, src_parts, src_center):
 
     cp = stage.GetPrimAtPath(chassis_path)
     UsdPhysics.RigidBodyAPI.Apply(cp)
-    UsdPhysics.MassAPI.Apply(cp).CreateMassAttr(CHASSIS_MASS)
+    chassis_mass_used = args.chassis_mass if args.chassis_mass is not None else CHASSIS_MASS
+    UsdPhysics.MassAPI.Apply(cp).CreateMassAttr(chassis_mass_used)
     UsdPhysics.MassAPI(cp).CreateCenterOfMassAttr(Gf.Vec3f(0, 0, 0))
     UsdPhysics.ArticulationRootAPI.Apply(cp)
     PhysxSchema.PhysxArticulationAPI.Apply(cp)
@@ -746,8 +752,11 @@ def build_robot(stage, src_parts, src_center):
         rxf.ClearXformOpOrder()
         rxf.AddTranslateOp().Set(Gf.Vec3d(0, 0, spawn_z))
 
+    chassis_mass_print = args.chassis_mass if args.chassis_mass is not None else CHASSIS_MASS
     print(f"\nChassis: {CHASSIS_L/IN:.1f}x{CHASSIS_W/IN:.1f}x{CHASSIS_H/IN:.1f}\" rect, "
-          f"{CHASSIS_MASS}kg", flush=True)
+          f"{chassis_mass_print}kg"
+          f"{' (--chassis-mass override)' if args.chassis_mass is not None else ''}",
+          flush=True)
     print(f"Belly height: {BELLY_HEIGHT/IN:.2f}\" ({BELLY_HEIGHT*100:.1f}cm)", flush=True)
     print(f"Wheel: {TARGET_DIA_MM:.0f}mm dia, {TARGET_WIDTH_MM:.0f}mm wide, "
           f"{NUM_ROLLERS} real rollers/wheel", flush=True)
@@ -1247,17 +1256,24 @@ if args.orbit_speed is not None:
     speed = args.orbit_speed
     r0 = args.orbit_radius
     omega = speed / r0
+    # CCW orbit around origin: at the reactor spawn pose (0, -1.59, yaw=+90deg)
+    # chassis +X points to origin, so chassis +Y points to world -X. The CCW
+    # tangent at spawn is in world +X = chassis -Y, so vy_chassis = -speed.
+    vy_chassis = -speed
+    omega_chassis = +omega
     duration = args.orbit_orbits * 2.0 * math.pi * r0 / speed + 1.0
-    settle_s = 2.0
+    settle_s = float(args.orbit_settle)
     out_csv = args.orbit_csv or os.path.join(
         RESULTS_ROOT, "orbit_realwheel_5sphere",
         f"orbit_realwheel_{speed:.2f}mps.csv")
     os.makedirs(os.path.dirname(out_csv), exist_ok=True)
 
     print(f"\nOrbit test: {speed:.2f} m/s @ R={r0:.3f}m  -> "
-          f"omega={omega:.4f} rad/s, duration={duration:.1f}s", flush=True)
+          f"omega={omega:.4f} rad/s, duration={duration:.1f}s "
+          f"(settle={settle_s:.1f}s, OPEN-LOOP, no tracker)", flush=True)
     print(f"CSV: {out_csv}", flush=True)
 
+    # Settle: zero velocity, let rollers/contacts stabilize.
     art.set_joint_velocity_targets(np.zeros((1, ndof)))
     _orbit_render = not headless
     for _ in range(int(settle_s * PHYSICS_HZ)):
@@ -1272,13 +1288,19 @@ if args.orbit_speed is not None:
     s0 = get_state(art, stage, chassis_path)
     p0 = s0["pos"]
     yaw0 = _yaw_deg(_chassis_mat())
-    print(f"Initial: ({p0[0]:.3f}, {p0[1]:.3f}, {p0[2]:.3f})m  yaw={yaw0:.1f}", flush=True)
+    R0_meas = math.sqrt(p0[0] ** 2 + p0[1] ** 2)
+    print(f"Post-settle: ({p0[0]:.3f}, {p0[1]:.3f}, {p0[2]:.3f})m  "
+          f"yaw={yaw0:.1f}  R={R0_meas:.3f}m", flush=True)
 
-    K_pos = 0.5
-    V_MAX_FACTOR = 1.4
-    print(f"Tracker gains: K_pos={K_pos}, vmax={V_MAX_FACTOR}xspeed", flush=True)
+    # Open-loop X-drive: one IK call, set joint targets once, never update.
+    tv = xdrive_ik(0.0, vy_chassis, omega_chassis)
     va = np.zeros(ndof)
-    init_phase = math.atan2(p0[1], p0[0])
+    for ii, di in enumerate(drive_dof_indices):
+        va[di] = tv[ii]
+    art.set_joint_velocity_targets(va.reshape(1, -1))
+    print(f"Open-loop wheel cmd (rad/s): "
+          f"FL={tv[0]:+.3f} FR={tv[1]:+.3f} BL={tv[2]:+.3f} BR={tv[3]:+.3f}",
+          flush=True)
 
     fcsv = open(out_csv, "w", newline="")
     writer = _csv.writer(fcsv)
@@ -1294,38 +1316,7 @@ if args.orbit_speed is not None:
 
     for frame in range(total_frames):
         t = frame / PHYSICS_HZ
-
-        phase_t = init_phase + omega * t
-        tgt_x = r0 * math.cos(phase_t)
-        tgt_y = r0 * math.sin(phase_t)
-        tgt_vx = -r0 * omega * math.sin(phase_t)
-        tgt_vy =  r0 * omega * math.cos(phase_t)
-
-        mat_now = _chassis_mat()
-        pos_now = mat_now.ExtractTranslation()
-        yaw_now = math.atan2(mat_now[1][0], mat_now[0][0])
-
-        ex = tgt_x - pos_now[0]
-        ey = tgt_y - pos_now[1]
-        v_world_x = tgt_vx + K_pos * ex
-        v_world_y = tgt_vy + K_pos * ey
-
-        vmag = math.sqrt(v_world_x * v_world_x + v_world_y * v_world_y)
-        vcap = V_MAX_FACTOR * speed
-        if vmag > vcap:
-            v_world_x *= vcap / vmag
-            v_world_y *= vcap / vmag
-
-        cy = math.cos(-yaw_now)
-        sy = math.sin(-yaw_now)
-        vx_chs = cy * v_world_x - sy * v_world_y
-        vy_chs = sy * v_world_x + cy * v_world_y
-
-        tv = xdrive_ik(vx_chs, vy_chs, omega)
-        for ii, di in enumerate(drive_dof_indices):
-            va[di] = tv[ii]
-
-        art.set_joint_velocity_targets(va.reshape(1, -1))
+        # No closed-loop correction; joint targets were set once, stay constant.
         world.step(render=_orbit_render)
 
         if frame % log_interval == 0:

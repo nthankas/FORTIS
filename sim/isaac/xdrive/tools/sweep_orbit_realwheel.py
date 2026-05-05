@@ -1,8 +1,16 @@
 """Run a full-orbit sweep of xdrive_realwheel.py at multiple speeds.
 
-Runs each speed as a subprocess (1 full orbit), writes per-speed CSVs into
-results/orbit_realwheel/, then aggregates path-length, net-displacement,
-and torque stats into sweep_orbit_realwheel.json.
+Runs each speed as a subprocess (1 full orbit) on the canonical realwheel
+chassis with the 5-sphere roller collider, writes per-speed CSVs into
+results/orbit_realwheel_5sphere/, then aggregates path-length,
+net-displacement, and torque stats into sweep_orbit_realwheel.json.
+
+Open-loop: the canonical's orbit-mode applies one constant per-wheel velocity
+after a long settle window. No closed-loop tracking. The chassis is allowed
+to drift radially/yaw -- this is a torque measurement, not a path-follow test.
+
+Mass: passes --chassis-mass 16.659 kg = 10.144 (chassis structure)
++ 6.515 (arm flat-stowed on chassis top) for the orbit case.
 """
 import os, sys, subprocess, csv, math, json, time
 
@@ -10,11 +18,13 @@ XDRIVE_ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__fil
 ISAAC_PYTHON = os.path.normpath(os.path.join(
     XDRIVE_ROOT, "..", "..", "..", "..", "..", "IsaacSim", "python.bat"))
 SCRIPT = os.path.join(XDRIVE_ROOT, "canonical", "xdrive_realwheel.py")
-OUT_DIR = os.path.join(XDRIVE_ROOT, "results", "orbit_realwheel")
+OUT_DIR = os.path.join(XDRIVE_ROOT, "results", "orbit_realwheel_5sphere")
 os.makedirs(OUT_DIR, exist_ok=True)
 
 SPEEDS = [0.10, 0.15, 0.20, 0.25, 0.30]
 ORBITS = 1.0  # full 360 deg per speed
+SETTLE_S = 5.0  # in-sim settle before motion (open-loop)
+CHASSIS_MASS_KG = 16.659  # chassis 10.144 + arm flat-stowed 6.515
 
 results = {}
 for speed in SPEEDS:
@@ -22,11 +32,17 @@ for speed in SPEEDS:
     cmd = [ISAAC_PYTHON, SCRIPT,
            "--orbit-speed", str(speed),
            "--orbit-orbits", str(ORBITS),
-           "--orbit-csv", csv_path]
-    print(f"\n=== {speed:.2f} m/s ({ORBITS} orbit) ===", flush=True)
+           "--orbit-csv", csv_path,
+           "--orbit-settle", str(SETTLE_S),
+           "--chassis-mass", str(CHASSIS_MASS_KG)]
+    print(f"\n=== {speed:.2f} m/s ({ORBITS} orbit, settle={SETTLE_S}s, "
+          f"mass={CHASSIS_MASS_KG}kg) ===", flush=True)
     print(f"cmd: {' '.join(cmd)}", flush=True)
     t0 = time.time()
-    r = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+    # Bumped timeout: 5s settle + duration buffer per speed; 0.10 m/s @ 1 orbit
+    # at R=1.59m is ~100s of motion + 5s settle = ~105s sim time, plus build
+    # + warmup. 900s is generous and avoids spurious kills.
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=900)
     elapsed = time.time() - t0
     print(f"  done in {elapsed:.1f}s, exit {r.returncode}", flush=True)
     if r.returncode != 0:
