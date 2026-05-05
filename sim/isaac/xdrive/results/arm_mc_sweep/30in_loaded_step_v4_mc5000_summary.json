@@ -1,0 +1,44 @@
+{
+  "config": "30in_loaded_step_v4_mc5000",
+  "method": "monte_carlo_uniform_4dof",
+  "n_samples": 5000,
+  "seed": 42,
+  "j1_range_deg": [
+    -180.0,
+    180.0
+  ],
+  "j2_range_deg": [
+    -180.0,
+    180.0
+  ],
+  "j3_range_deg": [
+    -180.0,
+    180.0
+  ],
+  "j4_range_deg": [
+    -100.0,
+    100.0
+  ],
+  "chassis_mass_kg": 3.629,
+  "wheels_total_kg": 4.0,
+  "arm_total_kg_approx": 6.515,
+  "robot_total_kg": 14.143999999999998,
+  "tip_roll_thresh_deg": 5.0,
+  "tip_pitch_thresh_deg": 5.0,
+  "tip_z_drop_thresh_m": 0.01,
+  "tip_hub_lift_thresh_m": 0.005,
+  "baseline_roll_deg": -179.9999982943246,
+  "baseline_pitch_deg": 2.1948914826249423e-06,
+  "baseline_z_m": -0.032927785396575926,
+  "n_done": 5000,
+  "n_converged": 5000,
+  "n_nan": 0,
+  "n_physics_tipped": 40,
+  "elapsed_s": 698.3826849460602,
+  "started_utc": "2026-05-05T07:34:34.635076Z",
+  "csv_path": "E:\\Capstone\\Projects\\FORTIS\\sim\\isaac\\xdrive\\results\\arm_mc_sweep\\30in_loaded_step_v4_mc5000.csv",
+  "test_mode": false,
+  "environment": "step",
+  "arm_reach_in": 30.36,
+  "loaded": true
+}

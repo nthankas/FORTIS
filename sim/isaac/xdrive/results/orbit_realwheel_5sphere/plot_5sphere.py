@@ -1,84 +1,56 @@
-"""Plot 5-sphere orbit-on-step torque sweep with M8325s thresholds, side-by-side
-with the single-sphere baseline."""
+"""Plot 5-sphere orbit torque sweep -- mean and P95 panels with M8325s
+continuous-rating reference lines."""
 import json, os
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.path.abspath(os.path.join(HERE, ".."))
-data_5 = json.load(open(os.path.join(HERE, "sweep_orbit_realwheel.json")))
-data_1 = json.load(open(os.path.join(ROOT, "orbit_realwheel_singlesphere",
-                                      "sweep_orbit_realwheel.json")))
-speeds = sorted(float(k) for k in data_5.keys())
-wheels = ["FL", "FR", "BL", "BR"]
-colors = {"FL": "tab:blue", "FR": "tab:orange",
-          "BL": "tab:green", "BR": "tab:red"}
+data = json.load(open(os.path.join(HERE, "sweep_orbit_realwheel.json")))
 
-T_CONT = 3.32
-T_PEAK = 4.98
-T_ABS  = 6.64
+speeds = sorted(float(k) for k in data.keys())
+WHEELS = ["FL", "FR", "BL", "BR"]
+COLORS = {"FL": "#1f77b4", "FR": "#d62728",
+          "BL": "#2ca02c", "BR": "#9467bd"}
 
-fig, axes = plt.subplots(2, 2, figsize=(15, 11),
-                          gridspec_kw={"height_ratios": [3, 2]})
+THRESH = [
+    (3.32, "40 A cont. (3.32 Nm)", "--"),
+    (4.98, "60 A cont. (4.98 Nm)", "-."),
+]
 
-def plot_panel(ax, data, title):
-    x = np.array(speeds)
-    width = 0.018
-    for i, w in enumerate(wheels):
-        off = (i - 1.5) * width
-        means = [data[f"{s:.2f}"][f"torque_{w}"]["mean"] for s in speeds]
-        p95s  = [data[f"{s:.2f}"][f"torque_{w}"]["p95"]  for s in speeds]
-        peaks = [data[f"{s:.2f}"][f"torque_{w}"]["peak"] for s in speeds]
-        ax.bar(x + off, means, width=width, color=colors[w], alpha=0.8,
-               label=f"{w} mean")
-        ax.scatter(x + off, p95s, color=colors[w], marker="^", s=70,
-                   edgecolor="black", zorder=5,
-                   label=f"{w} P95" if i == 0 else None)
-        ax.scatter(x + off, peaks, color=colors[w], marker="x", s=70,
-                   linewidth=2, zorder=6,
-                   label=f"{w} peak" if i == 0 else None)
-    for thr, lbl, col in [(T_CONT, "M8325s cont (3.32)", "g"),
-                           (T_PEAK, "M8325s peak (4.98)", "y"),
-                           (T_ABS,  "M8325s abs (6.64)",  "r")]:
-        ax.axhline(thr, linestyle="--", color=col, alpha=0.7)
-        ax.text(x[-1] + 0.005, thr + 0.1, lbl, color=col, fontsize=8)
-    ax.set_xlabel("Commanded orbit radial speed (m/s)")
-    ax.set_ylabel("Wheel torque (Nm)")
-    ax.set_title(title)
-    ax.set_xticks(x)
-    ax.set_xticklabels([f"{s:.2f}" for s in speeds])
-    ax.set_ylim(0, max(40, ax.get_ylim()[1]))
+fig, axes = plt.subplots(1, 2, figsize=(18, 9), sharey=True)
+
+for ax, stat, label in zip(axes, ("mean", "p95"), ("Mean torque", "P95 torque")):
+    for w in WHEELS:
+        vals = [data[f"{s:.2f}"][f"torque_{w}"][stat] for s in speeds]
+        ax.plot(speeds, vals, "o-", color=COLORS[w], linewidth=2.0,
+                markersize=8, label=w)
+        for s, v in zip(speeds, vals):
+            ax.annotate(f"{v:.2f}", (s, v),
+                        xytext=(0, 8), textcoords="offset points",
+                        ha="center", fontsize=8, color=COLORS[w])
+    for t, lab, ls in THRESH:
+        ax.axhline(t, color="gray", linestyle=ls, linewidth=1.0, alpha=0.7)
+        ax.text(speeds[0] - 0.018, t, f"{lab}",
+                fontsize=8, color="#444", va="center", ha="right")
+    ax.set_xlabel("Commanded orbit speed (m/s)", fontsize=11)
+    ax.set_xticks(speeds)
+    ax.set_xlim(speeds[0] - 0.05, speeds[-1] + 0.02)
+    ax.set_ylim(0, 8)
+    ax.set_title(f"{label} per wheel  --  5-sphere chain rollers",
+                 fontweight="bold", fontsize=12)
     ax.grid(True, alpha=0.3)
-    ax.legend(ncol=4, fontsize=7, loc="upper left")
+    ax.legend(loc="upper left", title="Wheel", framealpha=0.9)
 
-plot_panel(axes[0, 0], data_1, "Single-sphere collider (baseline)")
-plot_panel(axes[0, 1], data_5,
-           "5-sphere chain collider (continuous-arc contact)")
+axes[0].set_ylabel("|Torque| (Nm)")
 
-def make_table(ax, data, title):
-    ax.axis("off")
-    hdrs = ["v_cmd", "track%", "path_m"] + sum(
-        [[f"{w} mean", f"{w} P95", f"{w} pk"] for w in wheels], [])
-    rows = []
-    for s in speeds:
-        d = data[f"{s:.2f}"]
-        row = [f"{s:.2f}", f"{d['tracking_pct']:.0f}",
-               f"{d['path_len_m']:.2f}"]
-        for w in wheels:
-            t = d[f"torque_{w}"]
-            row += [f"{t['mean']:.2f}", f"{t['p95']:.2f}", f"{t['peak']:.2f}"]
-        rows.append(row)
-    tbl = ax.table(cellText=rows, colLabels=hdrs, loc="center",
-                   cellLoc="center")
-    tbl.auto_set_font_size(False)
-    tbl.set_fontsize(8)
-    tbl.scale(1, 1.4)
-    ax.set_title(title, fontsize=10, y=0.92)
+plt.suptitle(
+    "FORTIS realwheel 5-sphere -- orbit torque sweep "
+    "(40 lb total, 14.144 kg chassis + 4x 1 kg wheels, R=1.59 m)",
+    fontsize=12, fontweight="bold")
+plt.tight_layout(rect=(0, 0, 1, 0.95))
 
-make_table(axes[1, 0], data_1, "Single-sphere baseline numbers")
-make_table(axes[1, 1], data_5, "5-sphere chain numbers")
-
-plt.tight_layout()
 out = os.path.join(HERE, "torque_sweep_5sphere_vs_baseline.png")
-plt.savefig(out, dpi=130)
-print(f"Wrote {out}")
+plt.savefig(out, dpi=160, bbox_inches="tight")
+plt.close(fig)
+print(f"wrote {out}")
