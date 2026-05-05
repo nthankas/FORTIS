@@ -18,7 +18,8 @@ sim/isaac/
     docs/                 Spec docs, summaries, R0 plan
     results/              Per-script output (results/<script_name>/...)
     CHANGELOG.md          Milestone history
-  skid_steer_design/      Archived: proves skid-steer can't straddle the step
+  deprecated/
+    skid_steer_design/    Archived: proves skid-steer can't straddle the step
 ```
 
 Rule: every script writes its output into `results/<script_name>/`. No flat dumps in `xdrive/`.
@@ -71,7 +72,7 @@ Refer to the OnShape model and BOM for ground-truth dimensions, not these script
 
 ## Why x-drive (not skid-steer)
 
-The robot straddles a 4.5" step between the inner and outer reactor floor. Skid-steer point turns while straddling this step were tested in 60 configurations - only 3 completed (5%), all with dangerous tilt and drift. See `skid_steer_design/ANALYSIS.md`.
+The robot straddles a 4.5" step between the inner and outer reactor floor. Skid-steer point turns while straddling this step were tested in 60 configurations - only 3 completed (5%), all with dangerous tilt and drift. See `deprecated/skid_steer_design/ANALYSIS.md`.
 
 ## Running
 
