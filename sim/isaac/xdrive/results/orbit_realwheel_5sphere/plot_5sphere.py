@@ -16,6 +16,7 @@ COLORS = {"FL": "#1f77b4", "FR": "#d62728",
 THRESH = [
     (3.32, "40 A cont. (3.32 Nm)", "--"),
     (4.98, "60 A cont. (4.98 Nm)", "-."),
+    (5.81, "70 A cont. (5.81 Nm)", ":"),
 ]
 
 fig, axes = plt.subplots(1, 2, figsize=(18, 9), sharey=True)
@@ -36,7 +37,7 @@ for ax, stat, label in zip(axes, ("mean", "p95"), ("Mean torque", "P95 torque"))
     ax.set_xlabel("Commanded orbit speed (m/s)", fontsize=11)
     ax.set_xticks(speeds)
     ax.set_xlim(speeds[0] - 0.05, speeds[-1] + 0.02)
-    ax.set_ylim(0, 8)
+    ax.set_ylim(0, 5.81)
     ax.set_title(f"{label} per wheel  --  5-sphere chain rollers",
                  fontweight="bold", fontsize=12)
     ax.grid(True, alpha=0.3)
