@@ -10,12 +10,12 @@ OnShape model and BOM are the source of truth; this table is a snapshot.
 
 | Subsystem | Selection |
 |---|---|
-| Chassis | `13.082" x 8.54" x 6"` octagonal prism w/ 3" chamfered face diagonals at the four 45-degree corners; 40 lb total robot |
+| Chassis | `13.082" x 8.54" x 6"` octagonal prism w/ 3" chamfered face diagonals at the four 45-degree corners; ~45 lb total robot (chassis + arm + wheels per the v4 sim mass budget) |
 | Drive | X-drive: 4 omni wheels at the chamfered corners |
 | Wheels | AndyMark 8" Dualie Plastic Omni (am-0463) |
 | Drive motors | ODrive M8325s brushless x4, **direct drive** (no gearbox) |
 | Motor controllers | ODrive S1 x4 over CAN |
-| Arm | 4-DOF parallel-link, 30" CF, always 3 lb payload (build target: v3) |
+| Arm | 4-DOF parallel-link, 30" CF, always 3 lb payload |
 | Arm motors | NEMA 17 + Cricket 25:1 (J1/J3); NEMA 23 + EG23-G20-D10 20:1 (J2); Hitec D845WP servo (J4) |
 | Compute | Jetson Orin Nano Super |
 | Cameras | OAK-D Pro (depth, on arm L4 midpoint), chassis-mounted RGB |
@@ -82,7 +82,7 @@ Expect 0 failures. Per-package run / test instructions live in `src/<pkg>/README
 | `fortis_drive` | working; gated by mission state |
 | `fortis_arm` | scaffold; action + gripper services gated by mission state. **IK / trajectory / Teensy serial deferred** -- planned shape is a thin gate over MoveIt 2's `MoveGroup`, see `docs/adr/` |
 | `fortis_integration_tests` | safety-drive seam verified end-to-end |
-| Isaac Sim — chassis + v3 arm | working, see `sim/README.md` |
+| Isaac Sim | chassis (`xdrive_realwheel.py`) + v3 arm canonical script + v4 Monte Carlo sweep tooling -- see `sim/README.md` |
 | Isaac Sim — R0 port entry | not started |
 | `fortis_description` (URDF) | not started; needed for MoveIt 2 + ros2_control |
 | `fortis_perception`, `fortis_localization`, `fortis_bringup` | planned |
