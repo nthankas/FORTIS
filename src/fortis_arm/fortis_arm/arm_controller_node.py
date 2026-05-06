@@ -10,25 +10,12 @@ Subscribes
                                               the pattern, do not invent
                                               a new one.
 
-Action server
--------------
-    move_to_pose   fortis_msgs/action/MoveToPose
-        Goal     geometry_msgs/PoseStamped target_pose
-        Result   bool succeeded, string message
-        Feedback float32 progress
-
-        Goal callback rejects when the cached mission state is not in
-        ALLOWED_ARM_STATES (ARM_AT_VIEW, INSPECT, PICK, HOLDING,
-        RETURN_HOME). Accepted goals always return
-        succeeded=False, message="kinematics not implemented" -- the
-        contract is the deliverable, the motion is deferred to a later
-        pass that wires up Teensy serial + IK + trajectory generation.
-
 Services
 --------
     open_gripper    std_srvs/srv/Trigger
     close_gripper   std_srvs/srv/Trigger
-        Both are state-gated identically to the action. Calls outside
+        Both are state-gated against ALLOWED_ARM_STATES (ARM_AT_VIEW,
+        INSPECT, PICK, HOLDING, RETURN_HOME). Calls outside
         ALLOWED_ARM_STATES return success=False with an explanatory
         message; calls inside return success=False with
         message="gripper actuation not implemented".
@@ -42,29 +29,31 @@ dependency for no behavioural gain.
 
 Gating rules
 ------------
-Arm motion (action and gripper services) is honoured only while the
-mission state is one of ALLOWED_ARM_STATES. Any other state -- including
-"no state has been received yet" -- causes a rejection. Rejection log
-messages are throttled per state name so a flood of incoming requests
-cannot flood the log.
+Gripper services are honoured only while the mission state is one of
+ALLOWED_ARM_STATES. Any other state -- including "no state has been
+received yet" -- causes a rejection. Rejection log messages are
+throttled per state name so a flood of incoming requests cannot flood
+the log.
 
 Threading
 ---------
-SingleThreadedExecutor is sufficient: the state subscription, the
-action callbacks, and the service callbacks all do trivial work
-(state comparison + log + immediate response). MultiThreaded would buy
-nothing and would invite a data race on the cached state string. When
-real motion lands and the action callback starts running a trajectory,
-revisit -- a ReentrantCallbackGroup on the action server is the
-standard upgrade path.
+SingleThreadedExecutor is sufficient: the state subscription and the
+service callbacks all do trivial work (state comparison + log +
+immediate response). MultiThreaded would buy nothing and would invite a
+data race on the cached state string.
+
+Note
+----
+The MoveToPose action-server scaffold that previously lived in this
+node has been retired. Replaced by ros2_control + standard ROS 2
+packages. The original scaffold is preserved at
+``legacy/deprecated_arm_action/move_to_pose_action_server.py`` for
+historical reference.
 """
 
 from __future__ import annotations
 
 import rclpy
-from fortis_msgs.action import MoveToPose
-from rclpy.action import ActionServer, CancelResponse, GoalResponse
-from rclpy.action.server import ServerGoalHandle
 from rclpy.duration import Duration
 from rclpy.node import Node
 from rclpy.qos import QoSDurabilityPolicy, QoSProfile, QoSReliabilityPolicy
@@ -75,9 +64,9 @@ from std_srvs.srv import Trigger
 
 # --- Constants ---------------------------------------------------------------
 
-#: Mission states in which arm motion (action + gripper services) is
-#: honoured. Anything else => reject. Frozenset so accidental mutation
-#: at runtime raises rather than silently widening the gate.
+#: Mission states in which arm motion (gripper services) is honoured.
+#: Anything else => reject. Frozenset so accidental mutation at runtime
+#: raises rather than silently widening the gate.
 ALLOWED_ARM_STATES: frozenset[str] = frozenset({
     "ARM_AT_VIEW",
     "INSPECT",
@@ -90,7 +79,6 @@ ALLOWED_ARM_STATES: frozenset[str] = frozenset({
 REJECT_LOG_THROTTLE_S: float = 1.0
 
 MISSION_STATE_TOPIC: str = "/fortis/mission_state"
-MOVE_TO_POSE_ACTION: str = "move_to_pose"
 OPEN_GRIPPER_SERVICE: str = "open_gripper"
 CLOSE_GRIPPER_SERVICE: str = "close_gripper"
 
@@ -98,9 +86,8 @@ CLOSE_GRIPPER_SERVICE: str = "close_gripper"
 #: a rejection that happened before any /fortis/mission_state arrived.
 _UNKNOWN_STATE_KEY: str = "<no_state_received>"
 
-#: Stub messages returned on accepted goals / service calls. Replace
-#: when the actual kinematics + Teensy serial protocol land.
-_STUB_ACTION_MESSAGE: str = "kinematics not implemented"
+#: Stub message returned on accepted gripper service calls. Replace
+#: when the actual Teensy serial protocol lands.
 _STUB_GRIPPER_MESSAGE: str = "gripper actuation not implemented"
 
 
@@ -109,7 +96,7 @@ _STUB_GRIPPER_MESSAGE: str = "gripper actuation not implemented"
 
 class ArmControllerNode(Node):
     """
-    ROS node exposing the arm action + gripper services, gated by mission state.
+    ROS node exposing the gripper services, gated by mission state.
 
     Holds the most recent mission state (or None until the first message
     arrives) and a per-state throttle map for rejection log messages.
@@ -147,15 +134,6 @@ class ArmControllerNode(Node):
             MISSION_STATE_TOPIC,
             self._on_mission_state,
             latched_qos,
-        )
-
-        self._action_server = ActionServer(
-            self,
-            MoveToPose,
-            MOVE_TO_POSE_ACTION,
-            execute_callback=self._execute_move_to_pose,
-            goal_callback=self._goal_callback,
-            cancel_callback=self._cancel_callback,
         )
 
         self.create_service(
@@ -200,35 +178,6 @@ class ArmControllerNode(Node):
                 f"Rejected {kind} in state {state_key}: "
                 f"motion only allowed in {sorted(ALLOWED_ARM_STATES)}"
             )
-
-    # --- Action server ----------------------------------------------------
-
-    def _goal_callback(self, _goal_request) -> GoalResponse:
-        """Accept or reject a new goal based on current mission state."""
-        if self._state_allows_motion():
-            return GoalResponse.ACCEPT
-        self._log_rejection("move_to_pose goal")
-        return GoalResponse.REJECT
-
-    def _cancel_callback(self, _goal_handle) -> CancelResponse:
-        # Cancellation is always accepted -- a scaffold goal does no
-        # work, so cancelling is free. When real motion lands, this
-        # callback is the place to wire up trajectory abort.
-        return CancelResponse.ACCEPT
-
-    def _execute_move_to_pose(
-        self, goal_handle: ServerGoalHandle
-    ) -> MoveToPose.Result:
-        """Stub execution: immediately return succeeded=False, "not implemented"."""
-        self.get_logger().info(
-            "move_to_pose accepted in state "
-            f"{self._current_state}; returning stub result."
-        )
-        goal_handle.succeed()
-        result = MoveToPose.Result()
-        result.succeeded = False
-        result.message = _STUB_ACTION_MESSAGE
-        return result
 
     # --- Gripper services -------------------------------------------------
 
