@@ -7,8 +7,10 @@ setup(
     version='0.0.0',
     packages=find_packages(exclude=['test']),
     package_data={
-        # EKF default noise covariances. Loaded via importlib.resources
-        # from fortis_comms.ekf when no override is passed to EKF().
+        # EKF default noise covariances. The ekf module moved to
+        # legacy/deprecated_ekf/ekf.py (replaced by ros2_control +
+        # standard ROS 2 packages); the json is retained as historical
+        # reference data shipped with the package.
         'fortis_comms.cfgs': ['*.json'],
     },
     include_package_data=True,
