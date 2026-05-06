@@ -45,8 +45,4 @@ install/
 log/
 
 # Files that must not enter the repo
-
 CONTRIBUTING.md
-
-
-
