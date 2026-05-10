@@ -1,0 +1,7 @@
+# FORTIS bringup parameters (placeholder).
+#
+# Per-node parameter blocks will live here, keyed by fully-qualified
+# node name. Kept empty for now so the file can be loaded without
+# overriding any defaults.
+#
+# TODO: populate
