@@ -49,3 +49,7 @@ CONTRIBUTING.md
 isim.bat
 SUMMARY.md
 CLAUDE.md
+
+# Local stack CLI environment (real values; template lives in .env.example)
+.env
+.env.local
