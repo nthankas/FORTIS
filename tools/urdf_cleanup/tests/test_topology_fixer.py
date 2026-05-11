@@ -32,14 +32,12 @@ def test_reparents_hanging_wheel_hubs(minimal_export_path: Path) -> None:
     assert j.child == "wheel_hub_fl__1__"
     assert "hanging_node_to_root_joint_1" in report.reparented_joints
 
-    # hanging_node_to_root_joint_0 was root->base_link; also reparented.
-    # That's a self-loop now (base_link -> base_link), which is a real
-    # ugliness in the source URDF -- but the fixer's job is to redirect
-    # the parent edge, not to delete bogus joints. Downstream cleanup
-    # handles dedup. We just verify the parent was rewritten.
-    j0 = doc.find_joint("hanging_node_to_root_joint_0")
-    assert j0 is not None
-    assert j0.parent == "base_link"
+    # hanging_node_to_root_joint_0 was root->base_link. Rewiring it
+    # would create a base_link -> base_link self-loop, which is
+    # nonsense in URDF, so the fixer drops the joint instead and the
+    # chassis becomes the URDF root.
+    assert doc.find_joint("hanging_node_to_root_joint_0") is None
+    assert "hanging_node_to_root_joint_0" in report.dropped_joints
 
 
 def test_drops_synthetic_root_when_unreferenced() -> None:
@@ -66,8 +64,10 @@ def test_keeps_synthetic_root_if_still_referenced_after_pass() -> None:
   <link name="root"/>
   <link name="base_link"/>
   <link name="other"/>
-  <joint name="hanging_node_to_root_joint_0" type="fixed">
-    <parent link="root"/><child link="base_link"/>
+  <link name="wheel"/>
+  <joint name="hanging_node_to_root_joint_1" type="continuous">
+    <parent link="root"/><child link="wheel"/>
+    <axis xyz="0 0 1"/>
   </joint>
   <joint name="not_hanging" type="fixed">
     <parent link="root"/><child link="other"/>
@@ -77,7 +77,7 @@ def test_keeps_synthetic_root_if_still_referenced_after_pass() -> None:
     # not_hanging keeps root alive; only the matching joint is rewritten.
     fixer = TopologyFixer(chassis_link="base_link")
     report = fixer.fix(doc)
-    assert "hanging_node_to_root_joint_0" in report.reparented_joints
+    assert "hanging_node_to_root_joint_1" in report.reparented_joints
     assert report.removed_synthetic_root is False
     assert "root" in doc.link_names()
 
@@ -96,6 +96,36 @@ def test_noop_if_chassis_link_missing() -> None:
     report = TopologyFixer(chassis_link="base_link").fix(doc)
     assert report.reparented_joints == []
     assert "root" in doc.link_names()
+
+
+def test_drops_self_loop_joint_to_chassis() -> None:
+    # OnShape sometimes attaches the chassis itself to the synthetic
+    # root via a hanging-pattern joint. Rewiring would create a
+    # chassis -> chassis self-loop; drop the joint instead so the
+    # chassis becomes the URDF root.
+    xml = """<?xml version="1.0" ?>
+<robot name="x">
+  <link name="root"/>
+  <link name="base_link"/>
+  <link name="wheel"/>
+  <joint name="hanging_node_to_root_joint_0" type="fixed">
+    <parent link="root"/><child link="base_link"/>
+  </joint>
+  <joint name="hanging_node_to_root_joint_1" type="continuous">
+    <parent link="root"/><child link="wheel"/>
+    <axis xyz="0 0 1"/>
+  </joint>
+</robot>"""
+    doc = UrdfDoc.from_string(xml)
+    report = TopologyFixer(chassis_link="base_link").fix(doc)
+    # joint_0 dropped (would be a self-loop), joint_1 reparented.
+    assert "hanging_node_to_root_joint_0" in report.dropped_joints
+    assert "hanging_node_to_root_joint_1" in report.reparented_joints
+    assert doc.find_joint("hanging_node_to_root_joint_0") is None
+    j1 = doc.find_joint("hanging_node_to_root_joint_1")
+    assert j1 is not None and j1.parent == "base_link"
+    # Synthetic root unreferenced -> dropped.
+    assert "root" not in doc.link_names()
 
 
 def test_custom_pattern_and_synthetic_root() -> None:

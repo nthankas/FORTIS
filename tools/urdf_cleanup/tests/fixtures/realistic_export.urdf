@@ -1,0 +1,127 @@
+<?xml version="1.0" ?>
+<robot name="fortis_chassis_export__1__">
+  <link name="root"/>
+
+  <link name="base_link__1__">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/base_link__1__.stl"/>
+      </geometry>
+    </visual>
+    <collision>
+      <geometry>
+        <mesh filename="meshes/base_link__1__.stl"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="15.0"/>
+      <origin xyz="0 0 0"/>
+      <inertia ixx="0.5" iyy="0.5" izz="0.5" ixy="0" ixz="0" iyz="0"/>
+    </inertial>
+  </link>
+
+  <link name="wheel_hub_fl__1__">
+    <visual>
+      <geometry><mesh filename="meshes/wheel_hub_fl__1__.stl"/></geometry>
+    </visual>
+  </link>
+  <link name="wheel_hub_fr__1__">
+    <visual>
+      <geometry><mesh filename="meshes/wheel_hub_fr__1__.stl"/></geometry>
+    </visual>
+  </link>
+  <link name="wheel_hub_bl__1__">
+    <visual>
+      <geometry><mesh filename="meshes/wheel_hub_bl__1__.stl"/></geometry>
+    </visual>
+  </link>
+  <link name="wheel_hub_br__1__">
+    <visual>
+      <geometry><mesh filename="meshes/wheel_hub_br__1__.stl"/></geometry>
+    </visual>
+  </link>
+
+  <!-- Nuisance links: spacers, part-number aliases, OpenCascade junk. -->
+  <link name="1p5_spacer__1__"/>
+  <link name="1p5_spacer__2__"/>
+  <link name="1p5_spacer__3__"/>
+  <link name="part_1_42__1__"/>
+  <link name="part_2_42__1__"/>
+  <link name="part_2_17__1__"/>
+  <link name="open_cascade_step_translator_7_8_1_1__1__"/>
+  <link name="open_cascade_step_translator_7_8_1_1__2__"/>
+  <link name="open_cascade_step_translator_3_4_5_6__1__"/>
+
+  <!-- Hanging-node joints: wheel hubs incorrectly attached to root. -->
+  <joint name="hanging_node_to_root_joint_0" type="fixed">
+    <parent link="root"/>
+    <child link="base_link__1__"/>
+    <origin xyz="0 0 0.05" rpy="0 0 0"/>
+  </joint>
+  <joint name="hanging_node_to_root_joint_1" type="continuous">
+    <parent link="root"/>
+    <child link="wheel_hub_fl__1__"/>
+    <origin xyz="0.166 0.121 0" rpy="0 0 0.785"/>
+    <axis xyz="0 0 1"/>
+  </joint>
+  <joint name="hanging_node_to_root_joint_2" type="continuous">
+    <parent link="root"/>
+    <child link="wheel_hub_fr__1__"/>
+    <origin xyz="0.166 -0.121 0" rpy="0 0 -0.785"/>
+    <axis xyz="0 0 1"/>
+  </joint>
+  <joint name="hanging_node_to_root_joint_3" type="continuous">
+    <parent link="root"/>
+    <child link="wheel_hub_bl__1__"/>
+    <origin xyz="-0.166 0.121 0" rpy="0 0 -0.785"/>
+    <axis xyz="0 0 1"/>
+  </joint>
+  <joint name="hanging_node_to_root_joint_4" type="continuous">
+    <parent link="root"/>
+    <child link="wheel_hub_br__1__"/>
+    <origin xyz="-0.166 -0.121 0" rpy="0 0 0.785"/>
+    <axis xyz="0 0 1"/>
+  </joint>
+
+  <!-- Nuisance attach joints (fixed; safe to drop). -->
+  <joint name="spacer_attach_0" type="fixed">
+    <parent link="base_link__1__"/><child link="1p5_spacer__1__"/>
+    <origin xyz="0 0 0.01" rpy="0 0 0"/>
+  </joint>
+  <joint name="spacer_attach_1" type="fixed">
+    <parent link="base_link__1__"/><child link="1p5_spacer__2__"/>
+    <origin xyz="0 0 0.02" rpy="0 0 0"/>
+  </joint>
+  <joint name="spacer_attach_2" type="fixed">
+    <parent link="base_link__1__"/><child link="1p5_spacer__3__"/>
+    <origin xyz="0 0 0.03" rpy="0 0 0"/>
+  </joint>
+  <joint name="part_attach_0" type="fixed">
+    <parent link="base_link__1__"/><child link="part_1_42__1__"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+  <joint name="part_attach_1" type="fixed">
+    <parent link="base_link__1__"/><child link="part_2_42__1__"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+  <joint name="part_attach_2" type="fixed">
+    <parent link="base_link__1__"/><child link="part_2_17__1__"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+  <joint name="step_translator_attach_0" type="fixed">
+    <parent link="base_link__1__"/>
+    <child link="open_cascade_step_translator_7_8_1_1__1__"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+  <joint name="step_translator_attach_1" type="fixed">
+    <parent link="base_link__1__"/>
+    <child link="open_cascade_step_translator_7_8_1_1__2__"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+  <joint name="step_translator_attach_2" type="fixed">
+    <parent link="base_link__1__"/>
+    <child link="open_cascade_step_translator_3_4_5_6__1__"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+</robot>
