@@ -35,7 +35,7 @@ RUN pip install --no-cache-dir \
     odrive \
     numpy \
     matplotlib \
-    scipy 
+    scipy
 
 RUN groupadd --gid ${USER_GID} ${USERNAME} \
  && useradd -m -s /bin/bash --uid ${USER_UID} --gid ${USER_GID} ${USERNAME} \
@@ -50,4 +50,3 @@ USER ${USERNAME}
 WORKDIR /workspace
 
 CMD ["/bin/bash"]
-
