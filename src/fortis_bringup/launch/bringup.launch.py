@@ -1,16 +1,30 @@
 """
-Top-level FORTIS bringup launch file (stub).
+Top-level FORTIS bringup launch file.
 
-TODO: not implemented. Will eventually compose mission_state_node,
-drive_node, arm controller, perception, localization, and diagnostics
-into one launch entry point for the full robot.
+Composes mission_state_node (FSM) and drive_node (X-drive ROS interface)
+into a single launch entry point. Arm controller, perception, localization,
+and diagnostics will be added as those packages come online.
 """
-import launch
+from launch import LaunchDescription
+from launch_ros.actions import Node
 
 
 def generate_launch_description():
-    return launch.LaunchDescription([
-        launch.actions.LogInfo(
-            msg='fortis_bringup/bringup.launch.py: TODO: not implemented'
-        ),
+    mission_state_node = Node(
+        package='fortis_safety',
+        executable='mission_state_node',
+        name='mission_state_node',
+        output='screen',
+    )
+
+    drive_node = Node(
+        package='fortis_drive',
+        executable='drive_node',
+        name='drive_node',
+        output='screen',
+    )
+
+    return LaunchDescription([
+        mission_state_node,
+        drive_node,
     ])
