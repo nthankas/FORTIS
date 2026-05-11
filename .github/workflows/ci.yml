@@ -11,8 +11,24 @@ defaults:
     shell: bash
 
 jobs:
+  pre-commit:
+    name: pre-commit (lint)
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Run pre-commit
+        uses: pre-commit/action@v3.0.1
+
   colcon:
     name: colcon build + test (Humble)
+    needs: pre-commit
     runs-on: ubuntu-22.04
     env:
       ROS_DOMAIN_ID: 42
