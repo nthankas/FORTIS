@@ -51,5 +51,12 @@ repos:
     hooks:
       - id: pydocstyle
         files: ^src/.*\.py$
-        # ament_pep257 default convention. Match it.
-        args: [--convention=pep257]
+        # Mirror ament_pep257's default ament_pep257.ini: pep257 convention
+        # plus the same add-ignore list, so the codebase that passed
+        # ament_pep257 keeps passing pydocstyle directly.
+        # D203,D212,D404: stylistic, ament-disabled.
+        # D100-D107:      missing-docstring family, ament-disabled to allow
+        #                 undocumented modules / classes / functions.
+        args:
+          - --convention=pep257
+          - --add-ignore=D203,D212,D404,D100,D101,D102,D103,D104,D105,D106,D107
