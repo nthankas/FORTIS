@@ -1,14 +1,14 @@
 # fortis_bringup
 
-Top-level launch composition for FORTIS. Currently scaffolding only — every launch file is a stub that returns an empty `LaunchDescription` and logs a TODO. Real composition is added per package as each one comes online.
+Top-level launch composition for FORTIS. Partial today: `bringup.launch.py` composes the mission state machine and the drive node; `sim.launch.py` and `teleop.launch.py` remain stubs. More node includes are added per package as each one comes online.
 
-## Planned launch files
+## Launch files
 
-| File | Eventual purpose |
-|---|---|
-| `launch/bringup.launch.py` | TODO: full robot bringup. Mission state machine, drive, arm controller, perception, localization, diagnostics. |
-| `launch/sim.launch.py` | TODO: simulator-backed bringup with the same ROS interfaces as the hardware path. |
-| `launch/teleop.launch.py` | TODO: operator-station only (Foxglove bridge, click-to-3D adapter, `/cmd_vel` input). No robot-side drivers. |
+| File | Status | Purpose |
+|---|---|---|
+| `launch/bringup.launch.py` | live | Composes `mission_state_node` (`fortis_safety`) and `drive_node` (`fortis_drive`). Arm controller, perception, localization, and diagnostics are added as those packages come online. |
+| `launch/sim.launch.py` | stub | TODO: simulator-backed bringup with the same ROS interfaces as the hardware path. Currently logs `TODO: not implemented`. |
+| `launch/teleop.launch.py` | stub | TODO: operator-station only (Foxglove bridge, click-to-3D adapter, `/cmd_vel` input). Currently logs `TODO: not implemented`. |
 
 ## Planned config
 
@@ -23,19 +23,19 @@ colcon build --packages-select fortis_bringup
 source install/setup.bash
 ```
 
-## Running (stubs only today)
+## Running
 
 ```bash
-ros2 launch fortis_bringup bringup.launch.py
-ros2 launch fortis_bringup sim.launch.py
-ros2 launch fortis_bringup teleop.launch.py
+ros2 launch fortis_bringup bringup.launch.py    # live: mission_state_node + drive_node
+ros2 launch fortis_bringup sim.launch.py        # stub: logs TODO and exits
+ros2 launch fortis_bringup teleop.launch.py     # stub: logs TODO and exits
 ```
 
-Each currently logs `TODO: not implemented` at INFO level and exits the launch event loop with no actions to wait on.
+The two stub launch files log `TODO: not implemented` at INFO level and exit the launch event loop with no actions to wait on.
 
 ## TODO
 
-- Wire `bringup.launch.py` to the real `mission_state_node`, `drive_node`, and (when present) arm controller.
+- Add the arm controller include (`fortis_arm/arm_controller_node`) to `bringup.launch.py`.
 - Add MoveIt 2 launch include once `fortis_moveit_config` exists.
 - Add `depthai_ros_driver` includes for the 5 OAK cameras once `fortis_perception` exists. Per the BOM that is 4x OAK-D Lite (Active Focus) A00483 (left + right toroidal VIO, rear outward depth, front angled-up depth) plus 1x OAK-D Pro (Active Stereo IR, Active Focus, Standard FOV) A00546 on the arm L4 midpoint.
 - Add `robot_localization` ekf_node once `fortis_localization` exists.

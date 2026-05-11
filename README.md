@@ -144,10 +144,10 @@ The cross-package seam between safety and drive is exercised by
 | Dev environment | working; CPU `fortis-dev` is the default, opt-in `fortis-dev-gpu` (Isaac ROS Common base) staged for FORTIS PC / IdeaPad / Jetson |
 | `fortis_safety` | working; mission FSM + REPL console; end-to-end ROS round trip verified |
 | `fortis_msgs` | working; 4 messages + 1 action |
-| `fortis_comms` | X-drive kinematics in production; `odrive_s1.py` / `motor_base.py` / `ekf.py` are interim helpers slated for replacement by upstream packages (see `docs/adr/`) |
+| `fortis_comms` | X-drive kinematics in production. The earlier `odrive_s1.py` / `motor_base.py` / `ekf.py` helpers have been moved to `legacy/deprecated_*` and are slated for replacement by upstream packages (`odrive_ros2_control`, `robot_localization`). See `docs/adr/` and `docs/CLEANUP_AUDIT.md` Section 2. |
 | `fortis_drive` | working; gated by mission state |
-| `fortis_arm` | scaffold; action + gripper services gated by mission state. **IK / trajectory / Teensy serial deferred** -- planned shape is a thin gate over MoveIt 2's `MoveGroup`, see `docs/adr/`. Firmware-side skeleton + protocol live under `firmware/teensy/`. |
-| `fortis_bringup` | scaffold; stub launch files for `bringup` / `sim` / `teleop`, no node includes yet (`chore/package-scaffolding` merged) |
+| `fortis_arm` | scaffold; gripper services (`open_gripper`, `close_gripper`) gated by mission state. The `move_to_pose` action-server scaffold previously embedded in this node has been retired to `legacy/deprecated_arm_action/`; the planned replacement is a thin gate over MoveIt 2's `MoveGroup`, see `docs/adr/`. **IK / trajectory / Teensy serial deferred.** Firmware-side skeleton + protocol live under `firmware/teensy/`. |
+| `fortis_bringup` | `bringup.launch.py` composes `mission_state_node` + `drive_node`; `sim.launch.py` and `teleop.launch.py` are still stubs (`LogInfo("TODO: not implemented")`). Arm-controller and perception includes pending. |
 | `fortis_description` | scaffold; first OnShape URDF export landed but requires cleanup before integration (95 links / 94 joints, naming + topology issues; Adrian + Carlos have the fix list). URDF authoring planned as a dual track: chassis from OnShape cleanup, arm hand-authored xacro |
 | `fortis_integration_tests` | safety-drive seam verified end-to-end |
 | Isaac Sim | chassis (`xdrive_realwheel.py`) + v3 arm canonical script + v4 Monte Carlo sweep tooling -- see `sim/README.md` |
