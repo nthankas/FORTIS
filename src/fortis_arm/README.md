@@ -21,24 +21,27 @@ Open and close are binary commands from the operator with no payload. `Trigger` 
 
 ## Hardware reference
 
-Captured here so the future Teensy / kinematics pass starts from a known wiring + mechanical setup, not from rediscovery.
+Captured here so the future Teensy / kinematics pass starts from a known wiring + mechanical setup, not from rediscovery. Source of truth is `FORTIS_FINAL_BOM`.
 
 ### Motion controller
 
-- **Teensy 4.1** acts as the arm motion controller. Connected to the Jetson on **Port 4** over USB serial.
-- **TeensyStep** generates step / direction signals for J1, J2, J3 driving **CL57T-V41** closed-loop stepper drivers.
-- **SN74HCT245N** octal bus transceivers shift the Teensy's 3.3 V step / dir lines up to the 5 V the CL57T expects.
-- **Hitec D845WP** waterproof servo on J4 driven directly off a Teensy PWM pin (no level shift required for the servo signal).
-- **ServoCity 3219-0001-0002** rotational servo gripper as the end-effector.
+- **Teensy 4.1** (600 MHz Cortex-M7) acts as the arm motion controller. Connected to the Jetson on **USB Port 4** over USB serial. Replaces the earlier Pololu Tics + PCA9685 plan.
+- **TeensyStep** generates step / direction signals for J1, J2, J3 driving **StepperOnline CL57T-V41** closed-loop stepper drivers (0-8 A, 18-50 VDC, reads 1000 PPR encoder, hardware closed-loop pos / vel / current). Powered from the 48 V drive bus (min 18 V).
+- An **8-channel bi-directional bus transceiver (DIP-20)** shifts the Teensy's 3.3 V step / dir lines up to the 5 V the CL57T optocouplers expect.
+- **Hitec D845WP** waterproof servo on J4 driven directly off a Teensy hardware PWM pin (180 oz-in @ 7.4 V; no level shift required for the servo signal).
+- **ServoCity 3219-0001-0002** servo-driven parallel gripper kit (75 oz-in @ 6 V, steel gears) as the end-effector, also commanded via Teensy hardware PWM.
+- Hardware quadrature inputs on the Teensy are reserved for independent encoder verification (cross-check against the CL57T's own closed loop).
 
 ### Joint reference
 
 | Joint | Motor | Reduction / feedback |
 |---|---|---|
-| J1 | NEMA 17 stepper | Cricket MK II 25:1 cycloidal gearbox; CL57T closed-loop encoder |
-| J2 | NEMA 23 stepper | 50:1 planetary gearbox + 1000 PPR incremental encoder; CL57T closed-loop |
-| J3 | NEMA 17 stepper | Cricket MK II 25:1 cycloidal gearbox; CL57T closed-loop encoder |
-| J4 | Hitec D845WP servo | Internal feedback; commanded via PWM |
+| J1 (base yaw) | NEMA 17 closed-loop stepper 65 Ncm (17HS24-2104-ME1K, 2.1 A, 1000 PPR magnetic encoder, 3ch differential) | Cricket Drive MK II 25:1 cycloidal gearbox; CL57T closed-loop |
+| J2 (shoulder pitch) | NEMA 23 stepper (CN-23HS22-2804-HG50-ME1K, StepperOnline) with 1000 PPR (4000 CPR) magnetic encoder | 50:1 high-precision planetary gearbox + Ruland FHD-MCL-14-F shaft collar; CL57T closed-loop |
+| J3 (elbow pitch) | NEMA 17 closed-loop stepper (17HS24-2104-ME1K, same part as J1) | Cricket Drive MK II 25:1 cycloidal gearbox; CL57T closed-loop |
+| J4 (wrist) | Hitec D845WP servo (180 oz-in @ 7.4 V, waterproof) | Internal servo feedback; commanded via Teensy hardware PWM |
+
+Arm structural tubing: Clearwater Composites 1" ID x 1 1/8" OD pultruded square carbon fiber. Link lengths are TBD pending mechanical confirmation from the user and do not yet appear cleanly in the BOM.
 
 ### Position recovery
 
