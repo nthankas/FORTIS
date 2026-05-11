@@ -30,9 +30,15 @@ pull and run that image would exclude the non-NVIDIA developers.
 
 Isaac ROS 4.x dropped ROS 2 Humble in favor of Jazzy. The FORTIS stack is on
 Humble (matched to Jetson JetPack 6 and to the rest of the team's tooling),
-so the Isaac ROS path is pinned to the **3.2 release line** (`release-3.2`
-branch / `*_ros2_humble_release-3.2` Docker tags), which is the last 3.x
+so the Isaac ROS path is pinned to the **3.2 release line** -- the last 3.x
 release supporting Humble.
+
+NVIDIA's Isaac ROS Dev Base image (`nvcr.io/nvidia/isaac/ros`) does not
+publish semver-style tags such as `ros2_humble_release-3.2`. The real tags
+are content-addressed hashes with arch + OS suffixes, e.g.
+`isaac_ros_<sha>-amd64` and `isaac_ros_<sha>-arm64-jetpack`. The Dockerfile
+pins a single hash via an `ISAAC_ROS_HASH` ARG and derives the per-arch
+tags from it.
 
 ## Decision
 
@@ -42,10 +48,12 @@ Ship **two development containers** maintained side by side:
    `osrf/ros:humble-desktop`. The default container. Builds on any x86_64 or
    aarch64 Docker host. Used by all teammates regardless of hardware.
 2. **`fortis-dev-gpu`** (`docker/Dockerfile.dev-gpu`, new) - based on the
-   NVIDIA Isaac ROS Dev Base for `ros2_humble_release-3.2` (multi-arch:
-   `x86_64-` and `aarch64-` variants), with the Isaac ROS apt repository
-   pre-configured and the perception/motion packages above pre-installed.
-   Used only by teammates with an NVIDIA GPU.
+   NVIDIA Isaac ROS Dev Base for the 3.2 Humble line (multi-arch:
+   `-amd64` for x86_64 hosts, `-arm64-jetpack` for the Jetson; the
+   `-arm64-fastos` variant for NVIDIA AMR appliances is intentionally not
+   used). The Isaac ROS apt repository is pre-configured and the
+   perception/motion packages above are pre-installed. Used only by
+   teammates with an NVIDIA GPU.
 
 Both containers:
 
@@ -105,5 +113,20 @@ vars rather than duplicating them.
 
 - Isaac ROS line is pinned to `release-3.2`. We will not chase 4.x until the
   rest of the FORTIS stack moves off Humble.
+- The Isaac ROS Dev Base image is hash-tagged on NGC (not semver). The
+  current pin is recorded in the header comment of
+  `docker/Dockerfile.dev-gpu` as `ISAAC_ROS_HASH` plus the NGC scan date.
+  Re-pin when an apt install or an Isaac ROS package starts failing
+  inside `fortis-dev-gpu`, or on a quarterly hygiene cadence -- NVIDIA
+  garbage-collects old hashes on its own schedule, and stale pins
+  eventually 404.
 - CPU base is pinned to `osrf/ros:humble-desktop` (the Humble LTS line).
 - Both pins are reviewed at each FORTIS milestone.
+
+**NGC authentication:**
+
+Pulling `nvcr.io/nvidia/isaac/ros` requires `docker login nvcr.io` with
+an NGC API key, even though the image is nominally public. Document this
+in `docker/README.md` and remind new teammates during onboarding. CI must
+either carry a pull credential or build the GPU image on the GPU host
+and cache layers locally.
