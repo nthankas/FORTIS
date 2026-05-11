@@ -108,7 +108,19 @@ flake8...................................................................Passed
 pydocstyle...............................................................Passed
 ```
 
-All six hooks pass on the current tree. No auto-fix changes to review.
+All six hooks pass on the current tree.
+
+The hygiene hooks did auto-fix three files on first run (trailing
+whitespace + EOF newlines). These are **left uncommitted in the
+worktree for human review**:
+
+- `.devcontainer/devcontainer.json`  -- trailing whitespace stripped
+- `docker/Dockerfile.dev`            -- trailing whitespace stripped
+- `docker/docker-compose.yml`        -- trailing whitespace stripped
+
+Run `git diff` in the worktree to inspect, then either `git checkout`
+them (reject the auto-fix) or `git add && git commit` them (accept).
+Diffs are small and cosmetic.
 
 Note: initial run of pydocstyle with `--convention=pep257` alone reported
 ~50 missing-docstring violations (D100-D107) on existing code. Fixed by
