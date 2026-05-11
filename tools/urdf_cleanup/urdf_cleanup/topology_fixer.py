@@ -40,6 +40,7 @@ class TopologyReport:
     """Result of a topology pass."""
 
     reparented_joints: List[str] = field(default_factory=list)
+    dropped_joints: List[str] = field(default_factory=list)
     new_parent: str = ""
     removed_synthetic_root: bool = False
 
@@ -73,6 +74,13 @@ class TopologyFixer:
             if not self._pattern.match(joint.name):
                 continue
             if joint.parent != self._synthetic_root:
+                continue
+            if joint.child == self._chassis:
+                # Rewiring would produce a self-loop (the synthetic
+                # root was attaching the chassis to itself). Drop the
+                # joint instead so the chassis becomes the URDF root.
+                doc.remove_joint(joint.name)
+                report.dropped_joints.append(joint.name)
                 continue
             # Re-parent.
             joint.parent = self._chassis
