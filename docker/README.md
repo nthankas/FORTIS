@@ -27,6 +27,11 @@ Common (both containers):
 - [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
   installed and configured: `sudo nvidia-ctk runtime configure --runtime=docker && sudo systemctl restart docker`.
 - Verify with `docker run --rm --gpus all nvidia/cuda:12.2.0-base-ubuntu22.04 nvidia-smi`.
+- **NGC login.** The Isaac ROS Dev Base image lives on `nvcr.io` and
+  requires an account even though it is nominally public. Before the
+  first GPU build, run `docker login nvcr.io` and paste your NGC API
+  key (free account at `ngc.nvidia.com`). Without this the build will
+  fail at the `FROM` stage with `unauthorized`.
 
 ## Build
 
@@ -78,9 +83,11 @@ colcon test
 ## What's different between the two
 
 - `fortis-dev` is `FROM osrf/ros:humble-desktop` (CPU only, ubuntu 22.04).
-- `fortis-dev-gpu` is `FROM nvcr.io/nvidia/isaac/ros:<arch>-ros2_humble_release-3.2`,
-  with the Isaac ROS apt repository pre-configured and these packages
-  pre-installed:
+- `fortis-dev-gpu` is `FROM nvcr.io/nvidia/isaac/ros:<hash>-<arch>` where
+  `<hash>` is a content-addressed Isaac ROS build (pinned in
+  `Dockerfile.dev-gpu` via the `ISAAC_ROS_HASH` ARG) and `<arch>` is
+  `amd64` or `arm64-jetpack`. The Isaac ROS apt repository is
+  pre-configured and these packages pre-installed:
   - `ros-humble-isaac-ros-visual-slam`
   - `ros-humble-isaac-ros-nvblox`
   - `ros-humble-isaac-ros-image-proc`
@@ -98,11 +105,22 @@ and both create the same `FORTIS` user with passwordless sudo.
 Both Dockerfiles are TARGETARCH-aware:
 - `fortis-dev` works on x86_64 and aarch64 hosts because `osrf/ros:humble-desktop`
   is multi-arch on Docker Hub.
-- `fortis-dev-gpu` selects between `x86_64-ros2_humble_release-3.2` and
-  `aarch64-ros2_humble_release-3.2` at build time. Jetson developers should
-  use the aarch64 variant (BuildKit picks it automatically when building on
-  the Jetson itself; on x86_64 you can request it via `--platform linux/arm64`
-  plus QEMU, though native builds on-Jetson are faster).
+- `fortis-dev-gpu` selects between the `-amd64` and `-arm64-jetpack` Isaac
+  ROS Dev Base tags at build time. Jetson developers get
+  `-arm64-jetpack` automatically (BuildKit picks it when building on the
+  Jetson itself; on x86_64 you can request it via `--platform linux/arm64`
+  plus QEMU, though native builds on-Jetson are faster). NVIDIA also
+  publishes `-arm64-fastos`; FORTIS does not use it because that variant
+  targets NVIDIA's AMR appliances, not JetPack-based Jetson devkits.
+
+## Re-pinning the Isaac ROS base image
+
+The Isaac ROS Dev Base on NGC is hash-tagged, not semver-tagged. The
+current pin and re-pin procedure live in the header comment of
+`docker/Dockerfile.dev-gpu`. In short: re-pin when an apt install or
+an Isaac ROS package starts failing inside `fortis-dev-gpu`, or as a
+quarterly hygiene tick. NGC garbage-collects old hashes on its own
+schedule, so a stale pin will eventually 404 at build time.
 
 ## Troubleshooting
 
