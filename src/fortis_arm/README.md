@@ -6,10 +6,11 @@ Arm controller seam for FORTIS, gated by mission state. **Kinematics are deferre
 
 | Endpoint | Type | Purpose |
 |---|---|---|
-| `move_to_pose` | action server, `fortis_msgs/action/MoveToPose` | Move the end-effector to a `geometry_msgs/PoseStamped`. Goal callback rejects when current mission state is not in the allowed set. Accepted goals always return `succeeded=False, message="kinematics not implemented"`. |
 | `open_gripper` | service, `std_srvs/srv/Trigger` | Stub; rejects on disallowed state with `success=False` + reason; returns `success=False, message="gripper actuation not implemented"` on allowed state. |
 | `close_gripper` | service, `std_srvs/srv/Trigger` | Same shape as `open_gripper`. |
 | `/fortis/mission_state` | subscription, `std_msgs/String` | Latched (TRANSIENT_LOCAL + RELIABLE, depth=1). Same topic and QoS as `fortis_drive`. |
+
+The `move_to_pose` action server previously embedded here has been retired to `legacy/deprecated_arm_action/move_to_pose_action_server.py`. The planned replacement is a thin gate over MoveIt 2's `MoveGroup` action once `fortis_description` lands a real URDF. The `fortis_msgs/action/MoveToPose` definition is preserved in `fortis_msgs/` for that wrapper.
 
 ### Allowed mission states for arm motion
 
@@ -68,7 +69,7 @@ colcon test-result --verbose
 ```
 
 Tests:
-- `test/test_state_gating.py` -- parametrized over every state in `MissionStateMachine.State`. Action goals are accepted (and return the stub result) in `ALLOWED_ARM_STATES` and rejected at the gate elsewhere; gripper services follow the same gating.
+- `test/test_state_gating.py` -- parametrised over every state in `MissionStateMachine.State`. The gripper services (`open_gripper`, `close_gripper`) are accepted inside `ALLOWED_ARM_STATES` (and return the "gripper actuation not implemented" stub) and rejected at the gate elsewhere. Action-goal gating was removed alongside the action server itself; the file's docstring notes the retirement.
 - `test/test_bringup.py` -- if `/fortis/mission_state` has not yet been published when a request arrives, the gate must reject. Mirrors the same race covered in `fortis_drive/test/test_drive_node.test_no_state_received_rejects_cmd_vel`.
 
 Lint (flake8, pep257) is no longer part of `colcon test`. It runs via pre-commit hooks and the `pre-commit` job in `.github/workflows/ci.yml`. See the root README "Pre-commit hooks" section.
