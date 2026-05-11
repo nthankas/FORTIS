@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  colcon:
+    name: colcon build + test (Humble)
+    runs-on: ubuntu-22.04
+    env:
+      ROS_DOMAIN_ID: 42
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup ROS 2 Humble
+        uses: ros-tooling/setup-ros@v0.7
+        with:
+          required-ros-distributions: humble
+
+      - name: Install workspace dependencies (rosdep)
+        run: |
+          source /opt/ros/humble/setup.bash
+          sudo rosdep init || true
+          rosdep update
+          rosdep install --from-paths src --ignore-src -r -y \
+            --rosdistro humble
+
+      - name: colcon build
+        run: |
+          source /opt/ros/humble/setup.bash
+          colcon build --symlink-install --event-handlers console_cohesion+
+
+      - name: colcon test
+        run: |
+          source /opt/ros/humble/setup.bash
+          source install/setup.bash
+          colcon test --event-handlers console_cohesion+ --return-code-on-test-failure
+
+      - name: colcon test-result
+        if: always()
+        run: |
+          source /opt/ros/humble/setup.bash
+          colcon test-result --verbose
