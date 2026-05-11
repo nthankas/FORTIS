@@ -8,6 +8,25 @@ state where chassis motion is allowed. In every other state, the node publishes
 explicit zeros on a separate topic so a downstream stop is never inferred from
 the *absence* of a message.
 
+## Hardware reference
+
+The drivetrain (per `FORTIS_FINAL_BOM`):
+
+- **Wheels:** 4x AndyMark 8" Dualie plastic omni (am-0463), no bearings, 80A
+  durometer, 120 lb load cap each.
+- **Drive motors:** 4x ODrive M8325s 100 KV outrunner brushless, **direct
+  drive** (no gearbox), 48 V direct.
+- **Motor controllers:** 4x ODrive S1 FOC controllers, sold as the combined
+  KIT-S1-M8325s-01 from ODrive Robotics.
+- **Bus:** CAN, daisy-chained across the four S1s; ODrive USB-CAN adapter
+  attaches to **Jetson USB Port 2**. The adapter has a built-in 120 ohm
+  termination, so no external terminator is required.
+
+This node consumes the kinematics from `fortis_comms` and is independent of the
+motor-driver layer, so the ODrive specifics are reference only -- the actual
+CAN bring-up lives in `fortis_comms/odrive_s1.py` (interim helper, see that
+package's README).
+
 ## Topics
 
 | Topic | Type | Direction | Notes |
