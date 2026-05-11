@@ -6,14 +6,6 @@ setup(
     name=package_name,
     version='0.0.0',
     packages=find_packages(exclude=['test']),
-    package_data={
-        # EKF default noise covariances. The ekf module moved to
-        # legacy/deprecated_ekf/ekf.py (replaced by ros2_control +
-        # standard ROS 2 packages); the json is retained as historical
-        # reference data shipped with the package.
-        'fortis_comms.cfgs': ['*.json'],
-    },
-    include_package_data=True,
     data_files=[
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
@@ -23,10 +15,7 @@ setup(
     zip_safe=True,
     maintainer='Nikhil Thankasala',
     maintainer_email='nikhilthankasala@gmail.com',
-    description=(
-        'Motor abstractions, X-drive kinematics, and EKF for FORTIS '
-        '(ament_python library).'
-    ),
+    description='X-drive kinematics library for FORTIS (ament_python).',
     license='MIT',
     extras_require={
         'test': [
