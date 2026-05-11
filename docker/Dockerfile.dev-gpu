@@ -11,21 +11,52 @@
 # Build:
 #   docker build -f docker/Dockerfile.dev-gpu -t fortis-dev-gpu:latest .
 #
-# Multi-arch notes:
-#   The NVIDIA Isaac ROS Dev Base on NGC publishes per-arch tags using the
-#   prefixes `x86_64-` and `aarch64-`. Docker's TARGETARCH build arg maps to
-#   `amd64` / `arm64`, so we translate below. The Isaac ROS 3.2 line is the
-#   final release that supports ROS 2 Humble; 4.x dropped Humble in favor
-#   of Jazzy. See ADR 0001-dual-container-strategy.md for the rationale.
+# -----------------------------------------------------------------------------
+# Isaac ROS base image -- pinning policy
+# -----------------------------------------------------------------------------
+# NVIDIA publishes the Isaac ROS Dev Base on NGC at nvcr.io/nvidia/isaac/ros.
+# Tags are NOT semver. They are content-addressed hashes with arch + OS
+# suffixes, e.g.
+#     isaac_ros_28556f8bc78a98822bd08b2d7c6fcf9b-amd64
+#     isaac_ros_28556f8bc78a98822bd08b2d7c6fcf9b-arm64-jetpack
+#     isaac_ros_28556f8bc78a98822bd08b2d7c6fcf9b-arm64-fastos
+# The "isaac_ros_<hash>" prefix is the same across all three; only the
+# arch / OS suffix differs.
 #
-# Base image reference:
-#   https://catalog.ngc.nvidia.com/orgs/nvidia/teams/isaac/containers/ros
-#   https://github.com/NVIDIA-ISAAC-ROS/isaac_ros_common/tree/release-3.2
+# We pin a single hash via ISAAC_ROS_HASH and derive the per-arch tags
+# from it. Re-pin periodically: NVIDIA rebuilds the Isaac ROS images on
+# their own cadence, and old hashes are garbage-collected off NGC.
+#
+#   Pinned hash:       isaac_ros_28556f8bc78a98822bd08b2d7c6fcf9b
+#   NGC scan date:     2026-04-30
+#   ROS distro:        Humble (Isaac ROS 3.2 line; 4.x dropped Humble for
+#                      Jazzy)
+#   amd64 -> -amd64
+#   arm64 -> -arm64-jetpack (the Jetson runs JetPack OS; -fastos is for
+#                            "Isaac for AMR" appliances and is not what
+#                            FORTIS deploys onto)
+#
+# When re-pinning, scan the NGC tag listing
+#   https://catalog.ngc.nvidia.com/orgs/nvidia/teams/isaac/containers/ros/tags
+# for the newest hash that ships -amd64 / -arm64-jetpack / -arm64-fastos
+# triplet, update ISAAC_ROS_HASH below, and bump the scan-date comment.
+#
+# NGC authentication:
+#   These images are nominally "public" but NGC still requires an account
+#   login to pull them. Before the first build of this image, the human
+#   driver must run:
+#       docker login nvcr.io
+#   and supply an NGC API key. CI cannot bypass this -- either provision a
+#   pull credential in the CI environment or build the GPU image manually
+#   on the GPU host and cache the layers locally.
+# -----------------------------------------------------------------------------
 
 ARG TARGETARCH
+
 ARG ISAAC_ROS_BASE_IMAGE=nvcr.io/nvidia/isaac/ros
-ARG ISAAC_ROS_BASE_TAG_AMD64=x86_64-ros2_humble_release-3.2
-ARG ISAAC_ROS_BASE_TAG_ARM64=aarch64-ros2_humble_release-3.2
+ARG ISAAC_ROS_HASH=isaac_ros_28556f8bc78a98822bd08b2d7c6fcf9b
+ARG ISAAC_ROS_BASE_TAG_AMD64=${ISAAC_ROS_HASH}-amd64
+ARG ISAAC_ROS_BASE_TAG_ARM64=${ISAAC_ROS_HASH}-arm64-jetpack
 
 FROM ${ISAAC_ROS_BASE_IMAGE}:${ISAAC_ROS_BASE_TAG_AMD64} AS base-amd64
 FROM ${ISAAC_ROS_BASE_IMAGE}:${ISAAC_ROS_BASE_TAG_ARM64} AS base-arm64
