@@ -81,6 +81,25 @@ docker exec -it fortis-dev bash
 
 The repo mounts at `/workspace` inside the container.
 
+### `./stack` (preferred entry point)
+
+`./stack` at the repo root is a small bash wrapper around `git` + `docker
+compose` that turns the workflows above into one-line commands. It is the
+preferred way to bring the dev environment up; the raw `docker compose`
+calls still work and are the documented fallback.
+
+```bash
+cp .env.example .env
+./stack up
+./stack exec
+./stack status
+./stack switch feat/foo
+./stack down
+```
+
+See [`tools/stack/README.md`](tools/stack/README.md) for the full command
+reference and Jetson workflow.
+
 ### Pre-commit hooks
 
 Lint (flake8 + pydocstyle + standard hygiene hooks) runs on every
