@@ -1,4 +1,5 @@
-FROM osrf/ros:humble-desktop
+ARG BASE_IMAGE=osrf/ros:humble-desktop
+FROM ${BASE_IMAGE}
 
 ARG USERNAME=FORTIS
 ARG USER_UID=1000
