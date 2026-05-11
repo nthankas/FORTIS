@@ -81,6 +81,27 @@ docker exec -it fortis-dev bash
 
 The repo mounts at `/workspace` inside the container.
 
+### Pre-commit hooks
+
+Lint (flake8 + pydocstyle + standard hygiene hooks) runs on every
+commit via pre-commit. After cloning, install once on the host:
+
+```bash
+pip install pre-commit
+pre-commit install
+```
+
+Run on the whole repo any time with `pre-commit run --all-files`.
+Config is `.pre-commit-config.yaml`; flake8 reads workspace `.flake8`.
+
+### CI
+
+GitHub Actions runs `colcon build` + `colcon test` on every PR to
+`main` (and every push to `main`). Lint runs in CI via
+`pre-commit/action`, so the same checks that fire locally also gate
+the PR. ROS 2 Humble + `ROS_DOMAIN_ID=42` (matches docker-compose).
+Workflow lives in `.github/workflows/ci.yml`.
+
 ### Isaac ROS integrations (staged in `fortis-dev-gpu`, not yet wired into nodes)
 
 The GPU image preloads these packages so they are available the moment a node consumes them. They are NOT currently invoked from any package under `src/`:
