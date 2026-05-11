@@ -1,0 +1,49 @@
+<?xml version="1.0" ?>
+<robot name="fortis_chassis">
+  <link name="root"/>
+  <link name="base_link__1__">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/base_link__1__.stl"/>
+      </geometry>
+    </visual>
+  </link>
+  <link name="wheel_hub_fl__1__">
+    <visual>
+      <geometry>
+        <mesh filename="meshes/wheel_hub_fl__1__.stl"/>
+      </geometry>
+    </visual>
+  </link>
+  <link name="open_cascade_step_translator_7_8_1_1__1__"/>
+  <link name="1p5_spacer__1__"/>
+  <link name="part_1_42__1__"/>
+
+  <joint name="hanging_node_to_root_joint_0" type="fixed">
+    <parent link="root"/>
+    <child link="base_link__1__"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+  <joint name="hanging_node_to_root_joint_1" type="continuous">
+    <parent link="root"/>
+    <child link="wheel_hub_fl__1__"/>
+    <origin xyz="0.1 0.1 0" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+  </joint>
+  <joint name="spacer_attach_0" type="fixed">
+    <parent link="base_link__1__"/>
+    <child link="1p5_spacer__1__"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+  <joint name="step_translator_attach_0" type="fixed">
+    <parent link="base_link__1__"/>
+    <child link="open_cascade_step_translator_7_8_1_1__1__"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+  <joint name="part_attach_0" type="fixed">
+    <parent link="base_link__1__"/>
+    <child link="part_1_42__1__"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+</robot>
