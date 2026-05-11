@@ -1,0 +1,141 @@
+# syntax=docker/dockerfile:1.6
+#
+# FORTIS dev container, GPU variant (Isaac ROS overlay).
+#
+# This image is the NVIDIA-GPU sibling of docker/Dockerfile.dev. It mirrors
+# the CPU image's apt + pip dependency layer and adds Isaac ROS 3.2 packages
+# on top of the NVIDIA Isaac ROS Dev Base image. Use this image on machines
+# with an NVIDIA GPU (FORTIS PC RTX 4080, IdeaPad RTX 5050 Laptop, Jetson
+# Orin Nano Super). Teammates without an NVIDIA GPU should use Dockerfile.dev.
+#
+# Build:
+#   docker build -f docker/Dockerfile.dev-gpu -t fortis-dev-gpu:latest .
+#
+# Multi-arch notes:
+#   The NVIDIA Isaac ROS Dev Base on NGC publishes per-arch tags using the
+#   prefixes `x86_64-` and `aarch64-`. Docker's TARGETARCH build arg maps to
+#   `amd64` / `arm64`, so we translate below. The Isaac ROS 3.2 line is the
+#   final release that supports ROS 2 Humble; 4.x dropped Humble in favor
+#   of Jazzy. See ADR 0001-dual-container-strategy.md for the rationale.
+#
+# Base image reference:
+#   https://catalog.ngc.nvidia.com/orgs/nvidia/teams/isaac/containers/ros
+#   https://github.com/NVIDIA-ISAAC-ROS/isaac_ros_common/tree/release-3.2
+
+ARG TARGETARCH
+ARG ISAAC_ROS_BASE_IMAGE=nvcr.io/nvidia/isaac/ros
+ARG ISAAC_ROS_BASE_TAG_AMD64=x86_64-ros2_humble_release-3.2
+ARG ISAAC_ROS_BASE_TAG_ARM64=aarch64-ros2_humble_release-3.2
+
+FROM ${ISAAC_ROS_BASE_IMAGE}:${ISAAC_ROS_BASE_TAG_AMD64} AS base-amd64
+FROM ${ISAAC_ROS_BASE_IMAGE}:${ISAAC_ROS_BASE_TAG_ARM64} AS base-arm64
+
+# Final stage picks the right base via TARGETARCH (amd64 | arm64).
+FROM base-${TARGETARCH} AS fortis-dev-gpu
+
+ARG USERNAME=FORTIS
+ARG USER_UID=1000
+ARG USER_GID=1000
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# -----------------------------------------------------------------------------
+# Mirror the apt dependency layer from docker/Dockerfile.dev exactly, so
+# packages that build in fortis-dev also build here. Keep this list in sync.
+# -----------------------------------------------------------------------------
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    sudo \
+    git \
+    curl \
+    wget \
+    nano \
+    gnupg2 \
+    lsb-release \
+    ca-certificates \
+    build-essential \
+    python3-pip \
+    python3-colcon-common-extensions \
+    python3-rosdep \
+    ros-humble-xacro \
+    ros-humble-joint-state-publisher-gui \
+    ros-humble-robot-localization \
+    ros-humble-moveit \
+    ros-humble-ros2-control \
+    ros-humble-ros2-controllers \
+    ros-humble-controller-manager \
+    ros-humble-tf2-tools \
+    ros-humble-rqt-tf-tree \
+    ros-humble-foxglove-bridge \
+    && rm -rf /var/lib/apt/lists/*
+
+# -----------------------------------------------------------------------------
+# Isaac ROS apt repository (release-3, jammy). The NGC Dev Base usually has
+# this configured already; we add it idempotently for safety in case the base
+# image rev drops it.
+# -----------------------------------------------------------------------------
+RUN curl -fsSL https://isaac.download.nvidia.com/isaac-ros/repos.key \
+        | gpg --dearmor -o /usr/share/keyrings/isaac-ros-archive-keyring.gpg \
+ && echo "deb [signed-by=/usr/share/keyrings/isaac-ros-archive-keyring.gpg] \
+https://isaac.download.nvidia.com/isaac-ros/release-3 $(lsb_release -cs) release-3.0" \
+        > /etc/apt/sources.list.d/isaac-ros.list
+
+# -----------------------------------------------------------------------------
+# Isaac ROS packages (apt-installable from the NVIDIA Isaac ROS release-3 repo).
+#
+# Decisions on apt vs source build for FORTIS staging:
+#   * isaac_ros_visual_slam       -> apt (ros-humble-isaac-ros-visual-slam)
+#   * isaac_ros_nvblox            -> apt (ros-humble-isaac-ros-nvblox)
+#   * isaac_ros_image_proc        -> apt (ros-humble-isaac-ros-image-proc)
+#   * isaac_ros_image_pipeline    -> apt (ros-humble-isaac-ros-image-pipeline)
+#   * isaac_ros_cumotion          -> apt (ros-humble-isaac-ros-cumotion)
+#   * isaac_ros_cumotion_moveit   -> apt (ros-humble-isaac-ros-cumotion-moveit)
+#
+# If any of the above fails to install (e.g. NVIDIA renames a package or the
+# repo drops a binary for one of the architectures), the install is skipped
+# rather than failing the whole layer. We intentionally do NOT vendor a
+# source-build fallback here - that work is tracked separately. See
+# docs/adr/0001-dual-container-strategy.md.
+# -----------------------------------------------------------------------------
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ros-humble-isaac-ros-visual-slam \
+        ros-humble-isaac-ros-nvblox \
+        ros-humble-isaac-ros-image-proc \
+        ros-humble-isaac-ros-image-pipeline \
+        ros-humble-isaac-ros-cumotion \
+        ros-humble-isaac-ros-cumotion-moveit \
+    || echo "WARNING: one or more Isaac ROS apt packages were not installed. \
+Check apt-cache search ros-humble-isaac-ros and the release-3 repo contents." \
+ && rm -rf /var/lib/apt/lists/*
+
+# -----------------------------------------------------------------------------
+# Python deps - same as Dockerfile.dev. Keep in sync.
+# -----------------------------------------------------------------------------
+RUN pip install --no-cache-dir \
+    depthai \
+    python-can \
+    pyserial \
+    odrive \
+    numpy \
+    matplotlib \
+    scipy
+
+# -----------------------------------------------------------------------------
+# User setup - mirror Dockerfile.dev. The Isaac ROS Dev Base ships with an
+# `admin` user; we create the FORTIS user fresh, granting it passwordless
+# sudo. groupadd / useradd are guarded so a re-tagged base with a colliding
+# UID/GID does not blow up the build.
+# -----------------------------------------------------------------------------
+RUN (getent group ${USER_GID} || groupadd --gid ${USER_GID} ${USERNAME}) \
+ && (id -u ${USERNAME} >/dev/null 2>&1 \
+        || useradd -m -s /bin/bash --uid ${USER_UID} --gid ${USER_GID} ${USERNAME}) \
+ && echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/${USERNAME} \
+ && chmod 440 /etc/sudoers.d/${USERNAME}
+
+RUN echo "source /opt/ros/humble/setup.bash" >> /home/${USERNAME}/.bashrc \
+ && echo "if [ -f /workspace/install/setup.bash ]; then source /workspace/install/setup.bash; fi" >> /home/${USERNAME}/.bashrc \
+ && echo "alias ll='ls -la'" >> /home/${USERNAME}/.bashrc
+
+USER ${USERNAME}
+WORKDIR /workspace
+
+CMD ["/bin/bash"]
