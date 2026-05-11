@@ -46,3 +46,6 @@ log/
 
 # Files that must not enter the repo
 CONTRIBUTING.md
+isim.bat
+SUMMARY.md
+CLAUDE.md
