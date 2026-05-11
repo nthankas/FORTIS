@@ -413,9 +413,22 @@ decision stands -- this branch does **not** install or configure ruff.
 
 ### 9.1 Pre-commit auto-fix pass
 
-`pre-commit run --all-files` (pre-commit 4.6.0) run on the tree at the
-audit start. **Results to be filled in after the run is executed in the
-same commit as this document update.**
+`pre-commit run --all-files` (pre-commit 4.6.0) on the tree at audit
+start:
+
+```
+trim trailing whitespace.................................................Passed
+fix end of files.........................................................Passed
+check for merge conflicts................................................Passed
+check yaml...............................................................Passed
+flake8...................................................................Passed
+pydocstyle...............................................................Passed
+```
+
+All six hooks pass on the current tree with no modifications. **No
+auto-fix commit was needed**; the prior `chore: accept pre-commit
+auto-fixes on pre-existing files` (`86ffc7d`) on `main` already covered
+the only files the hygiene hooks wanted to rewrite.
 
 ### 9.2 `colcon test` re-verification
 
