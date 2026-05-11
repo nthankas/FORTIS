@@ -19,7 +19,8 @@ Motor abstractions, X-drive kinematics, and EKF, packaged as an ament_python ROS
 | `test/test_imports.py` | Smoke test: every public module imports, IK/FK on zero input return zero, `EKF()` constructs from the bundled default config. |
 | `test/test_xdrive_kinematics.py` | IK/FK round-trip across forward, strafe, rotation, diagonal, and combined commands. |
 | `test/test_ekf.py` | Init, predict, optical-flow update, IMU update, and full-loop stability. Uses an in-fixture dict config rather than monkey-patching. |
-| `test/test_flake8.py`, `test/test_pep257.py` | Lint scaffolds, scoped to this package only via `Path(__file__).resolve().parent.parent`. |
+
+Lint (flake8, pep257) is no longer part of `colcon test`. It runs via pre-commit hooks and the `pre-commit` job in `.github/workflows/ci.yml`. See the root README "Pre-commit hooks" section.
 
 Run from the workspace root inside the dev container:
 

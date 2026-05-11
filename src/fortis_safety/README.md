@@ -58,6 +58,8 @@ colcon test-result --verbose
 
 Tests are pure-Python over the FSM itself (no ROS); the cross-package seam between this state machine and `fortis_drive` is exercised in `fortis_integration_tests`.
 
+Lint (flake8, pep257) is no longer part of `colcon test`. It runs via pre-commit hooks and the `pre-commit` job in `.github/workflows/ci.yml`. See the root README "Pre-commit hooks" section.
+
 ## What is intentionally not in here
 
 - Operator UI -- the console is bring-up only; the production operator interface is not in scope for this package.
