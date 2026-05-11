@@ -130,10 +130,10 @@ colcon test-result --verbose
 
 `colcon test` now runs functional pytest / launch_testing only; lint
 (flake8, pep257, copyright, xmllint) moved to pre-commit + the
-`pre-commit` job in `.github/workflows/ci.yml`. Test count dropped
-from the pre-refactor baseline of 126 (lint-heavy) accordingly --
-exact post-refactor number will be confirmed on the next CI run.
-Per-package run / test instructions live in `src/<pkg>/README.md`.
+`pre-commit` job in `.github/workflows/ci.yml`. Current baseline on
+`main`: **68 tests, 0 failures, 6 skipped** (down from 126/0/8 prior
+to the lint-out refactor). Per-package run / test instructions live
+in `src/<pkg>/README.md`.
 The cross-package seam between safety and drive is exercised by
 `launch_test src/fortis_integration_tests/test/test_safety_drive_integration.py`.
 
