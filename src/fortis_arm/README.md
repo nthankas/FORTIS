@@ -70,7 +70,8 @@ colcon test-result --verbose
 Tests:
 - `test/test_state_gating.py` -- parametrized over every state in `MissionStateMachine.State`. Action goals are accepted (and return the stub result) in `ALLOWED_ARM_STATES` and rejected at the gate elsewhere; gripper services follow the same gating.
 - `test/test_bringup.py` -- if `/fortis/mission_state` has not yet been published when a request arrives, the gate must reject. Mirrors the same race covered in `fortis_drive/test/test_drive_node.test_no_state_received_rejects_cmd_vel`.
-- `test/test_flake8.py`, `test/test_pep257.py` -- lint scaffolds, scoped to this package via `Path(__file__).resolve().parent.parent`.
+
+Lint (flake8, pep257) is no longer part of `colcon test`. It runs via pre-commit hooks and the `pre-commit` job in `.github/workflows/ci.yml`. See the root README "Pre-commit hooks" section.
 
 ## What is intentionally not in here
 
