@@ -1,0 +1,55 @@
+# Pre-commit hook configuration for FORTIS.
+#
+# Local install:
+#   pip install pre-commit
+#   pre-commit install
+#
+# Run on the whole repo once after install:
+#   pre-commit run --all-files
+#
+# CI runs the same hooks via pre-commit/action in .github/workflows/ci.yml,
+# so what passes locally also passes in CI.
+#
+# Scope notes:
+# - Python lint (flake8, pydocstyle) is restricted to ROS packages under
+#   src/. sim/, legacy/, and analysis/ are research / reference code with
+#   different conventions and are intentionally excluded (mirrors .flake8).
+# - Hygiene hooks (trailing whitespace, EOF, merge conflict, YAML) run on
+#   the whole tree, with build/install/log and binary asset dirs excluded.
+
+exclude: |
+  (?x)^(
+      build/.*|
+      install/.*|
+      log/.*|
+      sim/.*|
+      legacy/.*|
+      analysis/.*|
+      \.venv/.*|
+      venv/.*
+  )$
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-merge-conflict
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+
+  - repo: https://github.com/pycqa/flake8
+    rev: 7.1.1
+    hooks:
+      - id: flake8
+        files: ^src/.*\.py$
+        # Picks up workspace .flake8 (max-line-length=99, excludes sim/legacy).
+
+  - repo: https://github.com/pycqa/pydocstyle
+    rev: 6.3.0
+    hooks:
+      - id: pydocstyle
+        files: ^src/.*\.py$
+        # ament_pep257 default convention. Match it.
+        args: [--convention=pep257]
