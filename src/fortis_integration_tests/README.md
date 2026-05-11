@@ -15,6 +15,8 @@ Three reasons:
 | Test file | What it exercises |
 |---|---|
 | `test/test_safety_drive_integration.py` | Brings up `mission_state_node` (fortis_safety) and `drive_node` (fortis_drive) in one launch. Verifies (a) default-IDLE rejects `/cmd_vel` for >= 1 s producing only `zero_velocities`; (b) `START_ORBIT` event makes `/cmd_vel` produce `wheel_velocities` matching the X-drive IK; (c) transitioning out of `ORBIT` to `IDLE` makes the next `/cmd_vel` produce zeros within 200 ms; (d) the full `INSPECT -> DONE -> RETURN_HOME` path restores motion. |
+| `test/test_bringup_launch.py` | Includes the real `fortis_bringup/bringup.launch.py` under `launch_testing` and asserts every node the bringup is contractually expected to compose is alive shortly after launch, and that `/fortis/mission_state` latches to `IDLE` within a small startup budget. Catches silent regressions where a refactor drops a Node from the launch graph or breaks the latched-state publisher. |
+| `test/test_safety_arm_integration.py` | Scaffold only. Four `@pytest.mark.skip` placeholders documenting the planned safety + arm contract (IDLE rejects MoveToPose, ARM_AT_VIEW accepts, ORBIT rejects, FAULT forces rejection). Bodies will be filled in alongside the MoveIt 2 wrapper for `fortis_arm`. |
 
 ## Running
 
