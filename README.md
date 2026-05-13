@@ -55,7 +55,7 @@ src/                ROS 2 packages (colcon workspace)
   fortis_integration_tests/   Cross-package launch_testing
 sim/                Isaac Sim 5.1 work (Windows host, outside the container)
   isaac/xdrive/     Canonical chassis + arm sims, tools, deprecated/, results
-analysis/           Drivetrain and arm analysis writeups
+  analysis/         Drivetrain and arm analysis writeups
 legacy/             Reference code from earlier design iterations
 ```
 
@@ -178,5 +178,5 @@ The cross-package seam between safety and drive is exercised by
 
 - `docs/adr/` -- architectural decision records (state representation, MoveIt 2 + state-gate shape, ros2_control wiring)
 - `sim/README.md` and `sim/isaac/xdrive/CHANGELOG.md` -- simulation state and history
-- `analysis/` -- drivetrain rationale (x-drive vs skid-steer, orbit, torque, pivot)
+- `sim/analysis/` -- drivetrain rationale (x-drive vs skid-steer, orbit, torque, pivot)
 - `src/<pkg>/README.md` -- per-package contracts (topics, services, actions, gating rules)
