@@ -1,0 +1,32 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <material name="fortis_aluminum">
+    <color rgba="0.75 0.75 0.78 1.0"/>
+  </material>
+
+  <material name="fortis_carbon_fiber">
+    <color rgba="0.12 0.12 0.14 1.0"/>
+  </material>
+
+  <material name="fortis_motor_black">
+    <color rgba="0.18 0.18 0.18 1.0"/>
+  </material>
+
+  <material name="fortis_wheel_blue">
+    <color rgba="0.10 0.30 0.65 1.0"/>
+  </material>
+
+  <material name="fortis_camera_cyan">
+    <color rgba="0.20 0.65 0.80 1.0"/>
+  </material>
+
+  <material name="fortis_gripper_silver">
+    <color rgba="0.65 0.65 0.70 1.0"/>
+  </material>
+
+  <material name="fortis_jaw_orange">
+    <color rgba="0.90 0.45 0.10 1.0"/>
+  </material>
+
+</robot>

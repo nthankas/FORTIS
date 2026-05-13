@@ -1,0 +1,168 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="fortis_chassis">
+
+  <!--
+    FORTIS chassis.
+    base_link is at the chassis geometric center, projected to ground (Z=0).
+    +X forward, +Y left, +Z up (REP-103).
+    Top of chassis at Z = belly_clearance + chassis_height = 0.203 m.
+  -->
+
+  <!-- =================== base_link (canonical ROS root) =================== -->
+  <link name="base_link"/>
+
+  <!-- =================== chassis body =================== -->
+  <link name="chassis_body">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="${chassis_length} ${chassis_width} ${chassis_height}"/>
+      </geometry>
+      <material name="fortis_aluminum"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="${chassis_length} ${chassis_width} ${chassis_height}"/>
+      </geometry>
+    </collision>
+    <xacro:box_inertia m="${chassis_mass}"
+                       x="${chassis_length}"
+                       y="${chassis_width}"
+                       z="${chassis_height}"/>
+  </link>
+
+  <joint name="base_to_chassis_body" type="fixed">
+    <parent link="base_link"/>
+    <child  link="chassis_body"/>
+    <origin xyz="0 0 ${belly_clearance + chassis_height/2}" rpy="0 0 0"/>
+  </joint>
+
+  <!-- =================== wheel macro =================== -->
+  <!--
+    X-drive wheel. Local frame: rotation axis is Y.
+    The wheel link is placed at (x_pos, y_pos, wheel_z) in base_link frame.
+    yaw rotates the whole wheel frame about Z so that the rolling direction
+    is correctly oriented for X-drive (45 deg diagonal).
+  -->
+  <xacro:macro name="omni_wheel" params="name x_pos y_pos yaw">
+
+    <link name="${name}_wheel">
+      <visual>
+        <origin xyz="0 0 0" rpy="${pi/2} 0 0"/>
+        <geometry>
+          <cylinder radius="${wheel_radius}" length="${wheel_width}"/>
+        </geometry>
+        <material name="fortis_wheel_blue"/>
+      </visual>
+      <collision>
+        <origin xyz="0 0 0" rpy="${pi/2} 0 0"/>
+        <geometry>
+          <cylinder radius="${wheel_radius}" length="${wheel_width}"/>
+        </geometry>
+      </collision>
+      <xacro:cylinder_inertia m="${wheel_mass}"
+                              r="${wheel_radius}"
+                              h="${wheel_width}"
+                              rpy="${pi/2} 0 0"/>
+    </link>
+
+    <joint name="${name}_wheel_joint" type="continuous">
+      <parent link="base_link"/>
+      <child  link="${name}_wheel"/>
+      <origin xyz="${x_pos} ${y_pos} ${wheel_z}" rpy="0 0 ${yaw}"/>
+      <axis xyz="0 1 0"/>
+      <limit effort="20.0" velocity="20.0"/>
+      <dynamics damping="0.01" friction="0.0"/>
+    </joint>
+
+  </xacro:macro>
+
+  <!--
+    X-config wheel placement and orientation:
+      FL at (+x, +y), rolls toward (+x, +y), axis perpendicular at -45 deg from chassis X
+      FR at (+x, -y), rolls toward (+x, -y), axis at +45 deg
+      RL at (-x, +y), rolls toward (-x, +y), axis at +45 deg
+      RR at (-x, -y), rolls toward (-x, -y), axis at -45 deg
+    The 45 deg yaw aligns the wheel local rolling direction diagonally.
+  -->
+  <xacro:omni_wheel name="fl"  x_pos=" ${wheel_x_offset}" y_pos=" ${wheel_y_offset}" yaw="${-wheel_x_drive_yaw}"/>
+  <xacro:omni_wheel name="fr"  x_pos=" ${wheel_x_offset}" y_pos="-${wheel_y_offset}" yaw="${ wheel_x_drive_yaw}"/>
+  <xacro:omni_wheel name="rl"  x_pos="-${wheel_x_offset}" y_pos=" ${wheel_y_offset}" yaw="${ wheel_x_drive_yaw}"/>
+  <xacro:omni_wheel name="rr"  x_pos="-${wheel_x_offset}" y_pos="-${wheel_y_offset}" yaw="${-wheel_x_drive_yaw}"/>
+
+  <!-- =================== chassis cameras (4x OAK-D Lite) =================== -->
+  <!--
+    Each chassis camera: link (camera body) + optical frame (ROS conv: Z forward, X right, Y down).
+    The optical frame is what perception nodes publish images in.
+  -->
+  <xacro:macro name="oak_lite_camera" params="name x y z roll pitch yaw">
+
+    <link name="${name}_camera_link">
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <box size="${oak_lite_x} ${oak_lite_y} ${oak_lite_z}"/>
+        </geometry>
+        <material name="fortis_camera_cyan"/>
+      </visual>
+      <collision>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <box size="${oak_lite_x} ${oak_lite_y} ${oak_lite_z}"/>
+        </geometry>
+      </collision>
+      <xacro:box_inertia m="${oak_lite_mass}"
+                         x="${oak_lite_x}"
+                         y="${oak_lite_y}"
+                         z="${oak_lite_z}"/>
+    </link>
+
+    <joint name="${name}_camera_mount_joint" type="fixed">
+      <parent link="base_link"/>
+      <child  link="${name}_camera_link"/>
+      <origin xyz="${x} ${y} ${z}" rpy="${roll} ${pitch} ${yaw}"/>
+    </joint>
+
+    <!-- Optical frame: Z forward, X right, Y down. -->
+    <link name="${name}_camera_optical_frame"/>
+    <joint name="${name}_camera_optical_joint" type="fixed">
+      <parent link="${name}_camera_link"/>
+      <child  link="${name}_camera_optical_frame"/>
+      <origin xyz="0 0 0" rpy="${-pi/2} 0 ${-pi/2}"/>
+    </joint>
+
+  </xacro:macro>
+
+  <!--
+    Camera placement per CAD:
+      front: at front face, looking forward (+X), tilted up 30 deg
+      rear:  at rear face,  looking backward (-X)
+      left:  on left side panel,  looking outward (+Y)
+      right: on right side panel, looking outward (-Y)
+    Body link convention: +X = camera forward. Yaw rotates body link to point that direction.
+    Pitch up = -pitch (rotation about Y axis, right-hand rule).
+  -->
+  <xacro:oak_lite_camera name="front"
+                         x="${cam_front_x}" y="0" z="${cam_front_z}"
+                         roll="0" pitch="-0.524" yaw="0"/>          <!-- 30 deg up -->
+  <xacro:oak_lite_camera name="rear"
+                         x="-${cam_front_x}" y="0" z="${cam_front_z}"
+                         roll="0" pitch="0" yaw="${pi}"/>
+  <xacro:oak_lite_camera name="left"
+                         x="0" y="${cam_side_y}" z="${cam_side_z}"
+                         roll="0" pitch="0" yaw="${pi/2}"/>
+  <xacro:oak_lite_camera name="right"
+                         x="0" y="-${cam_side_y}" z="${cam_side_z}"
+                         roll="0" pitch="0" yaw="${-pi/2}"/>
+
+  <!-- =================== arm mounting plate (where arm attaches) =================== -->
+  <!-- Provides a named frame for the arm's J1 axis to attach to. -->
+  <link name="arm_mount"/>
+  <joint name="chassis_to_arm_mount" type="fixed">
+    <parent link="base_link"/>
+    <child  link="arm_mount"/>
+    <origin xyz="${j1_mount_x} ${j1_mount_y} ${j1_mount_z}" rpy="0 0 0"/>
+  </joint>
+
+</robot>
