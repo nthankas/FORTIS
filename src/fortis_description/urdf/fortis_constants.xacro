@@ -1,0 +1,129 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!--
+    FORTIS dimensions, all in SI units (m, kg, rad).
+    Source: ROS_Expanded_Chassis CAD export, treated as truth.
+    Any value here is the single source of truth for the whole URDF.
+  -->
+
+  <!-- =================== CHASSIS =================== -->
+  <!-- Skeleton box (the welded aluminum frame, excluding wheels) -->
+  <xacro:property name="chassis_length"  value="0.332"/>  <!-- 13.082 in, X axis  -->
+  <xacro:property name="chassis_width"   value="0.217"/>  <!-- 8.540  in, Y axis  -->
+  <xacro:property name="chassis_height"  value="0.152"/>  <!-- 6.000  in, Z axis  -->
+  <xacro:property name="chassis_mass"    value="4.0"/>    <!-- estimate; Robert to confirm post-build -->
+
+  <!-- Belly clearance above ground -->
+  <xacro:property name="belly_clearance" value="0.051"/>  <!-- 2.000 in -->
+
+  <!-- =================== WHEELS (AndyMark 8" Dualie Omni am-0463) =================== -->
+  <xacro:property name="wheel_radius"    value="0.1016"/> <!-- 4.000 in -->
+  <xacro:property name="wheel_width"     value="0.051"/>  <!-- 2.000 in -->
+  <xacro:property name="wheel_mass"      value="1.0"/>    <!-- ~1 kg per wheel -->
+
+  <!-- Wheel center positions from chassis center (extracted from CAD) -->
+  <xacro:property name="wheel_x_offset"  value="0.176"/>  <!-- 6.93 in, half longitudinal spread -->
+  <xacro:property name="wheel_y_offset"  value="0.125"/>  <!-- 4.92 in, half lateral spread -->
+  <xacro:property name="wheel_z"         value="${wheel_radius}"/>  <!-- wheel center at axle height -->
+
+  <!-- X-config: each wheel rotated 45 deg about Z so its rolling axis is diagonal -->
+  <xacro:property name="wheel_x_drive_yaw" value="0.7854"/>  <!-- 45 deg, sign per corner -->
+
+  <!-- =================== ARM (4-DOF scorpion) =================== -->
+  <!-- J1 mount: top of chassis, 3 in forward from rear edge per memory -->
+  <!-- chassis center to J1 axis in X: half_length - 3 in = (0.332/2) - 0.0762 = 0.0898 -->
+  <xacro:property name="j1_mount_x"      value="0.0898"/>
+  <xacro:property name="j1_mount_y"      value="0.0"/>
+  <xacro:property name="j1_mount_z"      value="${belly_clearance + chassis_height}"/>  <!-- top of chassis -->
+
+  <!--
+    Arm dimensions extracted from CAD (ROS_Expanded_Chassis), kept separate:
+      *_axis  = joint-axis to joint-axis distance (used for joint origin placement)
+      *_tube  = CF tube physical length (used for visual + inertia of the tube itself)
+      *_tube  < *_axis  because motor housings, gearbox flanges, and mounting
+                        brackets add length on each side of the CF tube.
+    The difference per segment is split evenly when placing the tube visual.
+  -->
+  <xacro:property name="j1_to_j2_axis"   value="0.091"/>  <!--  3.59 in -->
+  <xacro:property name="arm_link2_axis"  value="0.411"/>  <!-- 16.16 in, J2 axis to J3 axis -->
+  <xacro:property name="arm_link3_axis"  value="0.300"/>  <!-- 11.82 in, J3 axis to J4 axis -->
+  <xacro:property name="arm_link4_axis"  value="0.068"/>  <!--  2.68 in, J4 axis to EE attach -->
+  <xacro:property name="ee_to_gripper"   value="0.030"/>  <!--  1.20 in, EE attach to gripper base -->
+
+  <xacro:property name="arm_link2_tube"  value="0.360"/>  <!-- 14.17 in, j2_link CF tube -->
+  <xacro:property name="arm_link3_tube"  value="0.208"/>  <!--  8.18 in, j3_link CF tube -->
+  <xacro:property name="arm_link4_tube"  value="0.038"/>  <!--  1.50 in, j4_link -->
+  <xacro:property name="arm_tube_side"   value="0.0287"/> <!--  1.128 in, square CF tube outer -->
+
+  <!-- Arm base (J1 motor body) sits on chassis, joint_j1 axis at its top. -->
+  <xacro:property name="arm_base_height" value="0.030"/>  <!-- ~NEMA 17 body height -->
+
+  <!--
+    Composite link masses. Each "linkN" rotates with jointN, so the inertia must
+    include whatever physical hardware moves with that link.
+      link1 = J2 motor + 50:1 planetary (rotates with J1)
+      link2 = j2_link CF tube + J3 motor+Cricket at far end (rotates with J2)
+      link3 = j3_link CF tube + J4 servo at far end           (rotates with J3)
+      link4 = j4_link CF tube + camera mount + EE plate       (rotates with J4)
+  -->
+  <xacro:property name="arm_link1_mass"  value="2.20"/>   <!-- NEMA 23 + 50:1 + bracket -->
+  <xacro:property name="arm_link2_mass"  value="0.76"/>   <!-- CF tube 107g + NEMA 17+Cricket 650g -->
+  <xacro:property name="arm_link3_mass"  value="0.20"/>   <!-- CF tube 86g + D845WP servo 60g + mount -->
+  <xacro:property name="arm_link4_mass"  value="0.10"/>   <!-- CF tube 21g + EE plate + camera bracket -->
+
+  <!-- Joint limits, per locked hardware spec -->
+  <xacro:property name="j1_lower"        value="-2.967"/> <!-- -170 deg, cable management range -->
+  <xacro:property name="j1_upper"        value="2.967"/>  <!-- +170 deg -->
+  <xacro:property name="j2_lower"        value="-1.571"/> <!-- -90  deg, gearbox hardstop -->
+  <xacro:property name="j2_upper"        value="1.571"/>  <!-- +90  deg -->
+  <xacro:property name="j3_lower"        value="-2.618"/> <!-- -150 deg, fold geometry -->
+  <xacro:property name="j3_upper"        value="2.618"/>  <!-- +150 deg -->
+  <xacro:property name="j4_lower"        value="-1.571"/> <!-- -90  deg, Hitec D845WP -->
+  <xacro:property name="j4_upper"        value="1.571"/>  <!-- +90  deg -->
+
+  <!-- Effort/velocity from motor+gearbox specs -->
+  <xacro:property name="j1_effort"       value="15.0"/>   <!-- NEMA 17 + 25:1, conservative -->
+  <xacro:property name="j2_effort"       value="40.0"/>   <!-- NEMA 23 + 50:1, conservative -->
+  <xacro:property name="j3_effort"       value="15.0"/>   <!-- NEMA 17 + 25:1 -->
+  <xacro:property name="j4_effort"       value="3.5"/>    <!-- D845WP stall torque -->
+  <xacro:property name="j_velocity"      value="1.0"/>    <!-- 1 rad/s nominal -->
+
+  <!-- =================== GRIPPER (ServoCity 3219-0001-0002) =================== -->
+  <xacro:property name="gripper_base_mass" value="0.10"/>
+  <xacro:property name="gripper_base_x"    value="0.060"/>
+  <xacro:property name="gripper_base_y"    value="0.060"/>
+  <xacro:property name="gripper_base_z"    value="0.030"/>
+
+  <xacro:property name="jaw_mass"          value="0.025"/>
+  <xacro:property name="jaw_length"        value="0.060"/> <!-- finger length -->
+  <xacro:property name="jaw_width"         value="0.015"/>
+  <xacro:property name="jaw_thickness"     value="0.008"/>
+
+  <xacro:property name="jaw_open_stroke"   value="0.040"/> <!-- max jaw half-spread from closed -->
+
+  <!-- =================== CAMERAS =================== -->
+  <!-- OAK-D Pro AF on arm end effector -->
+  <xacro:property name="oak_pro_mass"      value="0.150"/>
+  <xacro:property name="oak_pro_x"         value="0.097"/>
+  <xacro:property name="oak_pro_y"         value="0.038"/>
+  <xacro:property name="oak_pro_z"         value="0.024"/>
+
+  <!-- OAK-D Lite (chassis cameras) -->
+  <xacro:property name="oak_lite_mass"     value="0.090"/>
+  <xacro:property name="oak_lite_x"        value="0.091"/>
+  <xacro:property name="oak_lite_y"        value="0.028"/>
+  <xacro:property name="oak_lite_z"        value="0.017"/>
+
+  <!-- Chassis camera mounting positions (extracted from CAD, in chassis frame) -->
+  <!-- Front cam mounts at front face, rear at rear face, left/right on side panels -->
+  <xacro:property name="cam_front_x"       value="${chassis_length/2}"/>
+  <xacro:property name="cam_front_z"       value="${belly_clearance + chassis_height*0.5}"/>
+  <xacro:property name="cam_side_y"        value="${chassis_width/2}"/>
+  <xacro:property name="cam_side_z"        value="${belly_clearance + chassis_height*0.7}"/>
+
+  <!-- Arm camera mount: on j4_link area, looking forward of EE -->
+  <xacro:property name="arm_cam_x_offset"  value="0.030"/>
+  <xacro:property name="arm_cam_z_offset"  value="-0.020"/>
+
+</robot>

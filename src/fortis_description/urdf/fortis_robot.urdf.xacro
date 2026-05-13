@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="fortis">
+
+  <!--
+    FORTIS top-level URDF.
+    Composes the chassis and arm into one robot model.
+    Loads constants first so all downstream xacro sees them.
+
+    Build:
+      xacro fortis_robot.urdf.xacro > fortis.urdf
+      check_urdf fortis.urdf
+
+    Launch in RViz:
+      ros2 launch fortis_description display.launch.py
+  -->
+
+  <xacro:include filename="$(find fortis_description)/urdf/fortis_constants.xacro"/>
+  <xacro:include filename="$(find fortis_description)/urdf/fortis_inertia.xacro"/>
+  <xacro:include filename="$(find fortis_description)/urdf/fortis_materials.xacro"/>
+
+  <xacro:include filename="$(find fortis_description)/urdf/fortis_chassis.urdf.xacro"/>
+  <xacro:include filename="$(find fortis_description)/urdf/fortis_arm.urdf.xacro"/>
+
+</robot>

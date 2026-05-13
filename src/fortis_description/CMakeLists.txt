@@ -3,17 +3,8 @@ project(fortis_description)
 
 find_package(ament_cmake REQUIRED)
 
-# Install the placeholder asset directories so they are discoverable
-# under the package share once the actual content lands. Each directory
-# carries a placeholder marker so it survives the install step before
-# any real files exist.
 install(
-  DIRECTORY
-    urdf
-    meshes
-    launch
-    config
-    rviz
+  DIRECTORY urdf launch rviz
   DESTINATION share/${PROJECT_NAME}
 )
 
