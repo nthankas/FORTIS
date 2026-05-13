@@ -8,7 +8,6 @@ Optional args:
     rviz_config:=...     # override default rviz config
 """
 
-import os
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.conditions import IfCondition, UnlessCondition
