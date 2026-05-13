@@ -60,6 +60,14 @@
       </geometry>
       <material name="fortis_aluminum"/>
     </visual>
+    <!-- J2 motor body (NEMA 23 + 50:1 planetary) sits at top of L1, axis along Y. -->
+    <visual>
+      <origin xyz="0 0 ${j1_to_j2_axis}" rpy="0 0 0"/>
+      <geometry>
+        <box size="${j2_motor_x} ${j2_motor_y} ${j2_motor_z}"/>
+      </geometry>
+      <material name="fortis_motor_black"/>
+    </visual>
     <collision>
       <origin xyz="0 0 ${j1_to_j2_axis/2}" rpy="0 0 0"/>
       <geometry>
@@ -92,25 +100,38 @@
     (arm_link2_axis - arm_link2_tube)/2 gap at each end is the motor housing.
   -->
   <link name="link2">
+    <!-- Tube spans diagonally from L2 origin (J2 axis) to (arm_link2_axis, j2_offset_y, 0) (J3 axis).
+         Yaw the box to align with that diagonal direction. -->
     <visual>
-      <origin xyz="${arm_link2_axis/2} 0 0" rpy="0 0 0"/>
+      <origin xyz="${arm_link2_axis/2} ${j2_offset_y/2} 0"
+              rpy="0 0 ${atan2(j2_offset_y, arm_link2_axis)}"/>
       <geometry>
         <box size="${arm_link2_tube} ${arm_tube_side} ${arm_tube_side}"/>
       </geometry>
       <material name="fortis_carbon_fiber"/>
     </visual>
+    <!-- J3 motor body (NEMA 17 + Cricket) at the far end of L2, axis along Y. -->
+    <visual>
+      <origin xyz="${arm_link2_axis} ${j2_offset_y} 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="${j3_motor_x} ${j3_motor_y} ${j3_motor_z}"/>
+      </geometry>
+      <material name="fortis_motor_black"/>
+    </visual>
     <collision>
-      <origin xyz="${arm_link2_axis/2} 0 0" rpy="0 0 0"/>
+      <origin xyz="${arm_link2_axis/2} ${j2_offset_y/2} 0"
+              rpy="0 0 ${atan2(j2_offset_y, arm_link2_axis)}"/>
       <geometry>
         <box size="${arm_link2_tube} ${arm_tube_side} ${arm_tube_side}"/>
       </geometry>
     </collision>
-    <!-- CoM at 75% toward J3: NEMA 17 + Cricket at J3 end dominates CF tube. -->
+    <!-- CoM at 75% toward J3 along the tube, and biased toward the Y offset
+         since the NEMA 17 + Cricket sit at the offset position, not on tube axis. -->
     <xacro:box_inertia m="${arm_link2_mass}"
                        x="${arm_link2_axis}"
                        y="${arm_tube_side}"
                        z="${arm_tube_side}"
-                       xyz="${arm_link2_axis*0.75} 0 0"/>
+                       xyz="${arm_link2_axis*0.75} ${j2_offset_y*0.6} 0"/>
   </link>
 
   <joint name="joint_j2" type="revolute">
@@ -125,31 +146,44 @@
 
   <!-- =================== J3: elbow pitch (revolute about Y) =================== -->
   <link name="link3">
+    <!-- Tube spans diagonally from L3 origin (J3 axis) to (arm_link3_axis, j3_offset_y, 0). -->
     <visual>
-      <origin xyz="${arm_link3_axis/2} 0 0" rpy="0 0 0"/>
+      <origin xyz="${arm_link3_axis/2} ${j3_offset_y/2} 0"
+              rpy="0 0 ${atan2(j3_offset_y, arm_link3_axis)}"/>
       <geometry>
         <box size="${arm_link3_tube} ${arm_tube_side} ${arm_tube_side}"/>
       </geometry>
       <material name="fortis_carbon_fiber"/>
     </visual>
+    <!-- J4 servo (Hitec D845WP) at the far end of L3, axis along Y. -->
+    <visual>
+      <origin xyz="${arm_link3_axis} ${j3_offset_y} 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="${j4_motor_x} ${j4_motor_y} ${j4_motor_z}"/>
+      </geometry>
+      <material name="fortis_motor_black"/>
+    </visual>
     <collision>
-      <origin xyz="${arm_link3_axis/2} 0 0" rpy="0 0 0"/>
+      <origin xyz="${arm_link3_axis/2} ${j3_offset_y/2} 0"
+              rpy="0 0 ${atan2(j3_offset_y, arm_link3_axis)}"/>
       <geometry>
         <box size="${arm_link3_tube} ${arm_tube_side} ${arm_tube_side}"/>
       </geometry>
     </collision>
-    <!-- CoM at 70% toward J4: D845WP servo at J4 end. -->
+    <!-- CoM at 70% toward J4 along the tube, biased toward Y offset where J4
+         servo sits (sign matches j3_offset_y -> flipped from j2 side). -->
     <xacro:box_inertia m="${arm_link3_mass}"
                        x="${arm_link3_axis}"
                        y="${arm_tube_side}"
                        z="${arm_tube_side}"
-                       xyz="${arm_link3_axis*0.70} 0 0"/>
+                       xyz="${arm_link3_axis*0.70} ${j3_offset_y*0.6} 0"/>
   </link>
 
   <joint name="joint_j3" type="revolute">
     <parent link="link2"/>
     <child  link="link3"/>
-    <origin xyz="${arm_link2_axis} 0 0" rpy="0 0 0"/>
+    <!-- Y component is the lateral stow offset along J2 rotation axis. -->
+    <origin xyz="${arm_link2_axis} ${j2_offset_y} 0" rpy="0 0 0"/>
     <axis xyz="0 1 0"/>
     <limit lower="${j3_lower}" upper="${j3_upper}"
            effort="${j3_effort}" velocity="${j_velocity}"/>
@@ -181,7 +215,8 @@
   <joint name="joint_j4" type="revolute">
     <parent link="link3"/>
     <child  link="link4"/>
-    <origin xyz="${arm_link3_axis} 0 0" rpy="0 0 0"/>
+    <!-- Zigzag flip: J3 offset is +Y (opposite to J2 which was -Y). -->
+    <origin xyz="${arm_link3_axis} ${j3_offset_y} 0" rpy="0 0 0"/>
     <axis xyz="0 1 0"/>
     <limit lower="${j4_lower}" upper="${j4_upper}"
            effort="${j4_effort}" velocity="${j_velocity}"/>
@@ -217,7 +252,7 @@
   <joint name="link4_to_ee" type="fixed">
     <parent link="link4"/>
     <child  link="ee"/>
-    <origin xyz="${arm_link4_axis} 0 0" rpy="0 0 0"/>
+    <origin xyz="${arm_link4_axis} ${j4_offset_y} 0" rpy="0 0 0"/>
   </joint>
 
   <!-- =================== gripper jaws =================== -->
@@ -292,16 +327,22 @@
   </joint>
 
   <!-- =================== arm camera (OAK-D Pro AF) =================== -->
+  <!--
+    Camera body rotated 90 deg about Z so the 97 mm long dimension lies along
+    link4's local +Y (transverse to the arm tube, parallel to the gripper
+    jaw-opening axis). Lens still points along link4's +X (arm-forward), so
+    the optical frame transform downstream is unchanged.
+  -->
   <link name="arm_camera_link">
     <visual>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <origin xyz="0 0 0" rpy="0 0 ${pi/2}"/>
       <geometry>
         <box size="${oak_pro_x} ${oak_pro_y} ${oak_pro_z}"/>
       </geometry>
       <material name="fortis_camera_cyan"/>
     </visual>
     <collision>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <origin xyz="0 0 0" rpy="0 0 ${pi/2}"/>
       <geometry>
         <box size="${oak_pro_x} ${oak_pro_y} ${oak_pro_z}"/>
       </geometry>
@@ -309,7 +350,8 @@
     <xacro:box_inertia m="${oak_pro_mass}"
                        x="${oak_pro_x}"
                        y="${oak_pro_y}"
-                       z="${oak_pro_z}"/>
+                       z="${oak_pro_z}"
+                       rpy="0 0 ${pi/2}"/>
   </link>
 
   <!--

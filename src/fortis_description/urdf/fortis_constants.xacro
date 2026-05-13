@@ -45,19 +45,58 @@
                         brackets add length on each side of the CF tube.
     The difference per segment is split evenly when placing the tube visual.
   -->
+  <!--
+    Axis-to-axis X-projections (along the tube), NOT diagonal distances.
+    The arm has lateral stow offsets at each joint (j*_offset_y below) so the
+    full 3D distance from one joint axis to the next is sqrt(axis^2 + offset_y^2).
+    These values were back-computed from CAD-extracted joint origins.
+  -->
   <xacro:property name="j1_to_j2_axis"   value="0.091"/>  <!--  3.59 in -->
-  <xacro:property name="arm_link2_axis"  value="0.411"/>  <!-- 16.16 in, J2 axis to J3 axis -->
-  <xacro:property name="arm_link3_axis"  value="0.300"/>  <!-- 11.82 in, J3 axis to J4 axis -->
-  <xacro:property name="arm_link4_axis"  value="0.068"/>  <!--  2.68 in, J4 axis to EE attach -->
+  <xacro:property name="arm_link2_axis"  value="0.404"/>  <!-- 15.91 in, J2->J3 X-projection (3D dist 0.411) -->
+  <xacro:property name="arm_link3_axis"  value="0.295"/>  <!-- 11.61 in, J3->J4 X-projection (3D dist 0.300) -->
+  <xacro:property name="arm_link4_axis"  value="0.060"/>  <!--  2.36 in, J4 axis to EE attach (CAD verified) -->
   <xacro:property name="ee_to_gripper"   value="0.030"/>  <!--  1.20 in, EE attach to gripper base -->
+
+  <!--
+    Lateral "stow" offsets at each joint along the joint's rotation axis (local Y).
+    This is what lets L2's plane of motion sit alongside L1's plane instead of
+    on top of it, so the arm can fold flat. Sign convention follows REP-103
+    (+Y = chassis left, -Y = chassis right). Per FORTIS spec:
+      J2 motor mounts on chassis-right side -> j2_offset_y is NEGATIVE
+      J3 motor mounts opposite (chassis-left) -> j3_offset_y is POSITIVE
+      J4 mounts same side as J3 (~negligible)  -> j4_offset_y ~ 0
+  -->
+  <xacro:property name="j2_offset_y"     value="-0.073"/> <!-- L2 to J3 axis, CAD-extracted -->
+  <xacro:property name="j3_offset_y"     value="+0.052"/> <!-- L3 to J4 axis, CAD-extracted -->
+  <xacro:property name="j4_offset_y"     value="0.000"/>  <!-- L4 to EE attach; 11 mm in CAD, treated as noise -->
+  <xacro:property name="ee_offset_y"     value="0.000"/>  <!-- EE attach to gripper base -->
 
   <xacro:property name="arm_link2_tube"  value="0.360"/>  <!-- 14.17 in, j2_link CF tube -->
   <xacro:property name="arm_link3_tube"  value="0.208"/>  <!--  8.18 in, j3_link CF tube -->
   <xacro:property name="arm_link4_tube"  value="0.038"/>  <!--  1.50 in, j4_link -->
   <xacro:property name="arm_tube_side"   value="0.0287"/> <!--  1.128 in, square CF tube outer -->
 
-  <!-- Arm base (J1 motor body) sits on chassis, joint_j1 axis at its top. -->
-  <xacro:property name="arm_base_height" value="0.030"/>  <!-- ~NEMA 17 body height -->
+  <!--
+    Arm base (J1 motor body) protrudes above chassis top. The motor body extends
+    DOWN into the chassis; the rotation axis sits at the top of the housing.
+    Value matches CAD-extracted J1 axis height above chassis-arm interface plane.
+  -->
+  <xacro:property name="arm_base_height" value="0.053"/>  <!-- CAD verified -->
+
+  <!--
+    Motor body visual primitives. Catalog dimensions from data sheets; used as
+    cosmetic boxes at each joint origin so the arm renders as a continuous
+    object rather than floating tube segments.
+  -->
+  <xacro:property name="j2_motor_x"      value="0.057"/>  <!-- NEMA 23 cross-section -->
+  <xacro:property name="j2_motor_y"      value="0.120"/>  <!-- NEMA 23 + 50:1 planetary, total length along axis -->
+  <xacro:property name="j2_motor_z"      value="0.057"/>
+  <xacro:property name="j3_motor_x"      value="0.042"/>  <!-- NEMA 17 cross-section -->
+  <xacro:property name="j3_motor_y"      value="0.080"/>  <!-- NEMA 17 + Cricket gearbox, total length along axis -->
+  <xacro:property name="j3_motor_z"      value="0.042"/>
+  <xacro:property name="j4_motor_x"      value="0.040"/>  <!-- Hitec D845WP servo -->
+  <xacro:property name="j4_motor_y"      value="0.038"/>
+  <xacro:property name="j4_motor_z"      value="0.020"/>
 
   <!--
     Composite link masses. Each "linkN" rotates with jointN, so the inertia must
