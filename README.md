@@ -163,7 +163,7 @@ The cross-package seam between safety and drive is exercised by
 | Dev environment | working; CPU `fortis-dev` is the default, opt-in `fortis-dev-gpu` (Isaac ROS Common base) staged for FORTIS PC / IdeaPad / Jetson |
 | `fortis_safety` | working; mission FSM + REPL console; end-to-end ROS round trip verified |
 | `fortis_msgs` | working; 4 messages + 1 action |
-| `fortis_comms` | X-drive kinematics in production. The earlier `odrive_s1.py` / `motor_base.py` / `ekf.py` helpers have been moved to `legacy/deprecated_*` and are slated for replacement by upstream packages (`odrive_ros2_control`, `robot_localization`). See `docs/adr/` and `docs/CLEANUP_AUDIT.md` Section 2. |
+| `fortis_comms` | X-drive kinematics in production. The earlier `odrive_s1.py` / `motor_base.py` / `ekf.py` helpers have been moved to `legacy/deprecated_*` and are slated for replacement by upstream packages (`odrive_ros2_control`, `robot_localization`). See `docs/adr/` and `legacy/README.md`. |
 | `fortis_drive` | working; gated by mission state |
 | `fortis_arm` | scaffold; gripper services (`open_gripper`, `close_gripper`) gated by mission state. The `move_to_pose` action-server scaffold previously embedded in this node has been retired to `legacy/deprecated_arm_action/`; the planned replacement is a thin gate over MoveIt 2's `MoveGroup`, see `docs/adr/`. **IK / trajectory / Teensy serial deferred.** Firmware-side skeleton + protocol live under `firmware/teensy/`. |
 | `fortis_bringup` | `bringup.launch.py` composes `mission_state_node` + `drive_node`; `sim.launch.py` and `teleop.launch.py` are still stubs (`LogInfo("TODO: not implemented")`). Arm-controller and perception includes pending. |
