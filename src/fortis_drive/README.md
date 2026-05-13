@@ -26,8 +26,7 @@ This node consumes the kinematics from `fortis_comms` and is independent of the
 motor-driver layer, so the ODrive specifics above are hardware reference only.
 The earlier `fortis_comms/odrive_s1.py` interim CAN wrapper has been retired
 to `legacy/deprecated_motor_stack/odrive_s1.py` and will be replaced by the
-upstream `odrive_ros2_control` plugin via `ros2_control`; see
-`docs/CLEANUP_AUDIT.md` Section 2.1.
+upstream `odrive_ros2_control` plugin via `ros2_control`.
 
 ## Topics
 

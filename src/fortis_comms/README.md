@@ -2,7 +2,7 @@
 
 X-drive kinematics, packaged as an ament_python ROS 2 library. Originally a pre-ROS Python module under `control/fortis_comms`; promoted to a first-class colcon package so consumers (`fortis_drive` today) can declare it as a dependency instead of importing through a `sys.path` shim.
 
-The package previously also shipped `motor_base.py`, `odrive_s1.py`, and `ekf.py` interim helpers. Those have been retired to `legacy/deprecated_motor_stack/` and `legacy/deprecated_ekf/` and will be replaced by upstream packages (`odrive_ros2_control`, `robot_localization`). See `docs/CLEANUP_AUDIT.md` Section 2 for the migration plan.
+The package previously also shipped `motor_base.py`, `odrive_s1.py`, and `ekf.py` interim helpers. Those have been retired to `legacy/deprecated_motor_stack/` and `legacy/deprecated_ekf/` and will be replaced by upstream packages (`odrive_ros2_control`, `robot_localization`).
 
 ## Contents
 
