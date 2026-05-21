@@ -1,7 +1,64 @@
-# FORTIS bringup parameters (placeholder).
+# FORTIS bringup parameter defaults.
 #
-# Per-node parameter blocks will live here, keyed by fully-qualified
-# node name. Kept empty for now so the file can be loaded without
-# overriding any defaults.
+# Loaded by fortis_bringup/launch/bringup.launch.py and applied per node
+# via the Node(parameters=[...]) argument. Each top-level key is a
+# fully-qualified node name; values under "ros__parameters:" are the
+# defaults that node will see at startup unless a launch arg overrides.
 #
-# TODO: populate
+# Today no fortis_* node calls declare_parameter() (see
+# src/fortis_drive/README.md "Parameters" section for the rationale:
+# the module-level constants were left in code to make accidental
+# override impossible). Loading this YAML against undeclared parameters
+# is a no-op in ROS 2 Humble: the parameter is registered but no code
+# reads it. The file is forward-looking documentation of the values
+# that would become overridable once the corresponding nodes adopt
+# declare_parameter() in a deliberate, per-node change.
+#
+# What CANNOT be set here:
+#   - ROS_DOMAIN_ID. This is an environment variable, not a ROS
+#     parameter. The dev container exports ROS_DOMAIN_ID=42 from
+#     docker/docker-compose.yml; conftest.py overrides it to a
+#     per-PID value during launch_testing runs. Set it before
+#     launching, not from this file.
+#   - QoS profiles. QoS is configured per-publisher/per-subscriber in
+#     code, not via parameters. The /fortis/mission_state contract
+#     (TRANSIENT_LOCAL + RELIABLE, depth 1) is locked across
+#     mission_state_node, drive_node, and arm_controller; the
+#     parameter value below is documentation only and does not
+#     reconfigure the publishers/subscribers.
+
+mission_state_node:
+  ros__parameters:
+    # QoS values are documentation only. Actual QoS is set in
+    # fortis_safety/mission_state_node.py and must stay in lockstep
+    # with the subscribers in fortis_drive and fortis_arm.
+    mission_state_qos_durability: "TRANSIENT_LOCAL"
+    mission_state_qos_reliability: "RELIABLE"
+    mission_state_qos_depth: 1
+
+drive_node:
+  ros__parameters:
+    # Reject-warning throttle interval, seconds. Drive node logs at
+    # most one rejection warning per state name per this interval.
+    # Hardcoded as REJECT_LOG_THROTTLE_S in drive_node.py.
+    reject_log_throttle_s: 1.0
+    # cmd_vel watchdog placeholder. When the operator stops sending
+    # /cmd_vel, the drive will eventually need to publish zeros
+    # rather than freezing at the last value. Not implemented yet;
+    # the value below is the proposed default. Wire up via the
+    # watchdog-on-cmd-vel feature when bringup-on-hardware needs it.
+    cmd_vel_timeout_s: 0.5
+
+arm_controller:
+  ros__parameters:
+    # Reject-warning throttle interval, seconds. Same role as
+    # drive_node above. Hardcoded as REJECT_LOG_THROTTLE_S in
+    # arm_controller_node.py.
+    reject_log_throttle_s: 1.0
+    # Teensy heartbeat watchdog rate placeholder. The Teensy 4.1
+    # firmware (firmware/teensy/main.ino) expects a heartbeat every
+    # 250 ms; if a heartbeat is missed for this many consecutive
+    # cycles, the Teensy latches a fault and the arm controller must
+    # surface it. Not wired up until the Teensy serial bridge lands.
+    teensy_heartbeat_period_s: 0.25
+    teensy_heartbeat_miss_threshold: 3
