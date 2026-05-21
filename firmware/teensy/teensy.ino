@@ -12,19 +12,23 @@
 //
 // This is a SKELETON. Search for "TODO" for the bits left as stubs.
 
-#include <Arduino.h>
-#include <EEPROM.h>
-#include <Servo.h>
-#include <TeensyStep.h>
-
 // ---------------------------------------------------------------------------
-// Build-time flags
+// Build-time flags (defined before includes so MOCK_MODE can gate TeensyStep)
 // ---------------------------------------------------------------------------
 
 #define MOCK_MODE           0   // 1 = no GPIO writes, all motor I/O -> Serial
 #define FIRMWARE_BUILD_ID   0u  // optional: set from build system (git short)
 #define PROTO_MAJOR         1
 #define PROTO_MINOR         0
+
+#include <Arduino.h>
+#include <EEPROM.h>
+#include <Servo.h>
+#if !MOCK_MODE
+#include <teensystep4.h>
+using TS4::Stepper;
+using TS4::StepperGroup;
+#endif
 
 // ---------------------------------------------------------------------------
 // Pin map (must match PROTOCOL.md section 1)
@@ -183,10 +187,15 @@ static_assert(sizeof(EepromSlot) == 32, "EepromSlot must be 32 bytes");
 // TeensyStep + Servo objects
 // ---------------------------------------------------------------------------
 
+#if !MOCK_MODE
 static Stepper g_j1(PIN_J1_STEP, PIN_J1_DIR);
 static Stepper g_j2(PIN_J2_STEP, PIN_J2_DIR);
 static Stepper g_j3(PIN_J3_STEP, PIN_J3_DIR);
-static StepControl g_motion;
+static StepperGroup g_motion{g_j1, g_j2, g_j3};
+static inline bool motionRunning() {
+    return g_j1.isMoving || g_j2.isMoving || g_j3.isMoving;
+}
+#endif
 
 static Servo g_j4_servo;
 static Servo g_gripper_servo;
@@ -513,7 +522,7 @@ static void stopAllMotion() {
 #if MOCK_MODE
     Serial.println(F("[MOCK] stop_all"));
 #else
-    if (g_motion.isRunning()) g_motion.stopAsync();
+    if (motionRunning()) g_motion.stopAsync();
 #endif
     g_state.state_flags &= ~STATE_MOVING;
 }
@@ -580,8 +589,8 @@ static void handleSetJointTargets(uint8_t seq, const uint8_t *p, uint8_t len) {
     g_j1.setTargetAbs(j1);
     g_j2.setTargetAbs(j2);
     g_j3.setTargetAbs(j3);
-    if (g_motion.isRunning()) g_motion.stopAsync();
-    g_motion.moveAsync(g_j1, g_j2, g_j3);
+    if (motionRunning()) g_motion.stopAsync();
+    g_motion.startMove();
 #endif
     g_state.state_flags |= STATE_MOVING;
     writeServos(j4, gr);
@@ -762,7 +771,7 @@ static void scanFaults() {
 
 static void serviceMotion() {
 #if !MOCK_MODE
-    if (!g_motion.isRunning() && (g_state.state_flags & STATE_MOVING)) {
+    if (!motionRunning() && (g_state.state_flags & STATE_MOVING)) {
         g_state.state_flags &= ~STATE_MOVING;
     }
 #endif
@@ -804,6 +813,9 @@ void setup() {
     pinMode(PIN_J3_ALM, INPUT_PULLUP);
     pinMode(PIN_ESTOP,  INPUT_PULLUP);
     pinMode(PIN_LED,    OUTPUT);
+
+    // Initialize TeensyStep4 (sets up the default timer module)
+    TS4::begin();
 
     // Configure TeensyStep
     g_j1.setMaxSpeed(kJ1Cfg.max_speed_sps).setAcceleration(kJ1Cfg.max_accel_sps2);
