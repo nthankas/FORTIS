@@ -32,7 +32,7 @@ malformed frame), flag it; don't fix it yourself.
 
 - **MCU:** Teensy 4.1 (iMXRT1062, 600 MHz, 3.3 V logic)
 - **J1, J2, J3:** NEMA-23 closed-loop steppers via **CL57T-V41** drivers (step/dir/ena, optoisolated 5 V inputs)
-- **Level shifters:** **SN74HCT245N** — one for outbound STEP/DIR/ENA (A→B, 3.3 V→5 V), one for inbound ALM (B→A, 5 V→3.3 V)
+- **Level shifters:** **TI TXS0108E** 8-bit bidirectional auto-direction translator (marking `YF08E`) — one outbound for STEP/DIR/ENA (3.3 V→5 V), one inbound for ALM (5 V→3.3 V). OE is active-HIGH; no DIR pin. B-side outputs are open-drain (1.2 Mbps cap per TI SCES642H); STEP at ~64 kHz is well within spec. The push-pull TXB0108 is a drop-in firmware-compatible alternative if open-drain edges turn out to be too soft.
 - **J4:** Hitec D845WP servo, hardware PWM @ 50 Hz, 500–2500 µs
 - **Gripper:** generic hobby servo, hardware PWM @ 50 Hz, 1000–2000 µs
 - **Host link:** USB CDC serial, 1 000 000 baud
@@ -51,7 +51,8 @@ update PROTOCOL.md §1 and the `#define` block at the top of `main.ino` together
 | Shared driver ENABLE (active-low) | 9 |
 | J4 servo (FlexPWM3.1.B) | 28 |
 | Gripper servo (FlexPWM3.1.A) | 29 |
-| SN74HCT245N /OE / DIR | 14 / 15 |
+| Level-shifter OE (active-HIGH) | 14 |
+| (reserved; was SN74HCT245N DIR) | 15 |
 | External E-STOP (active-low, pull-up) | 21 |
 | Status LED | 13 (built-in) |
 
@@ -155,7 +156,7 @@ reason.
 
 1. **Resolve §8.1** so `arduino-cli compile` succeeds.
 2. **Compile + upload to a real Teensy 4.1.** Confirm the LED blinks (heartbeat indicator) and that USB serial enumerates at 1 Mbaud.
-3. **Scope STEP/DIR signals at the SN74HCT245N B-side outputs** before connecting drivers. Verify clean 5 V edges at the expected pin map. Catches level-shifter wiring bugs without smoking a driver.
+3. **Scope STEP/DIR signals at the TXS0108E B-side outputs** before connecting drivers. Verify clean 5 V edges at the expected pin map. Catches level-shifter wiring bugs without smoking a driver. TXS0108E B-side is open-drain — if edges look soft under capacitive load, add ~10 k pull-ups on the 5 V side per TI's datasheet.
 4. **Wire one driver (J1).** Verify ENA polarity with a multimeter (see §9). Move the joint slowly with a `CMD_SET_JOINT_TARGETS` from the host (use the mock's host-side test client as a starting point).
 5. **Force a driver fault** (e.g., disconnect a motor phase) and verify `FAULT_DRIVER_ALARM_J1` is raised in `RSP_STATUS` and an `EVT_FAULT` is emitted.
 6. **Repeat for J2, J3.**
