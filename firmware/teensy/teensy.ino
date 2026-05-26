@@ -79,8 +79,15 @@ static const StepperCfg kJ1Cfg = { 200, 8, 8000, 20000 };
 static const StepperCfg kJ2Cfg = { 200, 8, 8000, 20000 };
 static const StepperCfg kJ3Cfg = { 200, 8, 8000, 20000 };
 
-static const uint16_t kJ4MinUs      = 500;
-static const uint16_t kJ4MaxUs      = 2500;
+// D845WP safe operating range, calibrated on the physical unit on 2026-05-20:
+// observed stall (current spikes) below ~700 us and above ~2000 us. 100 us
+// margin pulled in on the low end, 0 us on the high. Hitec spec is 500-2500
+// but the individual servo's mechanical endstops are tighter; commanding past
+// these values causes the gearbox to stall and overdraw current. If the
+// physical J4 servo is ever replaced, re-characterize using
+// firmware/teensy/tests/servo_sweep/ and update these constants.
+static const uint16_t kJ4MinUs      = 800;
+static const uint16_t kJ4MaxUs      = 2000;
 static const uint16_t kJ4DefaultUs  = 1500;
 
 static const uint16_t kGripperMinUs     = 1000;
