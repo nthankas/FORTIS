@@ -6,7 +6,7 @@ Calibration is a **USB-over-Serial** workflow against one S1 at a time. CAN is s
 
 ## What you need on the bench
 
-- One ODrive S1 (KIT-S1-M8325s-01) with 48 V supply, brake resistor wired, **no CAN cable yet**
+- One ODrive S1 (KIT-S1-M8325s-01) with 48 V supply, brake resistor wired, **no CAN cable yet**. (Calibration on a bare shaft is also possible without the brake resistor — see "Calibration without a brake resistor" below for the required config override.)
 - One M8325s motor, free to spin a few revolutions (no load on the shaft, no wheel attached)
 - USB-C cable, S1 to host
 - `odrivetool` already installed (the `odrive` pip dep in `docker/Dockerfile.dev` gives you this; runs on host or inside the dev container with `--device=/dev/ttyACM0` mapped through)
@@ -23,6 +23,44 @@ Calibration is a **USB-over-Serial** workflow against one S1 at a time. CAN is s
 | Drive | direct (no gearbox) | BOM |
 | Recommended motor current limit (bench) | 20 A | conservative for initial spin-up; bump later once thermals are characterised |
 | Recommended motor velocity limit (bench) | 10 turn/s | safe for unloaded shaft; ≈ 0.66 m/s at the wheel after a 0.1016 m radius is attached |
+
+## Calibration without a brake resistor
+
+The brake resistor exists to dump regenerative current when a motor decelerates. With nothing attached to dump into, regen energy lands on the 48 V bus cap; if the cap can't absorb it, the bus voltage rises past the OV trip (~56 V) and the S1 faults.
+
+For **calibration of a bare shaft** (no wheel, no load, low speeds) the regen energy is small enough that the bus cap handles it. Configure the S1 to never try to actively brake into a missing resistor, and you can run all 7 steps below without one.
+
+### Scope
+
+| Allowed without brake resistor | Not allowed without brake resistor |
+|---|---|
+| `MOTOR_CALIBRATION` (step 4a) — DC injection only, no rotation | Attaching a wheel and spinning it |
+| `ENCODER_OFFSET_CALIBRATION` (step 4b) — slow sweep, bare shaft | Bringing up `fortis_control` from ROS |
+| Step 6 test spin at `input_vel = 1.0` on a bare shaft | Driving `/cmd_vel` on the bench |
+
+In short: everything in this runbook is fine. Everything in `src/fortis_control/README.md` is not.
+
+### Config override
+
+Add this to the bus section of step 3 (it replaces the default `dc_max_negative_current = -10`):
+
+```python
+# Calibration-only override when no brake resistor is wired:
+odrv0.config.dc_max_negative_current = 0      # do not actively brake
+odrv0.config.brake_resistor0.enable = False   # disable the brake chopper
+odrv0.config.brake_resistor0.resistance = 0
+```
+
+If the test spin in step 6 trips out with `ERROR_DC_BUS_OVER_REGEN_CURRENT` or `ERROR_DC_BUS_OVER_VOLTAGE_TRIP`, lower `vel_limit` to 2 turn/s and retry.
+
+### Before going further
+
+The next phase — `src/fortis_control/bench_one_motor.launch.py` and beyond — requires a brake resistor wired in. Before powering through that:
+
+1. Re-run step 3 with the canonical values (`dc_max_negative_current = -10`, brake resistor enabled with the actual resistance value, e.g. `2.0` Ω for the standard kit resistor).
+2. `odrv0.save_configuration()` again.
+
+Skipping that re-config is the most likely way to lose a controller.
 
 ## Prerequisite: USB passthrough on Windows + WSL2
 
