@@ -130,13 +130,24 @@ Optical frames follow ROS REP-103 (Z forward, X right, Y down) so they
 plug directly into `depthai_ros_driver_v3` and `image_pipeline` without
 remapping.
 
+## ros2_control wiring
+
+`urdf/fortis_chassis.ros2_control.xacro` contains the `<ros2_control>`
+system block for the four wheels. It is included from
+`fortis_robot.urdf.xacro` only when the `enable_ros2_control:=true`
+xacro arg is passed. `display.launch.py` (RViz only) does not pass it,
+so the legacy RViz workflow keeps working unchanged. The
+`fortis_control` package's launch files pass it to drive real motors
+via `odrive_ros2_control`. See `docs/adr/0002-odrive-ros2-control-integration.md`.
+
 ## Next steps (not in this package)
 
-1. `ros2_control` `<ros2_control>` block: add to a separate xacro that
-   includes this one, wires up `odrive_ros2_control` for wheels and the
-   custom Teensy SystemInterface for the arm.
-2. MoveIt 2 setup_assistant: point at the expanded URDF, generate
+1. MoveIt 2 setup_assistant: point at the expanded URDF, generate
    `fortis_moveit_config`. Self-collision matrix will be quick because
    the arm chain is clean.
+2. Arm `<ros2_control>` block (Teensy SystemInterface). Sibling xacro
+   to `fortis_chassis.ros2_control.xacro`; deferred until the Teensy
+   serial bridge node lands and the protocol can be plumbed to a
+   real `hardware_interface::SystemInterface`.
 3. `robot_localization` ekf_node: configure with wheel odometry +
    `arm_camera_optical_frame` VIO from cuVSLAM / Basalt.

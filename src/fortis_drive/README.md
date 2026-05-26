@@ -24,9 +24,11 @@ The drivetrain (per `FORTIS_FINAL_BOM`):
 
 This node consumes the kinematics from `fortis_comms` and is independent of the
 motor-driver layer, so the ODrive specifics above are hardware reference only.
-The earlier `fortis_comms/odrive_s1.py` interim CAN wrapper has been retired
-to `legacy/deprecated_motor_stack/odrive_s1.py` and will be replaced by the
-upstream `odrive_ros2_control` plugin via `ros2_control`.
+The earlier `fortis_comms/odrive_s1.py` interim CAN wrapper was retired to
+`legacy/deprecated_motor_stack/odrive_s1.py`; the production motor-side
+integration is `odrive_ros2_control` (see `src/fortis_control/` and
+`docs/adr/0002-odrive-ros2-control-integration.md`). `drive_node` publishes
+into the velocity controller's command topic — see Topics below.
 
 ## Topics
 
@@ -34,8 +36,9 @@ upstream `odrive_ros2_control` plugin via `ros2_control`.
 |---|---|---|---|
 | `/cmd_vel` | `geometry_msgs/Twist` | subscribed | desired chassis velocity (`linear.x` = forward, `linear.y` = strafe, `angular.z` = yaw rate) |
 | `/fortis/mission_state` | `std_msgs/String` | subscribed | latched (TRANSIENT_LOCAL + RELIABLE) so we get the latest state on connect |
-| `/fortis/drive/wheel_velocities` | `fortis_msgs/WheelVelocities` | published | per-wheel rad/s, one per accepted `/cmd_vel` |
+| `/fortis/drive/wheel_velocities` | `fortis_msgs/WheelVelocities` | published | per-wheel rad/s, one per accepted `/cmd_vel`. Kept during ros2_control bring-up; slated for retirement once the controller path is bench-verified. |
 | `/fortis/drive/zero_velocities` | `fortis_msgs/WheelVelocities` | published | per-wheel rad/s set to zero, one per rejected `/cmd_vel` |
+| `/wheel_velocity_controller/commands` | `std_msgs/Float64MultiArray` | published | `[fl, fr, rl, rr]` rad/s; consumed by `velocity_controllers/JointGroupVelocityController` from `fortis_control`. Published on BOTH accepted and rejected `/cmd_vel` (zeros on reject) so the controller never coasts at the last accepted setpoint. |
 
 The drive accepts `/cmd_vel` only while the mission state is `ORBIT` or
 `RETURN_HOME`. Anything else (and the bring-up window before any state has been

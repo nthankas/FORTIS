@@ -51,7 +51,8 @@ src/                ROS 2 packages (colcon workspace)
   fortis_drive/     X-drive ROS node, gated by mission state
   fortis_arm/       Arm controller seam (action + gripper services), scaffold
   fortis_bringup/   Top-level launch composition (scaffold, stub launches only)
-  fortis_description/  URDF / xacro + meshes + RViz config (scaffold, OnShape export pending cleanup)
+  fortis_description/  URDF / xacro + meshes + RViz config
+  fortis_control/   ros2_control wiring for the X-drive (odrive_ros2_control)
   fortis_integration_tests/   Cross-package launch_testing
 sim/                Isaac Sim 5.1 work (Windows host, outside the container)
   isaac/xdrive/     Canonical chassis + arm sims, tools, deprecated/, results
@@ -132,20 +133,33 @@ The GPU image preloads these packages so they are available the moment a node co
 
 ## Workspace test pass
 
-Inside the container:
+Inside the container. The first time (or after `tools/vendor_repos.yaml`
+changes), pull in vendored upstream packages:
 
 ```bash
 cd /workspace
+vcs import src < tools/vendor_repos.yaml
+```
+
+Then:
+
+```bash
 source /opt/ros/humble/setup.bash
 colcon build --symlink-install --packages-select \
     fortis_msgs fortis_comms fortis_safety fortis_drive fortis_arm \
-    fortis_bringup fortis_description fortis_integration_tests
+    fortis_bringup fortis_description fortis_control \
+    fortis_integration_tests
 source install/setup.bash
 colcon test --packages-select \
     fortis_msgs fortis_comms fortis_safety fortis_drive fortis_arm \
-    fortis_bringup fortis_description fortis_integration_tests
+    fortis_bringup fortis_description fortis_control \
+    fortis_integration_tests
 colcon test-result --verbose
 ```
+
+`fortis_control` does not currently ship any tests; it is included in
+the build set so the YAML + launch file install paths are exercised on
+every workspace build.
 
 `colcon test` now runs functional pytest / launch_testing only; lint
 (flake8, pep257, copyright, xmllint) moved to pre-commit + the
@@ -163,8 +177,9 @@ The cross-package seam between safety and drive is exercised by
 | Dev environment | working; CPU `fortis-dev` is the default, opt-in `fortis-dev-gpu` (Isaac ROS Common base) staged for FORTIS PC / IdeaPad / Jetson |
 | `fortis_safety` | working; mission FSM + REPL console; end-to-end ROS round trip verified |
 | `fortis_msgs` | working; 4 messages + 1 action |
-| `fortis_comms` | X-drive kinematics in production. The earlier `odrive_s1.py` / `motor_base.py` / `ekf.py` helpers have been moved to `legacy/deprecated_*` and are slated for replacement by upstream packages (`odrive_ros2_control`, `robot_localization`). See `docs/adr/` and `legacy/README.md`. |
-| `fortis_drive` | working; gated by mission state |
+| `fortis_comms` | X-drive kinematics in production. The earlier `odrive_s1.py` / `motor_base.py` / `ekf.py` helpers have been moved to `legacy/deprecated_*`; `odrive_s1.py` is now superseded by `fortis_control` + `odrive_ros2_control`. `robot_localization` integration still pending. See `docs/adr/` and `legacy/README.md`. |
+| `fortis_drive` | working; gated by mission state; also publishes `/wheel_velocity_controller/commands` for `fortis_control` |
+| `fortis_control` | scaffolded; `<ros2_control>` xacro + controller_manager YAMLs + bench-one-motor and full-chassis launch files. Bench bring-up against real hardware pending (calibration runbook at `tools/odrive_calibrate.md`). See `docs/adr/0002-odrive-ros2-control-integration.md`. |
 | `fortis_arm` | scaffold; gripper services (`open_gripper`, `close_gripper`) gated by mission state. The `move_to_pose` action-server scaffold previously embedded in this node has been retired to `legacy/deprecated_arm_action/`; the planned replacement is a thin gate over MoveIt 2's `MoveGroup`, see `docs/adr/`. **IK / trajectory / Teensy serial deferred.** Firmware-side skeleton + protocol live under `firmware/teensy/`. |
 | `fortis_bringup` | `bringup.launch.py` composes `mission_state_node` + `drive_node`; `sim.launch.py` and `teleop.launch.py` are still stubs (`LogInfo("TODO: not implemented")`). Arm-controller and perception includes pending. |
 | `fortis_description` | scaffold; first OnShape URDF export landed but requires cleanup before integration (95 links / 94 joints, naming + topology issues; Adrian + Carlos have the fix list). URDF authoring planned as a dual track: chassis from OnShape cleanup, arm hand-authored xacro |
@@ -176,7 +191,8 @@ The cross-package seam between safety and drive is exercised by
 
 ## Documentation
 
-- `docs/adr/` -- architectural decision records (state representation, MoveIt 2 + state-gate shape, ros2_control wiring)
+- `docs/adr/` -- architectural decision records (dual-container strategy, ODrive ros2_control integration)
+- `tools/odrive_calibrate.md` -- per-S1 `odrivetool` calibration runbook; required before `fortis_control` will spin a motor
 - `sim/README.md` and `sim/isaac/xdrive/CHANGELOG.md` -- simulation state and history
 - `sim/analysis/` -- drivetrain rationale (x-drive vs skid-steer, orbit, torque, pivot)
 - `src/<pkg>/README.md` -- per-package contracts (topics, services, actions, gating rules)

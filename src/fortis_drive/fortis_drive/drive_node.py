@@ -12,18 +12,50 @@ Publishes
     /fortis/drive/wheel_velocities   fortis_msgs/WheelVelocities
         Per-wheel angular velocity command (rad/s at the wheel shaft).
         Republished on every accepted /cmd_vel.
+        Kept alongside the controller-bound topic during the
+        odrive_ros2_control bring-up so existing consumers (tests,
+        Foxglove dashboards) keep working. Slated for retirement once
+        the new path is bench-verified.
 
     /fortis/drive/zero_velocities    fortis_msgs/WheelVelocities
         All-zero wheel velocities. Republished on every rejected /cmd_vel
         so a downstream stop is explicit, not silent.
 
-Why two output topics
----------------------
+    /wheel_velocity_controller/commands   std_msgs/Float64MultiArray
+        Per-wheel angular velocity command (rad/s) for
+        controller_manager's velocity_controllers/JointGroupVelocityController.
+        Array order is locked by fortis_control/config/fortis_drive_controllers.yaml:
+            [fl_wheel_joint, fr_wheel_joint, rl_wheel_joint, rr_wheel_joint]
+        Republished on every accepted /cmd_vel AND on every rejected
+        /cmd_vel (as all zeros), so the controller never has to infer a
+        stop from the absence of a message.
+
+Why two output channels for the same data
+-----------------------------------------
 A safety brake or motor controller should never have to infer "motion is
 suppressed" from the *absence* of a message. The zero_velocities topic is
 the explicit "I would have moved you, but the current state forbids it"
 channel; downstream nodes can react to it the same way they react to
 wheel_velocities (latch onto it, transition state, light an LED, etc.).
+
+The wheel_velocity_controller/commands topic carries the same intent but
+in the shape ros2_control wants. We publish to both because:
+  * fortis_msgs/WheelVelocities preserves the explicit "this is the
+    rejection" semantics via the separate zero_velocities topic for
+    code that reads it (tests, dashboards, future safety hooks).
+  * Float64MultiArray is the only shape JointGroupVelocityController
+    accepts; on rejected /cmd_vel we publish zeros into it so the
+    motors are explicitly commanded to a halt rather than left at the
+    last accepted setpoint.
+
+Wheel-order mapping
+-------------------
+fortis_comms.xdrive_kinematics returns wheel speeds in FL/FR/BL/BR order
+(legacy from the senior-design module). The URDF + ros2_control config
+use FL/FR/RL/RR. The mapping is identity for the first two and a
+naming-only relabel for the last two; we do the relabel at the publish
+boundary so the kinematics module and the WheelVelocities message stay
+untouched. The renaming work itself is tracked as a follow-up.
 
 Gating rules
 ------------
@@ -64,7 +96,7 @@ from rclpy.duration import Duration
 from rclpy.node import Node
 from rclpy.qos import QoSDurabilityPolicy, QoSProfile, QoSReliabilityPolicy
 from rclpy.time import Time
-from std_msgs.msg import String
+from std_msgs.msg import Float64MultiArray, String
 
 
 # --- Constants ---------------------------------------------------------------
@@ -83,6 +115,10 @@ CMD_VEL_TOPIC: str = "/cmd_vel"
 MISSION_STATE_TOPIC: str = "/fortis/mission_state"
 WHEEL_VELOCITIES_TOPIC: str = "/fortis/drive/wheel_velocities"
 ZERO_VELOCITIES_TOPIC: str = "/fortis/drive/zero_velocities"
+#: Topic consumed by velocity_controllers/JointGroupVelocityController as
+#: configured in fortis_control/config/fortis_drive_controllers.yaml.
+#: Array order MUST match that config's `joints:` list.
+WHEEL_CONTROLLER_COMMAND_TOPIC: str = "/wheel_velocity_controller/commands"
 
 #: Throttle-history key used in place of a real state name when logging a
 #: rejection that happened before any /fortis/mission_state arrived. Kept
@@ -142,6 +178,22 @@ def _wheel_command_to_msg(cmd: WheelCommand, stamp: TimeMsg) -> WheelVelocities:
     return msg
 
 
+def _wheel_command_to_controller_array(cmd: WheelCommand) -> Float64MultiArray:
+    """
+    Serialise a WheelCommand into the Float64MultiArray the ros2_control
+    JointGroupVelocityController expects.
+
+    Order is [fl, fr, rl, rr] to match
+    fortis_control/config/fortis_drive_controllers.yaml's `joints:` list.
+    The BL/BR -> RL/RR rename happens here at the boundary; the kinematics
+    module and the WheelVelocities message both still speak BL/BR. See
+    the module docstring "Wheel-order mapping" section.
+    """
+    msg = Float64MultiArray()
+    msg.data = [cmd.fl, cmd.fr, cmd.bl, cmd.br]
+    return msg
+
+
 # --- Node --------------------------------------------------------------------
 
 
@@ -186,6 +238,14 @@ class DriveNode(Node):
         )
         self._zero_pub = self.create_publisher(
             WheelVelocities, ZERO_VELOCITIES_TOPIC, 10
+        )
+        # Bound for ros2_control's JointGroupVelocityController. Single
+        # publisher used for both the accepted and rejected paths -- a
+        # rejected /cmd_vel publishes an all-zero array here so the
+        # controller is explicitly commanded to halt, never left at the
+        # last accepted setpoint waiting for a message that may not come.
+        self._wheel_controller_pub = self.create_publisher(
+            Float64MultiArray, WHEEL_CONTROLLER_COMMAND_TOPIC, 10
         )
 
         self._state_sub = self.create_subscription(
@@ -239,6 +299,7 @@ class DriveNode(Node):
 
         cmd = _twist_to_wheel_command(msg)
         self._wheel_pub.publish(_wheel_command_to_msg(cmd, stamp))
+        self._wheel_controller_pub.publish(_wheel_command_to_controller_array(cmd))
         self.get_logger().debug(
             f"cmd_vel accepted in {self._current_state}: "
             f"Vx={msg.linear.x:.3f} Vy={msg.linear.y:.3f} "
@@ -250,8 +311,16 @@ class DriveNode(Node):
     # --- Helpers ------------------------------------------------------------
 
     def _publish_zero(self, stamp: TimeMsg) -> None:
-        """Publish all-zero wheel velocities on the explicit-stop topic."""
-        self._zero_pub.publish(_wheel_command_to_msg(WheelCommand.zero(), stamp))
+        """Publish all-zero wheel velocities on the explicit-stop topics.
+
+        Emits on both the legacy WheelVelocities zero topic AND the
+        ros2_control controller-bound topic. The controller path must
+        receive zeros explicitly on rejection so it never coasts at the
+        last accepted setpoint.
+        """
+        zero = WheelCommand.zero()
+        self._zero_pub.publish(_wheel_command_to_msg(zero, stamp))
+        self._wheel_controller_pub.publish(_wheel_command_to_controller_array(zero))
 
     def _log_reject(self, state: str | None) -> None:
         """Log a per-state-throttled warning that /cmd_vel was rejected."""

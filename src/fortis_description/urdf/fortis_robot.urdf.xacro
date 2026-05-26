@@ -10,9 +10,31 @@
       xacro fortis_robot.urdf.xacro > fortis.urdf
       check_urdf fortis.urdf
 
-    Launch in RViz:
+    Launch in RViz (no ros2_control wiring):
       ros2 launch fortis_description display.launch.py
+
+    Launch with ros2_control (drives real motors via odrive_ros2_control,
+    consumed by fortis_control launch files):
+      xacro ... enable_ros2_control:=true wheels:=fl can_interface:=can0
   -->
+
+  <!--
+    Arguments. Defaults preserve the legacy RViz-only behaviour so the
+    display.launch.py invocation above keeps working unchanged. Override
+    them from fortis_control launch files to emit the <ros2_control>
+    block needed by controller_manager.
+
+    enable_ros2_control  - if true, include the chassis ros2_control system
+    use_mock_hardware    - if true, mock_components/GenericSystem instead
+                           of the ODrive plugin. CI uses this.
+    wheels               - comma-separated list of wheels to wire
+                           (e.g. "fl" for bench, "fl,fr,rl,rr" for full)
+    can_interface        - SocketCAN interface name (e.g. can0)
+  -->
+  <xacro:arg name="enable_ros2_control" default="false"/>
+  <xacro:arg name="use_mock_hardware"   default="false"/>
+  <xacro:arg name="wheels"              default="fl,fr,rl,rr"/>
+  <xacro:arg name="can_interface"       default="can0"/>
 
   <xacro:include filename="$(find fortis_description)/urdf/fortis_constants.xacro"/>
   <xacro:include filename="$(find fortis_description)/urdf/fortis_inertia.xacro"/>
@@ -20,5 +42,14 @@
 
   <xacro:include filename="$(find fortis_description)/urdf/fortis_chassis.urdf.xacro"/>
   <xacro:include filename="$(find fortis_description)/urdf/fortis_arm.urdf.xacro"/>
+
+  <xacro:if value="$(arg enable_ros2_control)">
+    <xacro:include filename="$(find fortis_description)/urdf/fortis_chassis.ros2_control.xacro"/>
+    <xacro:fortis_chassis_ros2_control
+        name="fortis_chassis_drive"
+        can_interface="$(arg can_interface)"
+        wheels="$(arg wheels)"
+        use_mock_hardware="$(arg use_mock_hardware)"/>
+  </xacro:if>
 
 </robot>

@@ -8,7 +8,7 @@ Reference code from earlier design iterations. Not imported by anything in the c
 
 - `deprecated_motor_stack/motor_base.py` - Abstract `Motor` base class (connect/disconnect/command_velocity, status enum, context manager) that lived at `src/fortis_comms/fortis_comms/motor_base.py`. Replaced by ros2_control + standard ROS 2 packages.
 
-- `deprecated_motor_stack/odrive_s1.py` - Concrete `ODrive_S1` subclass of `Motor` that hand-rolled an ODrive S1 CAN wrapper using python-can; lived at `src/fortis_comms/fortis_comms/odrive_s1.py`. Replaced by ros2_control + standard ROS 2 packages.
+- `deprecated_motor_stack/odrive_s1.py` - Concrete `ODrive_S1` subclass of `Motor` that hand-rolled an ODrive S1 CAN wrapper using python-can; lived at `src/fortis_comms/fortis_comms/odrive_s1.py`. Replaced by `odrive_ros2_control` (vendored in `src/` via `tools/vendor_repos.yaml`) consumed through `src/fortis_control/`. See `docs/adr/0002-odrive-ros2-control-integration.md`.
 
 - `deprecated_ekf/ekf.py` - Six-state EKF (x, y, theta, vx, vy, omega) for X-drive odometry with optical-flow and IMU updates; lived at `src/fortis_comms/fortis_comms/ekf.py`. Replaced by ros2_control + standard ROS 2 packages.
 
