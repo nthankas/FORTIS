@@ -89,11 +89,14 @@ ID. Send me a Slack msg or open a PR comment so I can mirror it on the host side
 |---|---|
 | `python -m py_compile tools/mock_teensy.py` | ✅ pass |
 | `mock_teensy.py --help` | ✅ pass |
-| Constant consistency: `main.ino` ↔ `PROTOCOL.md` ↔ `mock_teensy.py` | ✅ all 33 constants align |
+| Constant consistency: `teensy.ino` ↔ `PROTOCOL.md` ↔ `mock_teensy.py` | ✅ all 33 constants align |
 | Frame start/end/CRC params match across all three | ✅ |
 | Mock round-trip: heartbeat ACK, GET_STATUS, SET_TARGETS, heartbeat-timeout fault | ✅ all 4 cases pass |
-| `arduino-cli compile --fqbn teensy:avr:teensy41 main.ino` | ❌ **BLOCKED** — see §8 |
-| Bench bring-up (real Teensy + drivers + servos) | ❌ not started |
+| Arduino IDE 2.3.8 compile (`teensy.ino`, board=Teensy 4.1, USB=Serial, 600 MHz) | ✅ pass (FLASH 83 KB) |
+| Flash to real Teensy 4.1 + boot LED at 8 Hz watchdog-fault | ✅ verified on bench |
+| `EVT_BOOT` + `EVT_FAULT(HEARTBEAT_TIMEOUT)` frames observed on USB serial @ 1 Mbaud | ✅ verified on bench |
+| `arduino-cli compile --fqbn teensy:avr:teensy41 teensy.ino` | ⏳ not yet attempted (IDE path verified instead) |
+| Bench bring-up (drivers + servos wired) | ❌ not started |
 
 ## 8. Known blockers
 
