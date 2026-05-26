@@ -2,16 +2,21 @@
 
 This document specifies the binary serial protocol between a host (Jetson or PC)
 and the Teensy 4.1 firmware that drives three NEMA-23 closed-loop steppers
-(J1..J3, via CL57T-V41 drivers behind an SN74HCT245N level shifter), one
-high-power waterproof servo (J4, Hitec D845WP), and one hobby-grade gripper
-servo. The protocol is self-contained: it does not depend on any URDF, ROS,
-or higher-level controller stack.
+(J1..J3, via CL57T-V41 drivers behind a TXS0108E bidirectional level
+shifter), one high-power waterproof servo (J4, Hitec D845WP), and one
+hobby-grade gripper servo. The protocol is self-contained: it does not
+depend on any URDF, ROS, or higher-level controller stack.
 
 - Link: USB CDC serial, **1 000 000 baud** (`Serial.begin(1000000)`)
 - Byte order: **little-endian** for all multi-byte fields
-- Logic levels: Teensy is 3.3 V; the SN74HCT245N (HCT family) accepts 3.3 V
-  TTL high on its A-side inputs and drives 5 V CMOS-clean on its B-side
-  outputs into the CL57T-V41 STEP/DIR/ENA optocouplers
+- Logic levels: Teensy is 3.3 V; the TI TXS0108E shifter auto-senses
+  direction per channel and translates A-side signals up to 5 V on the
+  B-side into the CL57T-V41 STEP/DIR/ENA optocouplers. There is no DIR
+  pin to configure. OE is active-HIGH.
+- TXS0108E B-side outputs are open-drain (max 1.2 Mbps per TI datasheet
+  SCES642H). Our STEP rate is ~64 kHz worst-case (8000 sps x 8
+  microstep), well within spec; if STEP edges look soft on a scope, add
+  ~10 k pull-ups on the 5 V side.
 - Frame timing: a complete frame must be received within 50 ms once the start
   byte is seen, otherwise the parser resyncs
 
@@ -19,42 +24,43 @@ or higher-level controller stack.
 
 ## 1. Pin assignments (informative)
 
-These are the pins chosen by `firmware/teensy/main.ino`. They are repeated
+These are the pins chosen by `firmware/teensy/teensy.ino`. They are repeated
 here so a host implementer or hardware integrator can wire the board without
-opening the `.ino` file. Any change to `main.ino` MUST be reflected here.
+opening the `.ino` file. Any change to `teensy.ino` MUST be reflected here.
 
 | Function                       | Teensy pin | Direction (Teensy view) | Notes                                     |
 |--------------------------------|-----------:|-------------------------|-------------------------------------------|
-| J1 STEP                        |  2         | OUT (3V3 -> A1 of '245) | A-side, level-shifted to 5V on B1         |
-| J1 DIR                         |  3         | OUT (3V3 -> A2 of '245) |                                           |
-| J2 STEP                        |  4         | OUT (3V3 -> A3 of '245) |                                           |
-| J2 DIR                         |  5         | OUT (3V3 -> A4 of '245) |                                           |
-| J3 STEP                        |  6         | OUT (3V3 -> A5 of '245) |                                           |
-| J3 DIR                         |  7         | OUT (3V3 -> A6 of '245) |                                           |
-| ENABLE (shared, active-low)    |  9         | OUT (3V3 -> A7 of '245) | Drives ENA- on all three CL57T-V41        |
-| J4 servo PWM                   | 28         | OUT (FlexPWM3.1.B)      | 50 Hz, 500..2500 us pulse                 |
+| J1 STEP                        |  2         | OUT (3V3 -> A1 of LS)   | A-side, level-shifted to 5V on B1         |
+| J1 DIR                         |  3         | OUT (3V3 -> A2 of LS)   |                                           |
+| J2 STEP                        |  4         | OUT (3V3 -> A3 of LS)   |                                           |
+| J2 DIR                         |  5         | OUT (3V3 -> A4 of LS)   |                                           |
+| J3 STEP                        |  6         | OUT (3V3 -> A5 of LS)   |                                           |
+| J3 DIR                         |  7         | OUT (3V3 -> A6 of LS)   |                                           |
+| ENABLE (shared, active-low)    |  9         | OUT (3V3 -> A7 of LS)   | Drives ENA- on all three CL57T-V41        |
+| J4 servo PWM                   | 28         | OUT (FlexPWM3.1.B)      | 50 Hz, 800..2000 us pulse (bench-calibrated D845WP) |
 | Gripper servo PWM              | 29         | OUT (FlexPWM3.1.A)      | 50 Hz, 1000..2000 us pulse                |
-| SN74HCT245N /OE (active-low)   | 14         | OUT                     | Pulled high (disabled) at boot            |
-| SN74HCT245N DIR                | 15         | OUT                     | Tied high in firmware (A->B, fixed)       |
-| J1 ALM (CL57T-V41 ALM+)        | 22         | IN (via second '245)    | See "Driver alarm wiring" below           |
-| J2 ALM                         | 23         | IN (via second '245)    |                                           |
-| J3 ALM                         | 20         | IN (via second '245)    |                                           |
+| Level-shifter OE (active-HIGH) | 14         | OUT                     | Held LOW (Hi-Z) at boot, raised HIGH after pin states settle |
+| (reserved)                     | 15         | unused                  | Was DIR on SN74HCT245N; TXS0108E has no DIR pin |
+| J1 ALM (CL57T-V41 ALM+)        | 22         | IN (via second LS)      | See "Driver alarm wiring" below           |
+| J2 ALM                         | 23         | IN (via second LS)      |                                           |
+| J3 ALM                         | 20         | IN (via second LS)      |                                           |
 | External E-STOP                | 21         | IN, INPUT_PULLUP        | Active-low: low = E-STOP asserted         |
 | Status LED                     | 13         | OUT                     | Built-in LED, blinks on heartbeat         |
 
 ### Driver alarm wiring
 
 The CL57T-V41 ALM output is an open-collector signal referenced to its
-internal optocoupler. Wire ALM+ to a 5 V pull-up on the B-side of a second
-SN74HCT245N (configured B->A, 5 V -> 3.3 V; the HCT '245 tolerates this
-because the A-side is just an input on the Teensy). The firmware reads
-the alarm with internal pull-up and treats **logic low for >5 ms** as an
+internal optocoupler. Wire ALM+ to a 5 V pull-up on the B-side of a
+second TXS0108E level shifter (5 V -> 3.3 V; the shifter auto-senses
+direction, so no DIR configuration is needed). The firmware reads the
+alarm with internal pull-up and treats **logic low for >5 ms** as an
 active alarm (CL57T-V41 ALM is active-low when a fault is latched).
 
-The same '245 used for STEP/DIR is **not** suitable for the return path —
-use a second '245 with DIR tied low, or a dedicated bidirectional shifter.
-This protocol document is agnostic to which level shifter is used as long as
-the Teensy sees clean 3.3 V logic on the ALM pins.
+This protocol document is agnostic to the specific shifter chip as long
+as: (1) OE is asserted active-HIGH, (2) the chip auto-senses direction
+per channel, and (3) the Teensy sees clean 3.3 V logic on the ALM pins.
+Any compatible drop-in (e.g. TXB0108 if the open-drain edges of TXS0108E
+turn out to be too soft) requires no firmware change.
 
 ---
 
