@@ -37,24 +37,20 @@ fortis_description/
 
 ## Tree summary
 
-25 links, 24 joints. Single root `base_link`. No loop closures, no orphans.
+26 links, 25 joints. Single root `base_link`. No loop closures, no orphans.
 
 | Type | Count |
 |---|---|
-| fixed | 14 |
+| fixed | 15 |
 | continuous | 4 (wheels) |
 | revolute | 4 (J1, J2, J3, J4 with limits) |
 | prismatic | 2 (gripper driven + mimic) |
 
-Total mass at default values: 12.71 kg.
-
 ## Source-of-truth dimensions
 
-Extracted from ROS_Expanded_Chassis/urdf/ros_expanded_chassis.urdf, with
-separate values for CF tube physical length and joint-axis-to-joint-axis
-distance (the kinematic span). The two differ because motor housings,
-gearbox flanges, and mounting brackets add length at each end of the CF
-tube.
+Arm chain is fully in-line: every joint axis sits on the arm's local X plane,
+no lateral stow offsets. Tube lengths are slightly shorter than axis-to-axis
+distances to leave room for motor housings at each end.
 
 | Property | Value | Source |
 |---|---|---|
@@ -63,35 +59,39 @@ tube.
 | Wheel diameter | 0.203 m | AndyMark am-0463 |
 | Wheel center positions (X) | ±0.176 m | CAD |
 | Wheel center positions (Y) | ±0.125 m | CAD |
-| J1 axis → J2 axis | 0.091 m (3.59 in) | CAD |
-| J2 axis → J3 axis | 0.411 m (16.16 in) | CAD |
-| J3 axis → J4 axis | 0.300 m (11.82 in) | CAD |
-| J4 axis → EE attach | 0.068 m (2.68 in) | CAD |
-| EE attach → gripper base | 0.030 m (1.20 in) | CAD |
-| j2_link CF tube length | 0.360 m (visual only) | CAD |
+| J1 axis → J2 axis | 0.0559 m (2.199 in) | CAD |
+| J2 axis → J3 axis | 0.3939 m (15.508 in) | CAD |
+| J3 axis → J4 axis | 0.2992 m (11.781 in) | CAD |
+| J4 axis → gripper base mount (X / Z) | 0.0635 m / 0.02286 m (2.5 in / 0.9 in) | CAD |
+| Gripper base plate | 0.1041 × 0.060 × 0.010 m | ServoCity spec |
+| Jaw stroke (per finger) | 0.027 m | ServoCity spec |
+| Finger length (approach) | 0.058 m | ServoCity spec |
+| j2_link CF tube length | 0.350 m (visual only) | CAD |
 | j3_link CF tube length | 0.208 m (visual only) | CAD |
-| j4_link CF tube length | 0.038 m (visual only) | CAD |
-| J1 mount on chassis (X) | +0.0898 m | locked memory (3 in from rear edge) |
+| J1 mount on chassis (X) | +0.0898 m | locked memory |
+| Chassis camera height (all 4) | 0.21514 m (8.47 in) above ground | CAD |
+| Chassis camera edge gap | 0.01933 m (0.761 in) from chassis edge to housing | CAD |
 
 ## Reach (computed forward kinematics, all joints at zero)
 
 | Measurement | Value |
 |---|---|
-| J1 axis to gripper tip | 1.020 m (40.16 in) |
-| J2 axis to gripper tip | 0.929 m (36.57 in) |
-| J2 axis to gripper base | 0.839 m (33.03 in) |
+| J2 axis to gripper TCP (horizontal) | 0.802 m (31.6 in) |
 
-Clears the 30" reach criterion in Success Criteria Matrix V4.0 (T2).
+Still clears the 30" reach criterion in Success Criteria Matrix V4.0 (T2).
 
 ## Joint limits
 
-| Joint | Lower (rad) | Upper (rad) | Effort (Nm) | Velocity (rad/s) |
+| Joint | Lower (rad / m) | Upper (rad / m) | Effort | Velocity |
 |---|---|---|---|---|
-| joint_j1 | -2.967 (-170°) | +2.967 (+170°) | 15.0 | 1.0 |
-| joint_j2 | -1.571 (-90°)  | +1.571 (+90°)  | 40.0 | 1.0 |
-| joint_j3 | -2.618 (-150°) | +2.618 (+150°) | 15.0 | 1.0 |
-| joint_j4 | -1.571 (-90°)  | +1.571 (+90°)  | 3.5  | 1.0 |
-| joint_gripper | 0.0 m | 0.040 m | 20.0 | 0.05 |
+| joint_j1 | -2.967 (-170°) | +2.967 (+170°) | 15.0 Nm | 1.0 rad/s |
+| joint_j2 | -1.571 (-90°)  | +1.571 (+90°)  | 40.0 Nm | 1.0 rad/s |
+| joint_j3 | -2.618 (-150°) | +2.618 (+150°) | 15.0 Nm | 1.0 rad/s |
+| joint_j4 | -1.571 (-90°)  | +1.571 (+90°)  | 3.5 Nm  | 1.0 rad/s |
+| gripper_left_joint | 0.0 m | 0.027 m | 10.0 N | 0.05 m/s |
+
+`gripper_right_joint` mirrors `gripper_left_joint` via a `<mimic>` tag with
+multiplier=-1. Only `gripper_left_joint` is commandable.
 
 Adjust in `urdf/fortis_constants.xacro`.
 
@@ -121,9 +121,10 @@ check_urdf /tmp/fortis.urdf
 - `chassis_body`
 - `fl_wheel`, `fr_wheel`, `rl_wheel`, `rr_wheel`
 - `front_camera_link`, `front_camera_optical_frame` (and rear/left/right)
-- `arm_mount`, `arm_base`, `link1`..`link4`, `ee`
+- `arm_mount`, `arm_base`, `link1`..`link4`
 - `arm_camera_link`, `arm_camera_optical_frame`
-- `jaw_left`, `jaw_right`
+- `gripper_base`, `gripper_left_finger`, `gripper_right_finger`
+- `gripper_tcp` (tool center point for MoveIt grasp planning)
 
 Optical frames follow ROS REP-103 (Z forward, X right, Y down) so they
 plug directly into `depthai_ros_driver_v3` and `image_pipeline` without
