@@ -24,6 +24,43 @@ Calibration is a **USB-over-Serial** workflow against one S1 at a time. CAN is s
 | Recommended motor current limit (bench) | 20 A | conservative for initial spin-up; bump later once thermals are characterised |
 | Recommended motor velocity limit (bench) | 10 turn/s | safe for unloaded shaft; ≈ 0.66 m/s at the wheel after a 0.1016 m radius is attached |
 
+## Prerequisite: USB passthrough on Windows + WSL2
+
+Skip this section if you are calibrating from a native Linux machine — just plug in the S1 and `/dev/ttyACM0` shows up.
+
+If you are running `fortis-dev` inside WSL2 on Windows, WSL2 does not see USB devices by default; they must be forwarded from the Windows host with `usbipd-win`. Inside the container itself, no extra config is needed — `docker/docker-compose.yml` already runs `fortis-dev` with `privileged: true`, so once the device is visible in WSL2 the container sees it for free.
+
+### One-time install on Windows
+
+```powershell
+winget install --interactive --exact dorssel.usbipd-win
+```
+
+### Each session, after plugging in the S1
+
+From a Windows PowerShell prompt (elevated the *first* time per physical S1; a normal prompt is fine after that):
+
+```powershell
+.\tools\attach-odrive.ps1
+```
+
+The script finds any ODrive on the USB bus, binds it the first time, and forwards it into WSL2. Idempotent — running it twice is a no-op.
+
+If PowerShell refuses to run the script ("running scripts is disabled on this system"), invoke it with `powershell -ExecutionPolicy Bypass -File .\tools\attach-odrive.ps1` instead.
+
+Caveats:
+
+- `usbipd attach` does **not** survive unplug or Windows restart. After either, re-run the script.
+- The `bind` step requires admin. The `attach` step does not. So the very first run with a new S1 needs an elevated PowerShell; subsequent runs do not.
+
+### Sanity check from inside WSL or the container
+
+```bash
+./tools/check-odrive-usb.sh
+```
+
+If it prints `OK:` with a device path, you are ready for step 1 below. If it reports no `/dev/ttyACM*` device, go back and run `attach-odrive.ps1` on the Windows host.
+
 ## Steps
 
 ### 1. Plug USB only, launch odrivetool
