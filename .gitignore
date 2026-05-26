@@ -54,3 +54,8 @@ CLAUDE.md
 # Local stack CLI environment (real values; template lives in .env.example)
 .env
 .env.local
+
+# Vendored upstream ROS packages, pulled by `vcs import src < tools/vendor_repos.yaml`.
+# These live in src/ for colcon's sake but the source of truth is the pin in
+# tools/vendor_repos.yaml; committing the clone would freeze it twice.
+src/ros_odrive/

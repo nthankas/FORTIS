@@ -1,0 +1,42 @@
+# controller_manager config for the full 4-wheel FORTIS X-drive.
+#
+# Loaded by fortis_control/launch/drive_hw.launch.py. Pair with the URDF
+# rendered from fortis_robot.urdf.xacro with `wheels:=fl,fr,rl,rr`.
+#
+# Why JointGroupVelocityController and not DiffDriveController:
+#   FORTIS is an X-drive (4 omnis at 45 deg), not differential. The
+#   chassis inverse kinematics lives in fortis_comms.xdrive_kinematics
+#   and is applied by fortis_drive.drive_node, which publishes the four
+#   per-wheel velocities into /wheel_velocity_controller/commands. The
+#   group controller is the thinnest possible transport from those four
+#   numbers to the odrive_ros2_control plugin.
+#
+# Why update_rate: 100 Hz:
+#   The S1 closes its own current loop at ~10-20 kHz; the host loop only
+#   sends new velocity setpoints. 100 Hz matches the ODrive CAN encoder
+#   message cadence (10 ms) so we are never reading stale joint states.
+#   Bump if a future controller (e.g. position trajectory) needs more.
+
+controller_manager:
+  ros__parameters:
+    update_rate: 100  # Hz
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+    wheel_velocity_controller:
+      type: velocity_controllers/JointGroupVelocityController
+
+wheel_velocity_controller:
+  ros__parameters:
+    # Joint order here is the contract with fortis_drive.drive_node: the
+    # Float64MultiArray published on /wheel_velocity_controller/commands
+    # is [fl, fr, rl, rr] in this order. Changing the order here without
+    # updating drive_node will silently swap which motor responds to
+    # which wheel.
+    joints:
+      - fl_wheel_joint
+      - fr_wheel_joint
+      - rl_wheel_joint
+      - rr_wheel_joint
+    interface_name: velocity

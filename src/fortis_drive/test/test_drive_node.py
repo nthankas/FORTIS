@@ -32,12 +32,13 @@ import rclpy
 from geometry_msgs.msg import Twist
 from rclpy.node import Node
 from rclpy.qos import QoSDurabilityPolicy, QoSProfile, QoSReliabilityPolicy
-from std_msgs.msg import String
+from std_msgs.msg import Float64MultiArray, String
 
 from fortis_comms.xdrive_kinematics import WHEEL_RADIUS, xdrive_ik_solver
 from fortis_drive.drive_node import (
     CMD_VEL_TOPIC,
     MISSION_STATE_TOPIC,
+    WHEEL_CONTROLLER_COMMAND_TOPIC,
     WHEEL_VELOCITIES_TOPIC,
     ZERO_VELOCITIES_TOPIC,
     DriveNode,
@@ -149,6 +150,10 @@ class _Harness:
 
         self.wheel_msgs: list[WheelVelocities] = []
         self.zero_msgs: list[WheelVelocities] = []
+        # Float64MultiArray traffic on the ros2_control-bound topic.
+        # drive_node publishes here on BOTH accepted and rejected
+        # /cmd_vel; tests inspect the most recent entry.
+        self.controller_msgs: list[Float64MultiArray] = []
 
         self.helper.create_subscription(
             WheelVelocities,
@@ -160,6 +165,12 @@ class _Harness:
             WheelVelocities,
             ZERO_VELOCITIES_TOPIC,
             self.zero_msgs.append,
+            10,
+        )
+        self.helper.create_subscription(
+            Float64MultiArray,
+            WHEEL_CONTROLLER_COMMAND_TOPIC,
+            self.controller_msgs.append,
             10,
         )
 
@@ -266,6 +277,8 @@ def test_orbit_accepts_cmd_vel_and_publishes_correct_wheel_velocities(harness):
         "expected at least one WheelVelocities message in ORBIT"
     assert len(harness.zero_msgs) == 0, \
         "no zero_velocities should be published when motion is permitted"
+    assert len(harness.controller_msgs) >= 1, \
+        "expected at least one /wheel_velocity_controller/commands message"
 
     expected = _expected_wheel_speeds(0.5, 0.0, 0.0)
     msg = harness.wheel_msgs[-1]
@@ -273,6 +286,15 @@ def test_orbit_accepts_cmd_vel_and_publishes_correct_wheel_velocities(harness):
     assert msg.fr == pytest.approx(expected[1], abs=1e-6)
     assert msg.bl == pytest.approx(expected[2], abs=1e-6)
     assert msg.br == pytest.approx(expected[3], abs=1e-6)
+
+    # Controller-bound Float64MultiArray must carry the same four values
+    # in [fl, fr, rl, rr] order. The kinematics module emits bl/br but
+    # the controller config in fortis_control treats wheel 2/3 as rl/rr
+    # (URDF naming); the rename happens at the publish boundary and we
+    # assert here that the data sequence is preserved through it.
+    arr = harness.controller_msgs[-1]
+    assert list(arr.data) == pytest.approx(expected, abs=1e-6), \
+        "controller array must carry [fl, fr, rl, rr] in that order"
 
 
 def test_idle_rejects_cmd_vel_and_publishes_zeros(harness):
@@ -299,6 +321,14 @@ def test_idle_rejects_cmd_vel_and_publishes_zeros(harness):
     assert msg.fr == 0.0
     assert msg.bl == 0.0
     assert msg.br == 0.0
+
+    # Controller path must also receive an explicit zero, not silence.
+    # The motor controller (downstream) must never coast at the last
+    # accepted setpoint on rejection.
+    assert len(harness.controller_msgs) >= 1, \
+        "rejected /cmd_vel must publish zeros into the controller topic"
+    arr = harness.controller_msgs[-1]
+    assert list(arr.data) == [0.0, 0.0, 0.0, 0.0]
 
 
 def test_return_home_accepts_cmd_vel(harness):
@@ -372,3 +402,35 @@ def test_no_state_received_rejects_cmd_vel(harness):
         "must not publish wheel_velocities before any state has been received"
     assert len(harness.zero_msgs) >= 1, \
         "must publish zero_velocities to make the rejection explicit"
+    assert len(harness.controller_msgs) >= 1, \
+        "rejection in the no-state window must also publish zeros to controller"
+    assert list(harness.controller_msgs[-1].data) == [0.0, 0.0, 0.0, 0.0]
+
+
+def test_controller_array_ordering_matches_kinematics(harness):
+    """
+    The controller_array order is the contract with fortis_control's YAML.
+
+    The yaml's `joints: [fl_wheel_joint, fr_wheel_joint, rl_wheel_joint,
+    rr_wheel_joint]` line is the source of truth for which index of
+    Float64MultiArray.data drives which physical wheel. If the order in
+    drive_node._wheel_command_to_controller_array changes, this test
+    fires before a bench session swaps two motors.
+
+    Asymmetric Twist (vy != 0) so the four wheel speeds are all
+    different and order-sensitive.
+    """
+    harness.publish_state("ORBIT")
+    harness.spin()
+    harness.publish_twist(vx=0.1, vy=0.2, wz=0.3)
+    harness.spin()
+
+    expected = _expected_wheel_speeds(0.1, 0.2, 0.3)
+    arr = harness.controller_msgs[-1]
+    assert len(arr.data) == 4
+    # Pairwise: index 0 = FL, 1 = FR, 2 = RL (kinematics calls BL),
+    #          3 = RR (kinematics calls BR). The rename is naming-only.
+    assert arr.data[0] == pytest.approx(expected[0], abs=1e-6)
+    assert arr.data[1] == pytest.approx(expected[1], abs=1e-6)
+    assert arr.data[2] == pytest.approx(expected[2], abs=1e-6)
+    assert arr.data[3] == pytest.approx(expected[3], abs=1e-6)

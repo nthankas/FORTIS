@@ -1,0 +1,107 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!--
+    fortis_chassis.ros2_control.xacro
+
+    Defines a ros2_control system block that binds the four chassis
+    wheel joints declared in fortis_chassis.urdf.xacro to either the
+    real ODrive plugin (odrive_ros2_control_plugin/ODriveHardwareInterface)
+    or mock_components/GenericSystem for CI / desk testing without CAN.
+
+    Selection is via the use_mock_hardware xacro arg, exactly mirroring
+    the pattern in odrive_botwheel_explorer/description/urdf/diffbot.ros2_control.xacro.
+
+    The wheels arg controls which wheel joints are wired in. A bench
+    launch (only FL on the chain) loads a controller_manager that
+    expects exactly one joint, without complaining about three
+    unanswered CAN node_ids. The four-wheel value is the production
+    default.
+
+    node_id assignments: FL=0, FR=1, RL=2, RR=3. These are written to
+    each S1 via odrivetool during calibration (see
+    tools/odrive_calibrate.md); the xacro just declares the contract.
+    Physical daisy-chain position on the CAN bus is independent of
+    node_id, so do not assume order on the harness implies node_id.
+  -->
+
+  <xacro:macro name="fortis_chassis_ros2_control"
+               params="name
+                       can_interface:=can0
+                       wheels:=fl,fr,rl,rr
+                       use_mock_hardware:=false">
+
+    <ros2_control name="${name}" type="system">
+
+      <xacro:unless value="${use_mock_hardware}">
+        <hardware>
+          <plugin>odrive_ros2_control_plugin/ODriveHardwareInterface</plugin>
+          <param name="can">${can_interface}</param>
+        </hardware>
+      </xacro:unless>
+
+      <xacro:if value="${use_mock_hardware}">
+        <hardware>
+          <plugin>mock_components/GenericSystem</plugin>
+          <param name="calculate_dynamics">true</param>
+        </hardware>
+      </xacro:if>
+
+      <!--
+        Per-wheel joint blocks. Only emitted for wheels present in the
+        `wheels` arg. xacro:if can't directly test list membership, so
+        we test each side with a "contains" expression on the literal
+        list. The four wheels are independent macros to keep the test
+        targets explicit at review time.
+
+        Command interface: velocity (rad/s). State interfaces: position,
+        velocity, effort. odrive_ros2_control auto-selects velocity
+        control mode because that is the only command interface our
+        velocity_controllers/JointGroupVelocityController claims.
+      -->
+
+      <xacro:if value="${'fl' in wheels.split(',')}">
+        <joint name="fl_wheel_joint">
+          <param name="node_id">0</param>
+          <command_interface name="velocity"/>
+          <state_interface name="position"/>
+          <state_interface name="velocity"/>
+          <state_interface name="effort"/>
+        </joint>
+      </xacro:if>
+
+      <xacro:if value="${'fr' in wheels.split(',')}">
+        <joint name="fr_wheel_joint">
+          <param name="node_id">1</param>
+          <command_interface name="velocity"/>
+          <state_interface name="position"/>
+          <state_interface name="velocity"/>
+          <state_interface name="effort"/>
+        </joint>
+      </xacro:if>
+
+      <xacro:if value="${'rl' in wheels.split(',')}">
+        <joint name="rl_wheel_joint">
+          <param name="node_id">2</param>
+          <command_interface name="velocity"/>
+          <state_interface name="position"/>
+          <state_interface name="velocity"/>
+          <state_interface name="effort"/>
+        </joint>
+      </xacro:if>
+
+      <xacro:if value="${'rr' in wheels.split(',')}">
+        <joint name="rr_wheel_joint">
+          <param name="node_id">3</param>
+          <command_interface name="velocity"/>
+          <state_interface name="position"/>
+          <state_interface name="velocity"/>
+          <state_interface name="effort"/>
+        </joint>
+      </xacro:if>
+
+    </ros2_control>
+
+  </xacro:macro>
+
+</robot>

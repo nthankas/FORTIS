@@ -1,0 +1,31 @@
+# vcs import file for in-source third-party ROS 2 packages that are not
+# distributed via apt. After cloning the repo (or any time this file
+# changes), run from the workspace root:
+#
+#     vcs import src < tools/vendor_repos.yaml
+#
+# That clones each repo under src/, where colcon will pick it up on the
+# next build. vcstool is preinstalled in both fortis-dev and
+# fortis-dev-gpu (transitively, via ros-humble-* tooling).
+#
+# Pin policy: every entry pins a specific commit hash, never a branch.
+# Bumping the pin is a deliberate review-time decision because a moving
+# branch can break our build at any push.
+
+repositories:
+
+  # odriverobotics/ros_odrive — upstream ROS 2 packages for the ODrive
+  # Pro / S1 / Micro. Provides:
+  #   - odrive_node:                  standalone CAN node (we don't use this)
+  #   - odrive_ros2_control:          SystemInterface plugin for ros2_control
+  #                                   (THIS is what fortis_control loads)
+  #   - odrive_botwheel_explorer:     example differential drive (reference only)
+  #
+  # Pin: main @ 8ed510b (2026-04-21). Last commit before pin was a YAML-only
+  # change to disable open_loop in the example controllers config; no
+  # behavioural drift expected vs. the README we built fortis_control
+  # against. Bump after a bench-on-hardware retest, not opportunistically.
+  ros_odrive:
+    type: git
+    url: https://github.com/odriverobotics/ros_odrive.git
+    version: 8ed510b11675919df39751016cba200eebaa7d18

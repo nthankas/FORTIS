@@ -1,0 +1,26 @@
+# controller_manager config for the single-wheel bench bring-up.
+#
+# Loaded by fortis_control/launch/bench_one_motor.launch.py. Pair with
+# the URDF rendered from fortis_robot.urdf.xacro with `wheels:=fl`.
+#
+# This config only lists fl_wheel_joint so the controller_manager does
+# not refuse to start because nodes 1/2/3 are not answering on the bus.
+# When the second motor goes on the bench, copy this file with the next
+# joint added, or switch to the full controllers config and the full
+# launch.
+
+controller_manager:
+  ros__parameters:
+    update_rate: 100  # Hz
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+    wheel_velocity_controller:
+      type: velocity_controllers/JointGroupVelocityController
+
+wheel_velocity_controller:
+  ros__parameters:
+    joints:
+      - fl_wheel_joint
+    interface_name: velocity
