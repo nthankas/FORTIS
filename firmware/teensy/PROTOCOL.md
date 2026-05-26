@@ -187,13 +187,36 @@ when used in pure-velocity mode.
 
 ### 3.6 `CMD_HOME_REQUEST` (0x12)
 
-| Offset | Size | Field    | Description                               |
-|-------:|-----:|----------|-------------------------------------------|
-| 0      | 1    | `mask`   | bit0=J1, bit1=J2, bit2=J3, 0x07 = all     |
+| Offset | Size | Field    | Description                                                              |
+|-------:|-----:|----------|--------------------------------------------------------------------------|
+| 0      | 1    | `mask`   | bit0=J1, bit1=J2, bit2=J3, bit3=J4, bit4=gripper. 0x1F = all addressable |
 
-Homing implementation is firmware-side and is NOT specified by this
-protocol; the firmware NAKs with `ERR_NOT_IMPLEMENTED` until homing is
-implemented.
+Homing semantics differ by joint type:
+
+- **Steppers (J1, J2, J3)**: real homing — move-until-ALM, back off slowly,
+  call `setPosition(0)`. Firmware currently NAKs `ERR_NOT_IMPLEMENTED` for
+  these bits; see HANDOFF S9.
+- **Servos (J4, gripper)**: the servo already knows its absolute position
+  from the PWM pulse it's receiving, so "homing" is just commanding the
+  calibrated home pose for that joint. J4 home target is firmware-side
+  `kJ4HomeUs` (currently 1000 us, the FORTIS stowed-arm pose). Gripper is
+  not yet characterised (NAKs `ERR_NOT_IMPLEMENTED` until then).
+
+Preconditions enforced by the firmware before any bit is acted on:
+
+| Condition          | If violated                       |
+|--------------------|-----------------------------------|
+| `fault_flags == 0` | NAK `ERR_FAULT_ACTIVE`            |
+| `STATE_ENABLED`    | NAK `ERR_DISABLED`                |
+| `mask != 0`        | NAK `ERR_BAD_PARAMETER`           |
+
+Combination behaviour: if the mask asks for anything we can't do
+(stepper bits or gripper bit), the entire request is NAK'd
+`ERR_NOT_IMPLEMENTED` and nothing moves. This is intentional — partial
+homing would leave the host with an inconsistent picture of which joints
+believe they're homed. The host should re-issue with a narrower mask.
+
+Available as of PROTO_MINOR 1.
 
 ### 3.7 `CMD_CLEAR_FAULTS` (0x13)
 
@@ -250,7 +273,7 @@ Sent once after `setup()` completes.
 | Offset | Size | Field           | Description                            |
 |-------:|-----:|-----------------|----------------------------------------|
 | 0      | 1    | `proto_major`   | currently 1                            |
-| 1      | 1    | `proto_minor`   | currently 0                            |
+| 1      | 1    | `proto_minor`   | currently 1                            |
 | 2      | 1    | `eeprom_slot`   | 0 or 1, slot used for recovery, 0xFF if both invalid |
 | 3      | 1    | `recovered`     | 0 = uncalibrated, 1 = positions recovered |
 | 4      | 4    | `git_short`     | uint32, optional firmware build id (0 if unused) |
