@@ -19,7 +19,7 @@
 #define MOCK_MODE           0   // 1 = no GPIO writes, all motor I/O -> Serial
 #define FIRMWARE_BUILD_ID   0u  // optional: set from build system (git short)
 #define PROTO_MAJOR         1
-#define PROTO_MINOR         0
+#define PROTO_MINOR         1   // 0->1: CMD_HOME_REQUEST mask now accepts J4 (bit 3)
 
 #include <Arduino.h>
 #include <EEPROM.h>
@@ -88,7 +88,12 @@ static const StepperCfg kJ3Cfg = { 200, 8, 8000, 20000 };
 // firmware/teensy/tests/servo_sweep/ and update these constants.
 static const uint16_t kJ4MinUs      = 800;
 static const uint16_t kJ4MaxUs      = 2000;
-static const uint16_t kJ4DefaultUs  = 1500;
+static const uint16_t kJ4DefaultUs  = 1500;   // used at boot if EEPROM is uncalibrated (safe mid-pose)
+static const uint16_t kJ4HomeUs     = 1000;   // FORTIS J4 standard "home" / stowed pose
+                                              // (CMD_HOME_REQUEST mask bit 3 target).
+                                              // Differs from kJ4DefaultUs on purpose: defaultUs is
+                                              // a safe mid-pose for cold-boot recovery, homeUs is
+                                              // the deliberate parked pose the host asks for.
 
 static const uint16_t kGripperMinUs     = 1000;
 static const uint16_t kGripperMaxUs     = 2000;
@@ -633,13 +638,60 @@ static void handleSetJointVelocities(uint8_t seq, const uint8_t *p, uint8_t len)
     sendAck(seq, CMD_SET_JOINT_VELOCITIES);
 }
 
+// CMD_HOME_REQUEST mask bits (must match PROTOCOL.md section 3.6)
+static const uint8_t kHomeMaskJ1      = 1u << 0;
+static const uint8_t kHomeMaskJ2      = 1u << 1;
+static const uint8_t kHomeMaskJ3      = 1u << 2;
+static const uint8_t kHomeMaskJ4      = 1u << 3;
+static const uint8_t kHomeMaskGripper = 1u << 4;
+static const uint8_t kHomeMaskSteppers =
+    kHomeMaskJ1 | kHomeMaskJ2 | kHomeMaskJ3;
+
 static void handleHomeRequest(uint8_t seq, const uint8_t *p, uint8_t len) {
     if (len != 1) { sendNak(seq, CMD_HOME_REQUEST, ERR_LENGTH); return; }
-    // TODO: implement homing. Likely a per-joint move-until-ALM sequence with
-    // a slow back-off, then setPosition(0). Until that exists, NAK with
-    // ERR_NOT_IMPLEMENTED so the host fails fast.
-    (void)p;
-    sendNak(seq, CMD_HOME_REQUEST, ERR_NOT_IMPLEMENTED);
+
+    // Don't let homing run while faulted; that path needs CMD_CLEAR_FAULTS
+    // first so the operator has explicitly acknowledged the fault.
+    if (g_state.fault_flags) {
+        sendNak(seq, CMD_HOME_REQUEST, ERR_FAULT_ACTIVE);
+        return;
+    }
+    // Require ENABLE first so that operator intent is explicit and a power-on
+    // home request can't surprise-move the arm before the driver is energised.
+    if (!(g_state.state_flags & STATE_ENABLED)) {
+        sendNak(seq, CMD_HOME_REQUEST, ERR_DISABLED);
+        return;
+    }
+
+    const uint8_t mask = p[0];
+    if (mask == 0) {
+        sendNak(seq, CMD_HOME_REQUEST, ERR_BAD_PARAMETER);
+        return;
+    }
+
+    // Stepper homing (move-until-ALM + back-off + setPosition(0)) is still a
+    // TODO per HANDOFF S9. If the host asks for any stepper, fail fast so it
+    // doesn't think the steppers are now homed.
+    if (mask & kHomeMaskSteppers) {
+        sendNak(seq, CMD_HOME_REQUEST, ERR_NOT_IMPLEMENTED);
+        return;
+    }
+
+    // Gripper hasn't been bench-characterised yet; refuse rather than command
+    // a value that might stall it. Re-enable this branch once the gripper's
+    // safe range is known (see firmware/teensy/tests/servo_sweep/).
+    if (mask & kHomeMaskGripper) {
+        sendNak(seq, CMD_HOME_REQUEST, ERR_NOT_IMPLEMENTED);
+        return;
+    }
+
+    // J4 "homing" for a servo is just commanding the calibrated home pose.
+    // The D845WP always knows where it is, so there's no ALM/back-off step.
+    if (mask & kHomeMaskJ4) {
+        writeServos(kJ4HomeUs, g_state.gripper_us);
+    }
+
+    sendAck(seq, CMD_HOME_REQUEST);
 }
 
 static void handleClearFaults(uint8_t seq, const uint8_t *p, uint8_t len) {
