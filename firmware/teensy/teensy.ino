@@ -777,12 +777,20 @@ static void handleFrame(uint8_t seq, uint8_t type,
 // Periodic services
 // ---------------------------------------------------------------------------
 
-// Teensy 4.1 has an internal temperature sensor available via tempmonGetTemp()
-// in newer cores. Returned in 0.1 C units. TODO: replace stub with real call
-// once the target Arduino core is pinned.
+// Teensy 4.1 has an internal MCU temperature sensor. tempmonGetTemp() is
+// provided by the Teensyduino 1.5x+ core for IMXRT1062 and returns degrees
+// Celsius as a float. We convert to int16_t in 0.1 C units for the
+// RSP_STATUS payload (see PROTOCOL.md S3.10). The sensor reports NaN very
+// briefly at boot before the on-die temp monitor stabilises -- treat that
+// as "unknown / cold" so it can't accidentally trip FAULT_OVER_TEMP.
 static int16_t readMcuTempC10() {
-    // TODO: return (int16_t)(tempmonGetTemp() * 10.0f);
+#if MOCK_MODE
     return 0;
+#else
+    float t = tempmonGetTemp();
+    if (isnan(t)) return 0;
+    return (int16_t)(t * 10.0f);
+#endif
 }
 
 static void scanFaults() {
