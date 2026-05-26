@@ -38,43 +38,22 @@
   <xacro:property name="j1_mount_z"      value="${belly_clearance + chassis_height}"/>  <!-- top of chassis -->
 
   <!--
-    Arm dimensions extracted from CAD (ROS_Expanded_Chassis), kept separate:
-      *_axis  = joint-axis to joint-axis distance (used for joint origin placement)
+    Arm chain is in-line (no lateral stow offsets). Each joint axis sits on the
+    arm's X plane; the EE ends up co-planar with the J1 yaw axis as a result.
+      *_axis  = joint-axis to joint-axis X distance (used for joint origin placement)
       *_tube  = CF tube physical length (used for visual + inertia of the tube itself)
-      *_tube  < *_axis  because motor housings, gearbox flanges, and mounting
-                        brackets add length on each side of the CF tube.
-    The difference per segment is split evenly when placing the tube visual.
+      *_tube  < *_axis  because motor housings and gearbox flanges add length on
+                        each side of the CF tube.
   -->
-  <!--
-    Axis-to-axis X-projections (along the tube), NOT diagonal distances.
-    The arm has lateral stow offsets at each joint (j*_offset_y below) so the
-    full 3D distance from one joint axis to the next is sqrt(axis^2 + offset_y^2).
-    These values were back-computed from CAD-extracted joint origins.
-  -->
-  <xacro:property name="j1_to_j2_axis"   value="0.091"/>  <!--  3.59 in -->
-  <xacro:property name="arm_link2_axis"  value="0.404"/>  <!-- 15.91 in, J2->J3 X-projection (3D dist 0.411) -->
-  <xacro:property name="arm_link3_axis"  value="0.295"/>  <!-- 11.61 in, J3->J4 X-projection (3D dist 0.300) -->
-  <xacro:property name="arm_link4_axis"  value="0.060"/>  <!--  2.36 in, J4 axis to EE attach (CAD verified) -->
-  <xacro:property name="ee_to_gripper"   value="0.030"/>  <!--  1.20 in, EE attach to gripper base -->
+  <xacro:property name="j1_to_j2_axis"   value="0.0559"/>    <!--  2.199 in, J2 shaft above chassis top -->
+  <xacro:property name="arm_link2_axis"  value="0.393903"/>  <!-- 15.508 in, J2->J3 -->
+  <xacro:property name="arm_link3_axis"  value="0.299237"/>  <!-- 11.781 in, J3->J4 -->
+  <xacro:property name="arm_link4_axis"  value="0.0635"/>    <!--  2.500 in, J4 axis to gripper_base mount in X -->
+  <xacro:property name="j4_to_gripper_z" value="0.02286"/>   <!--  0.900 in, gripper_base mount Z lift above link4 -->
 
-  <!--
-    Lateral "stow" offsets at each joint along the joint's rotation axis (local Y).
-    This is what lets L2's plane of motion sit alongside L1's plane instead of
-    on top of it, so the arm can fold flat. Sign convention follows REP-103
-    (+Y = chassis left, -Y = chassis right). Per FORTIS spec:
-      J2 motor mounts on chassis-right side -> j2_offset_y is NEGATIVE
-      J3 motor mounts opposite (chassis-left) -> j3_offset_y is POSITIVE
-      J4 mounts same side as J3 (~negligible)  -> j4_offset_y ~ 0
-  -->
-  <xacro:property name="j2_offset_y"     value="-0.073"/> <!-- L2 to J3 axis, CAD-extracted -->
-  <xacro:property name="j3_offset_y"     value="+0.052"/> <!-- L3 to J4 axis, CAD-extracted -->
-  <xacro:property name="j4_offset_y"     value="0.000"/>  <!-- L4 to EE attach; 11 mm in CAD, treated as noise -->
-  <xacro:property name="ee_offset_y"     value="0.000"/>  <!-- EE attach to gripper base -->
-
-  <xacro:property name="arm_link2_tube"  value="0.360"/>  <!-- 14.17 in, j2_link CF tube -->
-  <xacro:property name="arm_link3_tube"  value="0.208"/>  <!--  8.18 in, j3_link CF tube -->
-  <xacro:property name="arm_link4_tube"  value="0.038"/>  <!--  1.50 in, j4_link -->
-  <xacro:property name="arm_tube_side"   value="0.0287"/> <!--  1.128 in, square CF tube outer -->
+  <xacro:property name="arm_link2_tube"  value="0.350"/>     <!-- shorter than axis to leave room for motors at each end -->
+  <xacro:property name="arm_link3_tube"  value="0.208"/>     <!--  8.18 in CF tube -->
+  <xacro:property name="arm_tube_side"   value="0.0287"/>    <!--  1.128 in, square CF tube outer -->
 
   <!--
     Arm base (J1 motor body) protrudes above chassis top. The motor body extends
@@ -104,12 +83,12 @@
       link1 = J2 motor + 50:1 planetary (rotates with J1)
       link2 = j2_link CF tube + J3 motor+Cricket at far end (rotates with J2)
       link3 = j3_link CF tube + J4 servo at far end           (rotates with J3)
-      link4 = j4_link CF tube + camera mount + EE plate       (rotates with J4)
+      link4 = wrist bracket + arm camera mount               (rotates with J4)
   -->
   <xacro:property name="arm_link1_mass"  value="2.20"/>   <!-- NEMA 23 + 50:1 + bracket -->
   <xacro:property name="arm_link2_mass"  value="0.76"/>   <!-- CF tube 107g + NEMA 17+Cricket 650g -->
   <xacro:property name="arm_link3_mass"  value="0.20"/>   <!-- CF tube 86g + D845WP servo 60g + mount -->
-  <xacro:property name="arm_link4_mass"  value="0.10"/>   <!-- CF tube 21g + EE plate + camera bracket -->
+  <xacro:property name="arm_link4_mass"  value="0.08"/>   <!-- short wrist bracket + camera bracket -->
 
   <!-- Joint limits, per locked hardware spec -->
   <xacro:property name="j1_lower"        value="-2.967"/> <!-- -170 deg, cable management range -->
@@ -128,18 +107,32 @@
   <xacro:property name="j4_effort"       value="3.5"/>    <!-- D845WP stall torque -->
   <xacro:property name="j_velocity"      value="1.0"/>    <!-- 1 rad/s nominal -->
 
-  <!-- =================== GRIPPER (ServoCity 3219-0001-0002) =================== -->
-  <xacro:property name="gripper_base_mass" value="0.10"/>
-  <xacro:property name="gripper_base_x"    value="0.060"/>
-  <xacro:property name="gripper_base_y"    value="0.060"/>
-  <xacro:property name="gripper_base_z"    value="0.030"/>
+  <!-- =================== GRIPPER (ServoCity parallel jaw, rack-and-pinion) =================== -->
+  <!--
+    Gripper local frame convention (matches MoveIt grasp planning convention):
+      +Z = approach direction (out from the palm)
+      +X = jaw motion axis (parallel to the wider 104.1 mm dimension)
+      +Y = perpendicular (the 60 mm dimension)
+    The gripper_base origin sits at the mount face (against the wrist bracket).
+  -->
+  <xacro:property name="gripper_base_mass"   value="0.15"/>
+  <xacro:property name="gripper_base_x"      value="0.1041"/>  <!-- jaw-motion direction (lateral) -->
+  <xacro:property name="gripper_base_y"      value="0.060"/>
+  <xacro:property name="gripper_base_z"      value="0.010"/>   <!-- plate thickness in approach direction -->
 
-  <xacro:property name="jaw_mass"          value="0.025"/>
-  <xacro:property name="jaw_length"        value="0.060"/> <!-- finger length -->
-  <xacro:property name="jaw_width"         value="0.015"/>
-  <xacro:property name="jaw_thickness"     value="0.008"/>
+  <xacro:property name="gripper_jaw_plane_z" value="0.030"/>   <!-- jaw plane height above gripper_base origin -->
+  <xacro:property name="gripper_finger_x"    value="0.010"/>   <!-- thickness in jaw-motion direction -->
+  <xacro:property name="gripper_finger_y"    value="0.020"/>
+  <xacro:property name="gripper_finger_z"    value="0.058"/>   <!-- finger length in approach direction -->
+  <xacro:property name="gripper_finger_mass" value="0.020"/>
 
-  <xacro:property name="jaw_open_stroke"   value="0.040"/> <!-- max jaw half-spread from closed -->
+  <!--
+    Per-jaw stroke: each finger translates 0 to 0.027 m outward from the closed
+    centerline. Mimic enforces symmetric motion of the right jaw. Verify against
+    ServoCity spec before committing the hardware controller limit.
+  -->
+  <xacro:property name="gripper_jaw_stroke"  value="0.027"/>
+  <xacro:property name="gripper_tcp_z"       value="0.045"/>   <!-- TCP frame above gripper_base origin (approach direction) -->
 
   <!-- =================== CAMERAS =================== -->
   <!-- OAK-D Pro AF on arm end effector -->
@@ -154,12 +147,17 @@
   <xacro:property name="oak_lite_y"        value="0.028"/>
   <xacro:property name="oak_lite_z"        value="0.017"/>
 
-  <!-- Chassis camera mounting positions (extracted from CAD, in chassis frame) -->
-  <!-- Front cam mounts at front face, rear at rear face, left/right on side panels -->
-  <xacro:property name="cam_front_x"       value="${chassis_length/2}"/>
-  <xacro:property name="cam_front_z"       value="${belly_clearance + chassis_height*0.5}"/>
-  <xacro:property name="cam_side_y"        value="${chassis_width/2}"/>
-  <xacro:property name="cam_side_z"        value="${belly_clearance + chassis_height*0.7}"/>
+  <!--
+    Chassis camera mounting positions, in base_link frame.
+    All four cameras sit at the same height above the ground (cam_height_z).
+    Along each camera's outward axis, the camera body's chassis-side face sits
+    cam_edge_to_housing beyond the chassis edge; the camera center is then
+    cam_edge_to_housing + oak_lite_z/2 (half the housing depth) past the edge.
+  -->
+  <xacro:property name="cam_edge_to_housing" value="0.01933"/>  <!-- 0.761 in -->
+  <xacro:property name="cam_height_z"        value="0.21514"/>  <!-- 8.470 in off the ground -->
+  <xacro:property name="cam_front_x"         value="${chassis_length/2 + cam_edge_to_housing + oak_lite_z/2}"/>
+  <xacro:property name="cam_side_y"          value="${chassis_width/2  + cam_edge_to_housing + oak_lite_z/2}"/>
 
   <!-- Arm camera mount: on j4_link area, looking forward of EE -->
   <xacro:property name="arm_cam_x_offset"  value="0.030"/>

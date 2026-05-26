@@ -2,34 +2,43 @@
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="fortis_arm">
 
   <!--
-    FORTIS 4-DOF arm.
+    FORTIS 4-DOF arm, in-line chain (no lateral stow offsets).
     Mount: arm_mount frame (provided by chassis).
-    Chain: arm_mount -> arm_base -> link1 -> link2 -> link3 -> link4 -> ee
-           with gripper on ee.
+    Chain: arm_mount -> arm_base -> link1 -> link2 -> link3 -> link4
+           -> gripper_base -> {gripper_left_finger, gripper_right_finger, gripper_tcp}
 
     Geometric convention:
       For each arm link, the link's frame origin sits on the proximal joint axis,
-      with +X pointing toward the distal joint along the CF tube.
-      Joint origins use axis-to-axis distance (the full kinematic span).
-      The CF tube visual is centered between the two joints; the gap at each end
-      represents the motor housing or gearbox flange.
+      with +X pointing toward the distal joint along the CF tube. All joint
+      origins are co-linear in Y=0; the EE ends up on the J1 yaw axis when the
+      arm is folded forward.
 
-    All four DOFs are revolute with explicit limits.
-    The gripper is ONE driven prismatic joint with one passive mimic joint.
+      Gripper local frame:  +Z = approach (out from palm)
+                            +X = jaw motion (lateral)
+                            +Y = perpendicular
+
+    All four arm DOFs are revolute with explicit limits.
+    Gripper is one driven prismatic joint (gripper_left_joint) plus one mimic
+    joint (gripper_right_joint, multiplier=-1) for the symmetric right jaw.
     Arm camera (OAK-D Pro AF) is a fixed link on link4 with a separate optical frame.
   -->
 
   <!-- =================== arm_base (J1 motor body) =================== -->
+  <!--
+    J1 motor body sits INSIDE the chassis, extending downward from the chassis
+    top surface. The J1 rotation axis is at the chassis top (arm_mount frame
+    origin), so link1 starts flush with the chassis top.
+  -->
   <link name="arm_base">
     <visual>
-      <origin xyz="0 0 ${arm_base_height/2}" rpy="0 0 0"/>
+      <origin xyz="0 0 ${-arm_base_height/2}" rpy="0 0 0"/>
       <geometry>
         <cylinder radius="0.025" length="${arm_base_height}"/>
       </geometry>
       <material name="fortis_motor_black"/>
     </visual>
     <collision>
-      <origin xyz="0 0 ${arm_base_height/2}" rpy="0 0 0"/>
+      <origin xyz="0 0 ${-arm_base_height/2}" rpy="0 0 0"/>
       <geometry>
         <cylinder radius="0.025" length="${arm_base_height}"/>
       </geometry>
@@ -37,7 +46,7 @@
     <xacro:cylinder_inertia m="0.40"
                             r="0.025"
                             h="${arm_base_height}"
-                            xyz="0 0 ${arm_base_height/2}"/>
+                            xyz="0 0 ${-arm_base_height/2}"/>
   </link>
 
   <joint name="arm_mount_to_arm_base" type="fixed">
@@ -48,9 +57,9 @@
 
   <!-- =================== J1: yaw at base (revolute about Z) =================== -->
   <!--
-    link1 represents the J2 motor mount bracket that rotates with J1.
-    J2 axis sits j1_to_j2_axis (91 mm) above J1 axis.
-    Mass of link1 is dominated by the NEMA 23 + 50:1 planetary at the J2 end.
+    link1 represents the J2 motor mount bracket that rotates with J1. Its
+    origin sits at the J1 axis (chassis top); J2 axis sits j1_to_j2_axis
+    (91 mm) above J1 axis.
   -->
   <link name="link1">
     <visual>
@@ -60,7 +69,7 @@
       </geometry>
       <material name="fortis_aluminum"/>
     </visual>
-    <!-- J2 motor body (NEMA 23 + 50:1 planetary) sits at top of L1, axis along Y. -->
+    <!-- J2 motor body (NEMA 23 + 50:1 planetary) at top of L1, axis along Y. -->
     <visual>
       <origin xyz="0 0 ${j1_to_j2_axis}" rpy="0 0 0"/>
       <geometry>
@@ -85,7 +94,7 @@
   <joint name="joint_j1" type="revolute">
     <parent link="arm_base"/>
     <child  link="link1"/>
-    <origin xyz="0 0 ${arm_base_height}" rpy="0 0 0"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
     <axis xyz="0 0 1"/>
     <limit lower="${j1_lower}" upper="${j1_upper}"
            effort="${j1_effort}" velocity="${j_velocity}"/>
@@ -93,45 +102,35 @@
   </joint>
 
   <!-- =================== J2: shoulder pitch (revolute about Y) =================== -->
-  <!--
-    link2 frame origin is on the J2 rotation axis, +X toward J3.
-    joint_j3 sits at xyz="(arm_link2_axis, 0, 0)" = true axis-to-axis distance.
-    CF tube visual (arm_link2_tube) is centered in that span; the
-    (arm_link2_axis - arm_link2_tube)/2 gap at each end is the motor housing.
-  -->
   <link name="link2">
-    <!-- Tube spans diagonally from L2 origin (J2 axis) to (arm_link2_axis, j2_offset_y, 0) (J3 axis).
-         Yaw the box to align with that diagonal direction. -->
+    <!-- CF tube along +X. -->
     <visual>
-      <origin xyz="${arm_link2_axis/2} ${j2_offset_y/2} 0"
-              rpy="0 0 ${atan2(j2_offset_y, arm_link2_axis)}"/>
+      <origin xyz="${arm_link2_axis/2} 0 0" rpy="0 0 0"/>
       <geometry>
         <box size="${arm_link2_tube} ${arm_tube_side} ${arm_tube_side}"/>
       </geometry>
       <material name="fortis_carbon_fiber"/>
     </visual>
-    <!-- J3 motor body (NEMA 17 + Cricket) at the far end of L2, axis along Y. -->
+    <!-- J3 motor body (NEMA 17 + Cricket) at far end of L2, axis along Y. -->
     <visual>
-      <origin xyz="${arm_link2_axis} ${j2_offset_y} 0" rpy="0 0 0"/>
+      <origin xyz="${arm_link2_axis} 0 0" rpy="0 0 0"/>
       <geometry>
         <box size="${j3_motor_x} ${j3_motor_y} ${j3_motor_z}"/>
       </geometry>
       <material name="fortis_motor_black"/>
     </visual>
     <collision>
-      <origin xyz="${arm_link2_axis/2} ${j2_offset_y/2} 0"
-              rpy="0 0 ${atan2(j2_offset_y, arm_link2_axis)}"/>
+      <origin xyz="${arm_link2_axis/2} 0 0" rpy="0 0 0"/>
       <geometry>
         <box size="${arm_link2_tube} ${arm_tube_side} ${arm_tube_side}"/>
       </geometry>
     </collision>
-    <!-- CoM at 75% toward J3 along the tube, and biased toward the Y offset
-         since the NEMA 17 + Cricket sit at the offset position, not on tube axis. -->
+    <!-- CoM biased toward J3 end where the NEMA 17 + Cricket sit. -->
     <xacro:box_inertia m="${arm_link2_mass}"
                        x="${arm_link2_axis}"
                        y="${arm_tube_side}"
                        z="${arm_tube_side}"
-                       xyz="${arm_link2_axis*0.75} ${j2_offset_y*0.6} 0"/>
+                       xyz="${arm_link2_axis*0.75} 0 0"/>
   </link>
 
   <joint name="joint_j2" type="revolute">
@@ -146,44 +145,38 @@
 
   <!-- =================== J3: elbow pitch (revolute about Y) =================== -->
   <link name="link3">
-    <!-- Tube spans diagonally from L3 origin (J3 axis) to (arm_link3_axis, j3_offset_y, 0). -->
     <visual>
-      <origin xyz="${arm_link3_axis/2} ${j3_offset_y/2} 0"
-              rpy="0 0 ${atan2(j3_offset_y, arm_link3_axis)}"/>
+      <origin xyz="${arm_link3_axis/2} 0 0" rpy="0 0 0"/>
       <geometry>
         <box size="${arm_link3_tube} ${arm_tube_side} ${arm_tube_side}"/>
       </geometry>
       <material name="fortis_carbon_fiber"/>
     </visual>
-    <!-- J4 servo (Hitec D845WP) at the far end of L3, axis along Y. -->
+    <!-- J4 servo (Hitec D845WP) at far end of L3, axis along Y. -->
     <visual>
-      <origin xyz="${arm_link3_axis} ${j3_offset_y} 0" rpy="0 0 0"/>
+      <origin xyz="${arm_link3_axis} 0 0" rpy="0 0 0"/>
       <geometry>
         <box size="${j4_motor_x} ${j4_motor_y} ${j4_motor_z}"/>
       </geometry>
       <material name="fortis_motor_black"/>
     </visual>
     <collision>
-      <origin xyz="${arm_link3_axis/2} ${j3_offset_y/2} 0"
-              rpy="0 0 ${atan2(j3_offset_y, arm_link3_axis)}"/>
+      <origin xyz="${arm_link3_axis/2} 0 0" rpy="0 0 0"/>
       <geometry>
         <box size="${arm_link3_tube} ${arm_tube_side} ${arm_tube_side}"/>
       </geometry>
     </collision>
-    <!-- CoM at 70% toward J4 along the tube, biased toward Y offset where J4
-         servo sits (sign matches j3_offset_y -> flipped from j2 side). -->
     <xacro:box_inertia m="${arm_link3_mass}"
                        x="${arm_link3_axis}"
                        y="${arm_tube_side}"
                        z="${arm_tube_side}"
-                       xyz="${arm_link3_axis*0.70} ${j3_offset_y*0.6} 0"/>
+                       xyz="${arm_link3_axis*0.70} 0 0"/>
   </link>
 
   <joint name="joint_j3" type="revolute">
     <parent link="link2"/>
     <child  link="link3"/>
-    <!-- Y component is the lateral stow offset along J2 rotation axis. -->
-    <origin xyz="${arm_link2_axis} ${j2_offset_y} 0" rpy="0 0 0"/>
+    <origin xyz="${arm_link2_axis} 0 0" rpy="0 0 0"/>
     <axis xyz="0 1 0"/>
     <limit lower="${j3_lower}" upper="${j3_upper}"
            effort="${j3_effort}" velocity="${j_velocity}"/>
@@ -191,53 +184,62 @@
   </joint>
 
   <!-- =================== J4: wrist pitch (revolute about Y) =================== -->
+  <!--
+    link4 is the short wrist bracket between J4 axis and the gripper mount face.
+    Mount face sits arm_link4_axis (2.5 in) forward and j4_to_gripper_z (0.9 in)
+    above the J4 axis.
+  -->
   <link name="link4">
     <visual>
-      <origin xyz="${arm_link4_axis/2} 0 0" rpy="0 0 0"/>
+      <origin xyz="${arm_link4_axis/2} 0 ${j4_to_gripper_z/2}" rpy="0 0 0"/>
       <geometry>
-        <box size="${arm_link4_tube} ${arm_tube_side} ${arm_tube_side}"/>
+        <box size="${arm_link4_axis} 0.030 0.020"/>
       </geometry>
-      <material name="fortis_carbon_fiber"/>
+      <material name="fortis_aluminum"/>
     </visual>
     <collision>
-      <origin xyz="${arm_link4_axis/2} 0 0" rpy="0 0 0"/>
+      <origin xyz="${arm_link4_axis/2} 0 ${j4_to_gripper_z/2}" rpy="0 0 0"/>
       <geometry>
-        <box size="${arm_link4_tube} ${arm_tube_side} ${arm_tube_side}"/>
+        <box size="${arm_link4_axis} 0.030 0.020"/>
       </geometry>
     </collision>
     <xacro:box_inertia m="${arm_link4_mass}"
                        x="${arm_link4_axis}"
-                       y="${arm_tube_side}"
-                       z="${arm_tube_side}"
-                       xyz="${arm_link4_axis/2} 0 0"/>
+                       y="0.030"
+                       z="0.020"
+                       xyz="${arm_link4_axis/2} 0 ${j4_to_gripper_z/2}"/>
   </link>
 
   <joint name="joint_j4" type="revolute">
     <parent link="link3"/>
     <child  link="link4"/>
-    <!-- Zigzag flip: J3 offset is +Y (opposite to J2 which was -Y). -->
-    <origin xyz="${arm_link3_axis} ${j3_offset_y} 0" rpy="0 0 0"/>
+    <origin xyz="${arm_link3_axis} 0 0" rpy="0 0 0"/>
     <axis xyz="0 1 0"/>
     <limit lower="${j4_lower}" upper="${j4_upper}"
            effort="${j4_effort}" velocity="${j_velocity}"/>
     <dynamics damping="0.3" friction="0.05"/>
   </joint>
 
-  <!-- =================== EE: end effector mount (gripper base) =================== -->
+  <!-- =================== gripper (ServoCity parallel jaw, rack-and-pinion) =================== -->
   <!--
-    EE attach point is at arm_link4_axis along link4. The gripper_base hangs
-    off this attach point by ee_to_gripper. Modeled as a single rigid body.
+    gripper_base local frame: +Z = approach, +X = jaw motion, +Y = perpendicular.
+    The fixed joint to link4 uses rpy=(pi/2, 0, pi/2) so that:
+      gripper +Z  = link4 +X  (arm forward, approach direction)
+      gripper +X  = link4 +Y  (chassis lateral, jaw motion)
+      gripper +Y  = link4 +Z  (up, perpendicular)
+    With this rotation jaws open along the chassis Y axis at arm neutral,
+    matching the previous URDF behavior.
   -->
-  <link name="ee">
+  <link name="gripper_base">
     <visual>
-      <origin xyz="${ee_to_gripper + gripper_base_x/2} 0 0" rpy="0 0 0"/>
+      <origin xyz="0 0 ${gripper_base_z/2}" rpy="0 0 0"/>
       <geometry>
         <box size="${gripper_base_x} ${gripper_base_y} ${gripper_base_z}"/>
       </geometry>
       <material name="fortis_gripper_silver"/>
     </visual>
     <collision>
-      <origin xyz="${ee_to_gripper + gripper_base_x/2} 0 0" rpy="0 0 0"/>
+      <origin xyz="0 0 ${gripper_base_z/2}" rpy="0 0 0"/>
       <geometry>
         <box size="${gripper_base_x} ${gripper_base_y} ${gripper_base_z}"/>
       </geometry>
@@ -246,103 +248,112 @@
                        x="${gripper_base_x}"
                        y="${gripper_base_y}"
                        z="${gripper_base_z}"
-                       xyz="${ee_to_gripper + gripper_base_x/2} 0 0"/>
+                       xyz="0 0 ${gripper_base_z/2}"/>
   </link>
 
-  <joint name="link4_to_ee" type="fixed">
+  <joint name="link4_to_gripper_base" type="fixed">
     <parent link="link4"/>
-    <child  link="ee"/>
-    <origin xyz="${arm_link4_axis} ${j4_offset_y} 0" rpy="0 0 0"/>
+    <child  link="gripper_base"/>
+    <origin xyz="${arm_link4_axis} 0 ${j4_to_gripper_z}"
+            rpy="${pi/2} 0 ${pi/2}"/>
   </joint>
 
-  <!-- =================== gripper jaws =================== -->
+  <!-- Left jaw: actuated. Travel 0 (closed) to gripper_jaw_stroke (open). -->
+  <link name="gripper_left_finger">
+    <visual>
+      <origin xyz="0 0 ${gripper_finger_z/2}" rpy="0 0 0"/>
+      <geometry>
+        <box size="${gripper_finger_x} ${gripper_finger_y} ${gripper_finger_z}"/>
+      </geometry>
+      <material name="fortis_jaw_orange"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 ${gripper_finger_z/2}" rpy="0 0 0"/>
+      <geometry>
+        <box size="${gripper_finger_x} ${gripper_finger_y} ${gripper_finger_z}"/>
+      </geometry>
+    </collision>
+    <xacro:box_inertia m="${gripper_finger_mass}"
+                       x="${gripper_finger_x}"
+                       y="${gripper_finger_y}"
+                       z="${gripper_finger_z}"
+                       xyz="0 0 ${gripper_finger_z/2}"/>
+  </link>
+
+  <joint name="gripper_left_joint" type="prismatic">
+    <parent link="gripper_base"/>
+    <child  link="gripper_left_finger"/>
+    <origin xyz="0 0 ${gripper_jaw_plane_z}" rpy="0 0 0"/>
+    <axis xyz="1 0 0"/>
+    <limit lower="0.0" upper="${gripper_jaw_stroke}"
+           effort="10.0" velocity="0.05"/>
+    <dynamics damping="2.0" friction="0.5"/>
+  </joint>
+
+  <!-- Right jaw: mirrored mimic. multiplier=-1 enforces symmetric motion in URDF. -->
+  <link name="gripper_right_finger">
+    <visual>
+      <origin xyz="0 0 ${gripper_finger_z/2}" rpy="0 0 0"/>
+      <geometry>
+        <box size="${gripper_finger_x} ${gripper_finger_y} ${gripper_finger_z}"/>
+      </geometry>
+      <material name="fortis_jaw_orange"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 ${gripper_finger_z/2}" rpy="0 0 0"/>
+      <geometry>
+        <box size="${gripper_finger_x} ${gripper_finger_y} ${gripper_finger_z}"/>
+      </geometry>
+    </collision>
+    <xacro:box_inertia m="${gripper_finger_mass}"
+                       x="${gripper_finger_x}"
+                       y="${gripper_finger_y}"
+                       z="${gripper_finger_z}"
+                       xyz="0 0 ${gripper_finger_z/2}"/>
+  </link>
+
+  <joint name="gripper_right_joint" type="prismatic">
+    <parent link="gripper_base"/>
+    <child  link="gripper_right_finger"/>
+    <origin xyz="0 0 ${gripper_jaw_plane_z}" rpy="0 0 0"/>
+    <axis xyz="1 0 0"/>
+    <limit lower="-${gripper_jaw_stroke}" upper="0.0"
+           effort="10.0" velocity="0.05"/>
+    <mimic joint="gripper_left_joint" multiplier="-1.0" offset="0.0"/>
+    <dynamics damping="2.0" friction="0.5"/>
+  </joint>
+
   <!--
-    Two jaw links. Only the left jaw is driven (prismatic). The right jaw uses
-    a <mimic> tag with multiplier -1 so it moves the opposite direction.
-    Each jaw origin is at the front face of the gripper base; jaw extends in +X.
+    TCP (tool center point) for MoveIt grasp planning. Placed along the gripper
+    +Z (approach) axis at gripper_tcp_z, roughly at the finger-tip midpoint when
+    closed.
   -->
-  <xacro:property name="jaw_x_origin" value="${ee_to_gripper + gripper_base_x}"/>
-
-  <link name="jaw_left">
-    <visual>
-      <origin xyz="${jaw_length/2} 0 0" rpy="0 0 0"/>
-      <geometry>
-        <box size="${jaw_length} ${jaw_thickness} ${jaw_width}"/>
-      </geometry>
-      <material name="fortis_jaw_orange"/>
-    </visual>
-    <collision>
-      <origin xyz="${jaw_length/2} 0 0" rpy="0 0 0"/>
-      <geometry>
-        <box size="${jaw_length} ${jaw_thickness} ${jaw_width}"/>
-      </geometry>
-    </collision>
-    <xacro:box_inertia m="${jaw_mass}"
-                       x="${jaw_length}"
-                       y="${jaw_thickness}"
-                       z="${jaw_width}"
-                       xyz="${jaw_length/2} 0 0"/>
-  </link>
-
-  <joint name="joint_gripper" type="prismatic">
-    <parent link="ee"/>
-    <child  link="jaw_left"/>
-    <origin xyz="${jaw_x_origin} 0 0" rpy="0 0 0"/>
-    <axis xyz="0 1 0"/>
-    <limit lower="0.0" upper="${jaw_open_stroke}"
-           effort="20.0" velocity="0.05"/>
-    <dynamics damping="2.0" friction="0.5"/>
-  </joint>
-
-  <link name="jaw_right">
-    <visual>
-      <origin xyz="${jaw_length/2} 0 0" rpy="0 0 0"/>
-      <geometry>
-        <box size="${jaw_length} ${jaw_thickness} ${jaw_width}"/>
-      </geometry>
-      <material name="fortis_jaw_orange"/>
-    </visual>
-    <collision>
-      <origin xyz="${jaw_length/2} 0 0" rpy="0 0 0"/>
-      <geometry>
-        <box size="${jaw_length} ${jaw_thickness} ${jaw_width}"/>
-      </geometry>
-    </collision>
-    <xacro:box_inertia m="${jaw_mass}"
-                       x="${jaw_length}"
-                       y="${jaw_thickness}"
-                       z="${jaw_width}"
-                       xyz="${jaw_length/2} 0 0"/>
-  </link>
-
-  <joint name="joint_gripper_mirror" type="prismatic">
-    <parent link="ee"/>
-    <child  link="jaw_right"/>
-    <origin xyz="${jaw_x_origin} 0 0" rpy="0 0 0"/>
-    <axis xyz="0 1 0"/>
-    <limit lower="-${jaw_open_stroke}" upper="0.0"
-           effort="20.0" velocity="0.05"/>
-    <mimic joint="joint_gripper" multiplier="-1.0" offset="0.0"/>
-    <dynamics damping="2.0" friction="0.5"/>
+  <link name="gripper_tcp"/>
+  <joint name="gripper_tcp_joint" type="fixed">
+    <parent link="gripper_base"/>
+    <child  link="gripper_tcp"/>
+    <origin xyz="0 0 ${gripper_tcp_z}" rpy="0 0 0"/>
   </joint>
 
   <!-- =================== arm camera (OAK-D Pro AF) =================== -->
   <!--
-    Camera body rotated 90 deg about Z so the 97 mm long dimension lies along
-    link4's local +Y (transverse to the arm tube, parallel to the gripper
-    jaw-opening axis). Lens still points along link4's +X (arm-forward), so
-    the optical frame transform downstream is unchanged.
+    Camera body oriented with rpy=(pi/2, 0, pi/2) so the 24 mm depth dim lies
+    along the camera link's local +X (outward / lens direction), the 97 mm
+    length lies along +Y (horizontal stereo baseline) and the 38 mm height
+    along +Z (vertical). The 97 x 38 lens-bearing face therefore faces +X.
+    Optical frame still applies the standard ROS RDF (Z fwd, X right, Y down)
+    conversion to the camera link.
   -->
   <link name="arm_camera_link">
     <visual>
-      <origin xyz="0 0 0" rpy="0 0 ${pi/2}"/>
+      <origin xyz="0 0 0" rpy="${pi/2} 0 ${pi/2}"/>
       <geometry>
         <box size="${oak_pro_x} ${oak_pro_y} ${oak_pro_z}"/>
       </geometry>
       <material name="fortis_camera_cyan"/>
     </visual>
     <collision>
-      <origin xyz="0 0 0" rpy="0 0 ${pi/2}"/>
+      <origin xyz="0 0 0" rpy="${pi/2} 0 ${pi/2}"/>
       <geometry>
         <box size="${oak_pro_x} ${oak_pro_y} ${oak_pro_z}"/>
       </geometry>
@@ -351,20 +362,16 @@
                        x="${oak_pro_x}"
                        y="${oak_pro_y}"
                        z="${oak_pro_z}"
-                       rpy="0 0 ${pi/2}"/>
+                       rpy="${pi/2} 0 ${pi/2}"/>
   </link>
 
-  <!--
-    Mount on link4, near the EE end, pointing +X (forward along the arm).
-    arm_cam_x_offset is measured from the J4 axis (link4 origin).
-  -->
+  <!-- Mount the camera under the wrist, forward of the gripper base mount. -->
   <joint name="link4_to_arm_camera" type="fixed">
     <parent link="link4"/>
     <child  link="arm_camera_link"/>
     <origin xyz="${arm_link4_axis + arm_cam_x_offset} 0 ${arm_cam_z_offset}" rpy="0 0 0"/>
   </joint>
 
-  <!-- Optical frame, ROS convention: Z forward, X right, Y down. -->
   <link name="arm_camera_optical_frame"/>
   <joint name="arm_camera_optical_joint" type="fixed">
     <parent link="arm_camera_link"/>

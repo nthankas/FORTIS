@@ -98,16 +98,22 @@
   -->
   <xacro:macro name="oak_lite_camera" params="name x y z roll pitch yaw">
 
+    <!--
+      Body box oriented with rpy=(pi/2, 0, pi/2) so the 17 mm depth lies along
+      camera local +X (outward / lens direction), the 91 mm length along +Y
+      (horizontal stereo baseline) and the 28 mm height along +Z (vertical).
+      The 91 x 28 lens-bearing face therefore faces +X.
+    -->
     <link name="${name}_camera_link">
       <visual>
-        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <origin xyz="0 0 0" rpy="${pi/2} 0 ${pi/2}"/>
         <geometry>
           <box size="${oak_lite_x} ${oak_lite_y} ${oak_lite_z}"/>
         </geometry>
         <material name="fortis_camera_cyan"/>
       </visual>
       <collision>
-        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <origin xyz="0 0 0" rpy="${pi/2} 0 ${pi/2}"/>
         <geometry>
           <box size="${oak_lite_x} ${oak_lite_y} ${oak_lite_z}"/>
         </geometry>
@@ -115,7 +121,8 @@
       <xacro:box_inertia m="${oak_lite_mass}"
                          x="${oak_lite_x}"
                          y="${oak_lite_y}"
-                         z="${oak_lite_z}"/>
+                         z="${oak_lite_z}"
+                         rpy="${pi/2} 0 ${pi/2}"/>
     </link>
 
     <joint name="${name}_camera_mount_joint" type="fixed">
@@ -135,34 +142,41 @@
   </xacro:macro>
 
   <!--
-    Camera placement per CAD:
-      front: at front face, looking forward (+X), tilted up 30 deg
-      rear:  at rear face,  looking backward (-X)
-      left:  on left side panel,  looking outward (+Y)
-      right: on right side panel, looking outward (-Y)
-    Body link convention: +X = camera forward. Yaw rotates body link to point that direction.
-    Pitch up = -pitch (rotation about Y axis, right-hand rule).
+    Camera names follow the chassis's CAD convention, which has the arm-side
+    edge as the rear of the robot. In base_link (REP-103) coordinates that
+    means user "front" = base_link -X. Camera labels are therefore:
+      front: at base_link -X face (user forward), tilted up 30 deg
+      rear:  at base_link +X face (user back)
+      left:  at base_link -Y face
+      right: at base_link +Y face
+    Body link convention: camera local +X = lens / outward direction. Yaw on
+    the parent joint orients each camera to face outward from its mount face.
   -->
   <xacro:oak_lite_camera name="front"
-                         x="${cam_front_x}" y="0" z="${cam_front_z}"
-                         roll="0" pitch="-0.524" yaw="0"/>          <!-- 30 deg up -->
+                         x="-${cam_front_x}" y="0" z="${cam_height_z}"
+                         roll="0" pitch="-0.524" yaw="${pi}"/>       <!-- 30 deg up -->
   <xacro:oak_lite_camera name="rear"
-                         x="-${cam_front_x}" y="0" z="${cam_front_z}"
-                         roll="0" pitch="0" yaw="${pi}"/>
+                         x="${cam_front_x}" y="0" z="${cam_height_z}"
+                         roll="0" pitch="0" yaw="0"/>
   <xacro:oak_lite_camera name="left"
-                         x="0" y="${cam_side_y}" z="${cam_side_z}"
-                         roll="0" pitch="0" yaw="${pi/2}"/>
-  <xacro:oak_lite_camera name="right"
-                         x="0" y="-${cam_side_y}" z="${cam_side_z}"
+                         x="0" y="-${cam_side_y}" z="${cam_height_z}"
                          roll="0" pitch="0" yaw="${-pi/2}"/>
+  <xacro:oak_lite_camera name="right"
+                         x="0" y="${cam_side_y}" z="${cam_height_z}"
+                         roll="0" pitch="0" yaw="${pi/2}"/>
 
   <!-- =================== arm mounting plate (where arm attaches) =================== -->
-  <!-- Provides a named frame for the arm's J1 axis to attach to. -->
+  <!--
+    Provides a named frame for the arm's J1 axis to attach to.
+    The yaw=pi flips the arm chain 180 deg about Z so that, at neutral pose,
+    the arm extends in base_link -X direction (over the chassis toward the
+    front face).
+  -->
   <link name="arm_mount"/>
   <joint name="chassis_to_arm_mount" type="fixed">
     <parent link="base_link"/>
     <child  link="arm_mount"/>
-    <origin xyz="${j1_mount_x} ${j1_mount_y} ${j1_mount_z}" rpy="0 0 0"/>
+    <origin xyz="${j1_mount_x} ${j1_mount_y} ${j1_mount_z}" rpy="0 0 ${pi}"/>
   </joint>
 
 </robot>
