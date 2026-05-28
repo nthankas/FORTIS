@@ -128,8 +128,7 @@ https://isaac.download.nvidia.com/isaac-ros/release-3 $(lsb_release -cs) release
 # If any of the above fails to install (e.g. NVIDIA renames a package or the
 # repo drops a binary for one of the architectures), the install is skipped
 # rather than failing the whole layer. We intentionally do NOT vendor a
-# source-build fallback here - that work is tracked separately. See
-# docs/adr/0001-dual-container-strategy.md.
+# source-build fallback here.
 # -----------------------------------------------------------------------------
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ros-humble-isaac-ros-visual-slam \

@@ -138,7 +138,7 @@ system block for the four wheels. It is included from
 xacro arg is passed. `display.launch.py` (RViz only) does not pass it,
 so the legacy RViz workflow keeps working unchanged. The
 `fortis_control` package's launch files pass it to drive real motors
-via `odrive_ros2_control`. See `docs/adr/0002-odrive-ros2-control-integration.md`.
+via `odrive_ros2_control`.
 
 ## Next steps (not in this package)
 
