@@ -13,7 +13,7 @@ URDF). You own the firmware, the protocol document, and the mock.
 
 | File | Purpose |
 |---|---|
-| `firmware/teensy/main.ino` | Firmware skeleton. TeensyStep for J1/J2/J3, hardware PWM for J4 + gripper, EEPROM position recovery, serial framing. |
+| `firmware/teensy/teensy.ino` | Firmware skeleton. TeensyStep for J1/J2/J3, hardware PWM for J4 + gripper, EEPROM position recovery, serial framing. |
 | `firmware/teensy/PROTOCOL.md` | Wire-format spec for the host↔Teensy serial link. Treat as a contract — see §5. |
 | `tools/mock_teensy.py` | Pure-Python pty simulator of the Teensy side. Lets the Jetson team develop without the board. |
 | `firmware/teensy/HANDOFF.md` | This file. |
@@ -39,7 +39,7 @@ malformed frame), flag it; don't fix it yourself.
 - **Position recovery:** Teensy 4.1 EEPROM emulation, ping-pong slots with CRC
 
 If the hardware spec changes (different driver, different servo, different shifter),
-update PROTOCOL.md §1 and the `#define` block at the top of `main.ino` together.
+update PROTOCOL.md §1 and the `#define` block at the top of `teensy.ino` together.
 
 ## 4. Pin map (current)
 
@@ -55,7 +55,7 @@ update PROTOCOL.md §1 and the `#define` block at the top of `main.ino` together
 | External E-STOP (active-low, pull-up) | 21 |
 | Status LED | 13 (built-in) |
 
-Pin map appears in two places: `main.ino` (the `#define` block ~lines 33–61) and
+Pin map appears in two places: `teensy.ino` (the `#define` block ~lines 33–61) and
 PROTOCOL.md §1. **Keep them in sync** — if you change a pin, change both.
 
 ## 5. Don't touch without coordination — protocol contract
@@ -73,7 +73,7 @@ the moment it's written.
 ID. Send me a Slack msg or open a PR comment so I can mirror it on the host side.
 
 **Need to change layout?** Bump `PROTO_MINOR` (or `PROTO_MAJOR` if breaking) in
-`main.ino` and PROTOCOL.md, and ping Nikhil before merging.
+`teensy.ino` and PROTOCOL.md, and ping Nikhil before merging.
 
 ## 6. Safe to change freely
 
@@ -100,9 +100,11 @@ ID. Send me a Slack msg or open a PR comment so I can mirror it on the host side
 
 ## 8. Known blockers
 
-### 8.1 TeensyStep doesn't compile against the current Teensy core
+### 8.1 TeensyStep doesn't compile against the current Teensy core — **RESOLVED 2026-05-26**
 
-This is upstream library breakage, not anything wrong with `main.ino`.
+Resolved via Option 1 below: TeensyStep4 (luni64 @ 42e1f69) vendored at `firmware/teensy/lib/TeensyStep4/` (commit `18d3df7`), `teensy.ino` adapted to the TeensyStep4 API (commit `f6d4dd4`), and a bench flash verified the resolution (commit `dd098cf`). The notes below are preserved for historical context.
+
+This was upstream library breakage, not anything wrong with `teensy.ino`.
 
 - **TeensyStep 2.3.4** (the only version in the Arduino library registry) gates
   its Teensy 4 implementation on `__IMXRT1052__`
@@ -110,7 +112,7 @@ This is upstream library breakage, not anything wrong with `main.ino`.
 - TeensyStep also calls `dwt_getCycles()`, which the new core no longer provides
 
 Result: `#include <TeensyStep.h>` itself fails to compile. Setting `MOCK_MODE=1`
-does NOT help — the include is unconditional in the current `main.ino`.
+does NOT help — the include is unconditional in the current `teensy.ino`.
 
 **Three options, in order of recommendation:**
 
@@ -121,7 +123,7 @@ does NOT help — the include is unconditional in the current `main.ino`.
 2. **Pin the Teensy core to ≤1.57.x.** Quick, but blocks any other Teensy 4.1
    work that benefits from newer core features. Not a long-term fix.
 3. **Switch to AccelStepper or TMCStepper.** Lots of churn — would mean rewriting
-   the J1/J2/J3 motion code in `main.ino`. Only do this if option 1 turns out
+   the J1/J2/J3 motion code in `teensy.ino`. Only do this if option 1 turns out
    to be a maintenance burden.
 
 Whichever path you pick: also wrap `#include <TeensyStep.h>` and the
@@ -138,7 +140,7 @@ in normal operation, annoying for tests.
 **Fix:** defer arming the watchdog until the first inbound CMD is received.
 Trivial change; do this when you're in the file for something else.
 
-## 9. TODOs flagged in main.ino (search `// TODO`)
+## 9. TODOs flagged in teensy.ino (search `// TODO`)
 
 | Symbol / location | What's missing |
 |---|---|
@@ -167,7 +169,7 @@ reason.
 
 ## 11. Working locally
 
-- **Edit / build:** Arduino IDE 2.x with Teensyduino, OR `arduino-cli` once §8.1 is unblocked. Everything should compile from `firmware/teensy/main.ino` standalone.
+- **Edit / build:** Arduino IDE 2.x with Teensyduino, OR `arduino-cli` once §8.1 is unblocked. Everything should compile from `firmware/teensy/teensy.ino` standalone.
 - **Protocol-only work without a Teensy:** run `python tools/mock_teensy.py --verbose`, point a host script at the slave pty path it prints. The mock supports `--inject-fault` for testing host-side fault handling.
 - **Branch:** all of this lives on `feat/teensy-protocol`. Make commits there or branch off it. **Don't merge to main until §10 steps 1–3 at minimum are green.**
 

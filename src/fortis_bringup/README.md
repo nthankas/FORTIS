@@ -1,20 +1,20 @@
 # fortis_bringup
 
-Top-level launch composition for FORTIS. Partial today: `bringup.launch.py` composes the mission state machine and the drive node; `sim.launch.py` and `teleop.launch.py` remain stubs. More node includes are added per package as each one comes online.
+Top-level launch composition for FORTIS. `bringup.launch.py` composes the mission state machine, the drive node, and the ODrive health monitor; `sim.launch.py` and `teleop.launch.py` are now live with concrete payloads (URDF publishing + Foxglove bridge, and keyboard teleop respectively). More node includes are added per package as each one comes online.
 
 ## Launch files
 
 | File | Status | Purpose |
 |---|---|---|
-| `launch/bringup.launch.py` | live | Composes `mission_state_node` (`fortis_safety`) and `drive_node` (`fortis_drive`). Arm controller, perception, localization, and diagnostics are added as those packages come online. |
-| `launch/sim.launch.py` | stub | TODO: simulator-backed bringup with the same ROS interfaces as the hardware path. Currently logs `TODO: not implemented`. |
-| `launch/teleop.launch.py` | stub | TODO: operator-station only (Foxglove bridge, click-to-3D adapter, `/cmd_vel` input). Currently logs `TODO: not implemented`. |
+| `launch/bringup.launch.py` | live | Composes `mission_state_node` (`fortis_safety`), `drive_node` (`fortis_drive`), and `odrive_health_monitor_node` (`fortis_safety`). Arm controller, perception, localization, and diagnostics are added as those packages come online. |
+| `launch/sim.launch.py` | live | Brings up `robot_state_publisher` (xacro-expanded URDF on `/robot_description` + `/tf`), `joint_state_publisher` (gated by `publish_joint_states:=true|false` so an external simulator can take over `/joint_states`), and `foxglove_bridge` on a configurable port (default 8765). Designed to pair with Isaac Sim running on the Windows host outside the container. |
+| `launch/teleop.launch.py` | live | Brings up `teleop_twist_keyboard` and remaps its output to `/cmd_vel`. Developer / debug-only entry point — production operator UI is the Foxglove + click-to-3D path. Must be launched in the foreground (the node reads stdin directly). |
 
-## Planned config
+## Config
 
-| File | Eventual purpose |
+| File | Purpose |
 |---|---|
-| `config/bringup_params.yaml` | TODO: per-node parameter overrides loaded by `bringup.launch.py`. Currently a placeholder header. |
+| `config/bringup_params.yaml` | Per-node parameter blocks loaded by `bringup.launch.py`. Forward-looking — most parameters are documented placeholders that the nodes have not yet adopted via `declare_parameter()`. See the file header for the registry rationale. |
 
 ## Building
 
@@ -26,12 +26,10 @@ source install/setup.bash
 ## Running
 
 ```bash
-ros2 launch fortis_bringup bringup.launch.py    # live: mission_state_node + drive_node
-ros2 launch fortis_bringup sim.launch.py        # stub: logs TODO and exits
-ros2 launch fortis_bringup teleop.launch.py     # stub: logs TODO and exits
+ros2 launch fortis_bringup bringup.launch.py    # mission_state_node + drive_node + odrive_health_monitor_node
+ros2 launch fortis_bringup sim.launch.py        # robot_state_publisher + joint_state_publisher + foxglove_bridge
+ros2 launch fortis_bringup teleop.launch.py     # teleop_twist_keyboard -> /cmd_vel
 ```
-
-The two stub launch files log `TODO: not implemented` at INFO level and exit the launch event loop with no actions to wait on.
 
 ## TODO
 
@@ -40,5 +38,4 @@ The two stub launch files log `TODO: not implemented` at INFO level and exit the
 - Add `depthai_ros_driver` includes for the 5 OAK cameras once `fortis_perception` exists. Per the BOM that is 4x OAK-D Lite (Active Focus) A00483 (left + right toroidal VIO, rear outward depth, front angled-up depth) plus 1x OAK-D Pro (Active Stereo IR, Active Focus, Standard FOV) A00546 on the arm L4 midpoint.
 - Add `robot_localization` ekf_node once `fortis_localization` exists.
 - Add namespace + `use_sim_time` arguments to `sim.launch.py`.
-- Add Foxglove bridge to `teleop.launch.py`.
-- Populate `config/bringup_params.yaml` with per-node parameter blocks.
+- Add the upstream-to-FORTIS ODrive health bridge (translates `/odrive_status` into `fortis_msgs/OdriveHealth` for `odrive_health_monitor_node` to consume) once `ros_odrive` is vcs-imported.

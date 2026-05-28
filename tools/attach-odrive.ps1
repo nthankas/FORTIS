@@ -5,6 +5,13 @@
     container can reach it as /dev/ttyACM*.
 
 .DESCRIPTION
+    LEGACY PATH. The primary ODrive calibration path is now `odrivetool`
+    running natively on the Jetson over SSH (see tools/odrive_calibrate.md);
+    that path is faster, has working udev rules, and matches the deployment
+    environment. This script is preserved for the case where a Jetson is
+    unavailable and the only host is a Windows machine running the
+    fortis-dev container.
+
     Idempotent: safe to re-run after a replug or Windows restart. The
     `usbipd bind` step requires admin and only needs to happen once per
     physical device. The `usbipd attach` step does NOT require admin and
