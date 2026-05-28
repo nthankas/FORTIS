@@ -196,12 +196,19 @@ controller. This is the intended behaviour for the single-motor bench.
 
 Same as above with:
 
-- `tools/odrive_calibrate.md` repeated for each S1, node_ids 0/1/2/3
-- All four S1s daisy-chained, last one's termination jumper closed
+- `tools/odrive_calibrate.md` repeated for each S1 in chain order
+  **FL → FR → RR → RL** with node_ids `0/1/2/3` respectively.
+- All four S1s daisy-chained in that order, USB-CAN adapter at the FL
+  end (its built-in 120 Ω is one terminator), RL's on-board termination
+  jumper closed at the far end.
 - `ros2 launch fortis_control drive_hw.launch.py` instead of
-  `bench_one_motor.launch.py`
-- Step 6 array is `[fl, fr, rl, rr]` — e.g. `[2.0, 2.0, 2.0, 2.0]` to
-  drive forward at constant speed on all four wheels.
+  `bench_one_motor.launch.py`.
+- Step 6 command array is still `[fl, fr, rl, rr]` — e.g.
+  `[2.0, 2.0, 2.0, 2.0]` to drive forward at constant speed on all
+  four wheels. (The controller's joint order `[fl, fr, rl, rr]` is
+  independent of the node_id chain order; the
+  `<param name="node_id">` block in the xacro maps each joint to its
+  S1, so commands route correctly regardless of array vs. chain order.)
 
 ## How this composes with the rest of the stack
 
