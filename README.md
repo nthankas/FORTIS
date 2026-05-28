@@ -87,7 +87,7 @@ preferred way to bring the dev environment up; the raw `docker compose`
 calls still work and are the documented fallback.
 
 ```bash
-cp .env.example .env
+cp tools/stack/.env.example .env
 ./stack up
 ./stack exec
 ./stack status

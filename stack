@@ -4,7 +4,7 @@
 #
 # A thin wrapper around `git` and `docker compose` so common deployment
 # workflows are one-line operations. Reads configuration from a .env file in
-# the repository root (template: .env.example).
+# the repository root (template: tools/stack/.env.example).
 #
 # Usage:
 #     ./stack <command> [args...]
@@ -25,7 +25,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="${SCRIPT_DIR}"
 ENV_FILE="${REPO_ROOT}/.env"
-ENV_EXAMPLE="${REPO_ROOT}/.env.example"
+ENV_EXAMPLE="${REPO_ROOT}/tools/stack/.env.example"
 COMPOSE_BASE="${REPO_ROOT}/docker/docker-compose.yml"
 COMPOSE_GPU="${REPO_ROOT}/docker/docker-compose.gpu.yml"
 
@@ -88,7 +88,7 @@ require_env_file() {
     if [[ "${ENV_LOADED:-0}" -ne 1 ]]; then
         err "No .env file at ${ENV_FILE}"
         err "Copy the template and edit values for this machine:"
-        err "    cp .env.example .env"
+        err "    cp tools/stack/.env.example .env"
         exit 1
     fi
 }
@@ -206,8 +206,8 @@ COMMANDS
     help [command]        Print this help, or help for one command.
 
 ENVIRONMENT
-    Reads .env in the repo root. Copy from .env.example on first run:
-        cp .env.example .env
+    Reads .env in the repo root. Copy from tools/stack/.env.example on first run:
+        cp tools/stack/.env.example .env
 
     Required keys: FORTIS_REF, COMPOSE_PROFILE, ROS_DOMAIN_ID,
                    COMPOSE_PROJECT_NAME.
@@ -631,7 +631,7 @@ cmd_status() {
     if [[ "${ENV_LOADED:-0}" -eq 1 ]]; then
         printf '  .env:               loaded (%s)\n' "${ENV_FILE}"
     else
-        printf '  .env:               %sMISSING%s (falling back to defaults; copy .env.example to .env)\n' \
+        printf '  .env:               %sMISSING%s (falling back to defaults; copy tools/stack/.env.example to .env)\n' \
             "${C_WARN}" "${C_RESET}"
     fi
 
