@@ -7,8 +7,7 @@
 #
 # It defines a new service `fortis-dev-gpu` that shares the volume mounts and
 # ROS environment of the existing `dev` service but uses the GPU Dockerfile
-# and reserves an NVIDIA GPU at runtime. See docker/README.md and
-# docs/adr/0001-dual-container-strategy.md.
+# and reserves an NVIDIA GPU at runtime. See docker/README.md.
 
 services:
   fortis-dev-gpu:

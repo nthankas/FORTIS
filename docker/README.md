@@ -132,6 +132,3 @@ schedule, so a stale pin will eventually 404 at build time.
   builds even if a single package is unavailable.
 - Display does not appear -> ensure `xhost +local:` on the host before
   starting the container.
-
-For the rationale behind the dual-container approach see
-[`docs/adr/0001-dual-container-strategy.md`](../docs/adr/0001-dual-container-strategy.md).

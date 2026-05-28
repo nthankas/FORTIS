@@ -41,8 +41,7 @@ OnShape model and `FORTIS_FINAL_BOM` are the source of truth; this table is a sn
 .devcontainer/      VSCode dev container
 .gitattributes      Force LF on text files (cross-machine hygiene)
 docker/             Dockerfile.dev + docker-compose.yml (ROS 2 Humble desktop); GPU variant in progress
-docs/adr/           Architectural decision records
-firmware/teensy/    Teensy 4.1 arm-motion firmware (main.ino, PROTOCOL.md, HANDOFF.md)
+firmware/teensy/    Teensy 4.1 arm-motion firmware (teensy.ino, PROTOCOL.md, HANDOFF.md)
 src/                ROS 2 packages (colcon workspace)
   fortis_safety/    Mission state machine + ROS node + REPL console
   fortis_msgs/      Custom message + action types
@@ -177,7 +176,7 @@ The cross-package seam between safety and drive is exercised by
 | `fortis_msgs` | working; 4 messages + 1 action |
 | `fortis_comms` | X-drive kinematics, packaged as an ament_python library consumed by `fortis_drive`. `robot_localization` integration still pending. |
 | `fortis_drive` | working; gated by mission state; also publishes `/wheel_velocity_controller/commands` for `fortis_control` |
-| `fortis_control` | scaffolded; `<ros2_control>` xacro + controller_manager YAMLs + bench-one-motor and full-chassis launch files. Bench bring-up against real hardware pending (calibration runbook at `tools/odrive_calibrate.md`). See `docs/adr/0002-odrive-ros2-control-integration.md`. |
+| `fortis_control` | `<ros2_control>` xacro + controller_manager YAMLs + bench-one-motor and full-chassis launch files for the X-drive via `odrive_ros2_control`. Calibration runbook at `tools/odrive_calibrate.md`. |
 | `fortis_arm` | gripper services (`open_gripper`, `close_gripper`) gated by mission state. A MoveIt 2 wrapper for arm motion is planned. Firmware-side skeleton + protocol live under `firmware/teensy/`. |
 | `fortis_bringup` | `bringup.launch.py` composes `mission_state_node` + `drive_node` + `odrive_health_monitor_node`; `sim.launch.py` brings up `robot_state_publisher` + `joint_state_publisher` + `foxglove_bridge`; `teleop.launch.py` brings up `teleop_twist_keyboard` with `/cmd_vel` remap. Arm-controller and perception includes pending. |
 | `fortis_description` | scaffold; first OnShape URDF export landed but requires cleanup before integration (95 links / 94 joints, naming + topology issues; Adrian + Carlos have the fix list). URDF authoring planned as a dual track: chassis from OnShape cleanup, arm hand-authored xacro |
@@ -188,7 +187,6 @@ The cross-package seam between safety and drive is exercised by
 
 ## Documentation
 
-- `docs/adr/` -- architectural decision records (dual-container strategy, ODrive ros2_control integration)
 - `tools/odrive_calibrate.md` -- per-S1 `odrivetool` calibration runbook; required before `fortis_control` will spin a motor
 - `sim/README.md` and `sim/isaac/xdrive/CHANGELOG.md` -- simulation state and history
 - `sim/analysis/` -- drivetrain rationale (x-drive vs skid-steer, orbit, torque, pivot)
