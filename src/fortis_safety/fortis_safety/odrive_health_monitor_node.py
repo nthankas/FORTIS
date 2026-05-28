@@ -81,12 +81,11 @@ def compute_aggregate_health(
     age_s: Optional[float],
     watchdog_timeout_s: float,
 ) -> bool:
-    """
-    Pure-logic core: decide drive_healthy from a (possibly stale) health
-    snapshot.
+    """Decide drive_healthy from a (possibly stale) health snapshot.
 
-    Extracted as a module-level function so tests can exercise the
-    aggregation logic without spinning up rclpy or constructing the node.
+    Pure-logic core, extracted as a module-level function so tests can
+    exercise the aggregation logic without spinning up rclpy or
+    constructing the node.
 
     Inputs:
       latest_health         the most recent OdriveHealth-shaped object,
