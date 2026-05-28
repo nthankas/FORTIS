@@ -47,8 +47,10 @@ The wiring lives in three places:
    `<ros2_control>` system block. Binds the four wheel joints to
    `odrive_ros2_control_plugin/ODriveHardwareInterface` with hardware
    param `can:=<interface>` and per-joint param `node_id:=0/1/2/3` for
-   FL/FR/RL/RR. Parametrised by `wheels` so the bench can load fewer
-   joints. Mocks out via `use_mock_hardware:=true` for CI.
+   `FL/FR/RR/RL` (chain order — see `project_can_chain_order` memory
+   note and the table in `tools/odrive_calibrate.md`). Parametrised by
+   `wheels` so the bench can load fewer joints. Mocks out via
+   `use_mock_hardware:=true` for CI.
 2. **`src/fortis_control/`** — controller_manager YAMLs + launch files.
    The chassis-wide YAML loads a
    `velocity_controllers/JointGroupVelocityController` over the four

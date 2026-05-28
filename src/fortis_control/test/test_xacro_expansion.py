@@ -154,7 +154,8 @@ def test_bench_single_wheel_renders_only_fl(tmp_path):
 def test_full_chassis_renders_all_four_wheels_with_correct_node_ids(tmp_path):
     """
     With wheels:=fl,fr,rl,rr, the <ros2_control> block contains all four
-    wheel joints with node_ids 0/1/2/3 in FL/FR/RL/RR order.
+    wheel joints with node_ids assigned per the CAN daisy-chain order
+    FL → FR → RR → RL (FL=0, FR=1, RR=2, RL=3).
 
     The node_id-to-wheel binding is the entire safety surface for "which
     motor moves when I command which wheel velocity." If this regresses,
@@ -177,8 +178,8 @@ def test_full_chassis_renders_all_four_wheels_with_correct_node_ids(tmp_path):
     assert by_name == {
         "fl_wheel_joint": "0",
         "fr_wheel_joint": "1",
-        "rl_wheel_joint": "2",
-        "rr_wheel_joint": "3",
+        "rr_wheel_joint": "2",
+        "rl_wheel_joint": "3",
     }, f"node_id mapping drift: {by_name}"
 
     _check_urdf(urdf, tmp_path)
@@ -189,8 +190,8 @@ def test_full_chassis_renders_all_four_wheels_with_correct_node_ids(tmp_path):
     [
         ("fl", "fl_wheel_joint", "0"),
         ("fr", "fr_wheel_joint", "1"),
-        ("rl", "rl_wheel_joint", "2"),
-        ("rr", "rr_wheel_joint", "3"),
+        ("rr", "rr_wheel_joint", "2"),
+        ("rl", "rl_wheel_joint", "3"),
     ],
 )
 def test_each_wheel_can_be_loaded_alone(wheel, joint_name, expected_node_id):

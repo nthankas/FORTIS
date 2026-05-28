@@ -14,10 +14,10 @@ What this brings up
 Pre-requisites
 --------------
   1. All four S1s calibrated per tools/odrive_calibrate.md with node_ids
-     0/1/2/3 for FL/FR/RL/RR. Sharpie labels match.
-  2. CAN harness wired FL->FR->RL->RR, USB-CAN adapter at one end with
-     built-in 120 Ohm termination, last S1's on-board termination jumper
-     closed at the other end.
+     0/1/2/3 for FL/FR/RR/RL respectively. Sharpie labels match.
+  2. CAN harness wired FL->FR->RR->RL (chain position = node_id), USB-CAN
+     adapter at the FL end with built-in 120 Ohm termination, RL's on-board
+     termination jumper closed at the other end.
   3. SocketCAN brought up:
 
          sudo ip link set can0 up type can bitrate 250000
