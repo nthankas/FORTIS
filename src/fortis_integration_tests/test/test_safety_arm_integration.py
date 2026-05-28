@@ -8,10 +8,6 @@ side already cover behaviour in isolation; this test catches QoS,
 timing, topic-name, and service-name mismatches the unit tests do not
 see.
 
-Replaces an earlier scaffold that referenced the now-retired MoveToPose
-action server (moved to legacy/deprecated_arm_action). The arm exposes
-gripper services today; the action will return when MoveIt 2 lands.
-
 Test cases:
 
 1. IDLE, ORBIT, TARGETING, and FAULT reject both gripper services with

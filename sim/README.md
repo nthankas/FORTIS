@@ -5,21 +5,14 @@ Simulation work for FORTIS. Currently all sims are in `isaac/` (NVIDIA Isaac Sim
 ## Layout
 
 ```
-sim/isaac/
-  xdrive/                 Active drivetrain + arm sims
-    canonical/            THE scripts to copy from (xdrive_realwheel.py, xdrive_reactor_arm_v3.py)
-    deprecated/           Old scripts kept for history (do NOT copy from these)
-      scripts/arm/        Deprecated arm scripts + IK (v1 arm, pose/torque/workspace sweeps)
-      scripts/chassis/    Deprecated chassis scripts (early reactor sims, v1/v2 arm-on-chassis builds, rejected realwheel variants)
-      results/            Old result dirs from deprecated scripts (data unreliable, kept for history)
-    tools/                Analysis / measurement / standalone utilities
-    lib/                  Shared modules (sim_config.py, arm_ik_v2.py, arm_ik_v3.py)
-    assets/               USD files (diiid_reactor.usd, omniwheels.usd)
-    docs/                 Spec docs, summaries, R0 plan
-    results/              Per-script output (results/<script_name>/...)
-    CHANGELOG.md          Milestone history
-  deprecated/
-    skid_steer_design/    Archived: proves skid-steer can't straddle the step
+sim/isaac/xdrive/
+  canonical/    Active sim scripts (xdrive_realwheel.py, xdrive_reactor_arm_v3.py)
+  tools/        Analysis / measurement / standalone utilities
+  lib/          Shared modules (sim_config.py, arm_ik_v3.py)
+  assets/       USD files (diiid_reactor.usd, omniwheels.usd)
+  docs/         Spec docs, summaries, R0 plan
+  results/      Per-script output (results/<script_name>/...)
+  CHANGELOG.md  Milestone history
 ```
 
 Rule: every script writes its output into `results/<script_name>/`. No flat dumps in `xdrive/`.
@@ -27,9 +20,9 @@ Rule: every script writes its output into `results/<script_name>/`. No flat dump
 ## Canonical scripts
 
 - `xdrive/canonical/xdrive_realwheel.py` -- chassis + real Kaya omni-wheel meshes (1 hub + 10 rollers per wheel as separate rigid bodies, after the 5-sphere roller-collider fix). 44-DOF articulation, CPU physics @ 360 Hz, TGS + CCD. Loads `assets/omniwheels.usd`. Supports `--reactor` for the DIII-D environment. Octagonal-prism skeleton `13.082" x 8.54" x 6.0"` with `3"` chamfered face diagonals at the four 45-degree corners (where the wheels mount), total footprint `19.022" x 14.5"`, `2.0"` belly default.
-- `xdrive/canonical/xdrive_reactor_arm_v3.py` -- **active build target.** 4-DOF parallel-link arm on the realwheel chassis, flat-stowed. Single-config: 30" carbon-fiber arm, always loaded with 3 lb payload. No `--24arm` / `--36arm` / `--metal` / `--armloaded` flags -- those collapsed into one fixed build. Heterogeneous motors (NEMA 17 + Cricket J1/J3, NEMA 23 + EG23 + adapter J2, Hitec D845WP J4), 1.128"x1.128" CF tubes, OAK-D Pro camera at L4 midpoint. v2 (`xdrive_reactor_arm_v2.py`) was deprecated when the heavier J2 stack landed -- see `deprecated/scripts/chassis/xdrive_reactor_arm_v2.py` for back-comparison.
+- `xdrive/canonical/xdrive_reactor_arm_v3.py` -- **active build target.** 4-DOF parallel-link arm on the realwheel chassis, flat-stowed. Single-config: 30" carbon-fiber arm, always loaded with 3 lb payload. Heterogeneous motors (NEMA 17 + Cricket J1/J3, NEMA 23 + EG23 + adapter J2, Hitec D845WP J4), 1.128"x1.128" CF tubes, OAK-D Pro camera at L4 midpoint.
 
-Any new sim that needs the FORTIS chassis copies its build path from `canonical/xdrive_realwheel.py`. Don't rebuild geometry from scratch and don't copy from anything in `deprecated/`.
+Any new sim that needs the FORTIS chassis copies its build path from `canonical/xdrive_realwheel.py`.
 
 ## Tools
 
@@ -38,14 +31,6 @@ Any new sim that needs the FORTIS chassis copies its build path from `canonical/
 - `tools/arm_mc_plot_v4.py` -- sampling histogram, torque table, per-joint torque bar chart (J1-J4), and poloidal cross-section.
 - `tools/sweep_orbit_realwheel.py` -- orbit-mode torque sweep on the canonical realwheel chassis. Used to validate the 5-sphere roller collider against the previous single-sphere baseline; results live under `results/orbit_realwheel_5sphere/` and `results/orbit_realwheel_singlesphere/`.
 - `tools/clearance_sweep.py`, `tools/measure_r0_port.py`, `tools/test_drift.py` -- standalone analytical / measurement utilities (no Isaac Sim needed).
-
-The arm continuous-sweep pipeline (Cartesian grid, J1 fixed at 0) is fully deprecated -- use the v4 Monte Carlo pipeline above. Older tooling under `deprecated/scripts/arm/` and `deprecated/scripts/chassis/`:
-- v1 arm: `arm_continuous_sweep_v1.py`, `arm_sweep_filter_v1.py`, `arm_stability_sweep_v1.py`, `arm_ik_v1.py`, `arm_pose_sweep.py`, `arm_torque_sweep.py`, `arm_workspace_sweep.py`
-- v2 arm: `arm_continuous_sweep_v2.py`, `arm_sweep_filter_v2.py`
-- v3 arm: `arm_continuous_sweep_v3.py`, `arm_sweep_filter_v3.py`, `arm_sweep_plot_v3.py`
-- chassis: `orbit_torque.py`, `orbit_torque_v2.py`, `step_arch_optimizer.py`, `sweep_orbit_variant.py`
-
-See `deprecated/README.md` for what each was and why it was retired.
 
 ## Hardware spec parity
 
@@ -59,7 +44,7 @@ Mass budget (40 lb total robot, ~18.144 kg):
 | Wheels | 4 x 1.0 kg | `canonical/xdrive_realwheel.py` `WHEEL_MASS` |
 | Total | 18.144 kg (= 40 lb) | |
 
-Sweep range for parameter studies: `lib/sim_config.py` `MASS_VALUES_KG = [13.6, 18.1, 22.7]` (30 / 40 / 50 lb), default 18.1 kg. The arm-IK modules (`lib/arm_ik_v3.py`, deprecated `lib/arm_ik_v2.py`) carry their own `CHASSIS_MASS = 20.4` constant for analytical tipping calculations -- v3 is the active value, v2 is kept for back-comparison only.
+Sweep range for parameter studies: `lib/sim_config.py` `MASS_VALUES_KG = [13.6, 18.1, 22.7]` (30 / 40 / 50 lb), default 18.1 kg. `lib/arm_ik_v3.py` carries its own `CHASSIS_MASS = 20.4` constant for analytical tipping calculations.
 
 Refer to the OnShape model and BOM for ground-truth dimensions, not these scripts.
 
@@ -72,7 +57,7 @@ Refer to the OnShape model and BOM for ground-truth dimensions, not these script
 
 ## Why x-drive (not skid-steer)
 
-The robot straddles a 4.5" step between the inner and outer reactor floor. Skid-steer point turns while straddling this step were tested in 60 configurations - only 3 completed (5%), all with dangerous tilt and drift. See `deprecated/skid_steer_design/ANALYSIS.md`.
+The robot straddles a 4.5" step between the inner and outer reactor floor. Skid-steer point turns while straddling this step were tested in 60 configurations - only 3 completed (5%), all with dangerous tilt and drift.
 
 ## Running
 

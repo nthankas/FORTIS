@@ -32,7 +32,7 @@ was created. They are not enforced by the package itself.
 
 | Action | Used by | Purpose |
 |---|---|---|
-| `MoveToPose` | none today; reserved for the planned MoveIt 2 wrapper in `fortis_arm` | Move the arm end-effector to a target `geometry_msgs/PoseStamped`. Goal carries the target pose; result is `bool succeeded` + `string message`; feedback is `float32 progress` in `[0.0, 1.0]`. The earlier `fortis_arm` action-server scaffold has been retired to `legacy/deprecated_arm_action/move_to_pose_action_server.py`; the definition is preserved here so the eventual MoveIt 2-backed wrapper can adopt the same contract. |
+| `MoveToPose` | reserved for the planned MoveIt 2 wrapper in `fortis_arm` | Move the arm end-effector to a target `geometry_msgs/PoseStamped`. Goal carries the target pose; result is `bool succeeded` + `string message`; feedback is `float32 progress` in `[0.0, 1.0]`. |
 
 ## Field-naming conventions
 
