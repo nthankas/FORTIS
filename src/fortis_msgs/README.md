@@ -22,6 +22,8 @@ source install/setup.bash
 | `GraspCandidate` | `/fortis/planner/grasp_candidates` | A candidate grasp from the grasp planner. Carries the end-effector pose in the robot frame, planner confidence in `[0.0, 1.0]`, an approach unit vector, and a timestamp. |
 | `MissionState` | `/fortis/mission_state_v2` | Richer mission-state announcement than the latched `std_msgs/String` topic published today by `fortis_safety/mission_state_node`. Carries previous state and the transition timestamp so consumers can render transitions and detect stalls. The plain `String` topic is preserved for back-compat. |
 | `WheelVelocities` | `/fortis/drive/wheel_velocities`, `/fortis/drive/zero_velocities` | Per-wheel angular velocity command for the X-drive (FL, FR, RL, RR in rad/s at the wheel shaft). Published by `fortis_drive/drive_node`. |
+| `OdriveAxisHealth` | (composed into `OdriveHealth`) | Per-axis health snapshot for one ODrive S1: node_id, armed flag, active-errors bitfield, vbus voltage, motor/FET temperatures. The FORTIS-owned narrow contract sitting between the upstream `odrive_ros2_control` schema and the safety FSM. |
+| `OdriveHealth` | `/fortis/drive/odrive_health` | Composite of four `OdriveAxisHealth` (fl/fr/rl/rr). Published by an upstream-to-FORTIS bridge (TBD), consumed by `fortis_safety/odrive_health_monitor_node` which aggregates it into `/fortis/context/drive_healthy` + edge-triggered `/fortis/events/fault`. |
 
 Topic names listed above are the intended use sites at the time this package
 was created. They are not enforced by the package itself.

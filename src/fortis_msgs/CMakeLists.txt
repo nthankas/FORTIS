@@ -15,6 +15,8 @@ set(msg_files
   "msg/ChassisCamClick.msg"
   "msg/GraspCandidate.msg"
   "msg/MissionState.msg"
+  "msg/OdriveAxisHealth.msg"
+  "msg/OdriveHealth.msg"
   "msg/WheelVelocities.msg"
 )
 

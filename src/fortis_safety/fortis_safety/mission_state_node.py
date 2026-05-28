@@ -45,6 +45,11 @@ CONTEXT_FIELDS = [
     "chassis_at_home",
     "pick_in_contact",
     "operator_ack",
+    # Published by fortis_safety/odrive_health_monitor_node. True iff all
+    # four ODrive S1 axes report zero active_errors AND a health snapshot
+    # has arrived within the watchdog window. Goes False on any axis
+    # fault; the same node emits Event.FAULT on the True->False edge.
+    "drive_healthy",
 ]
 
 
