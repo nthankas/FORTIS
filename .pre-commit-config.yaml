@@ -26,7 +26,8 @@ exclude: |
       legacy/.*|
       analysis/.*|
       \.venv/.*|
-      venv/.*
+      venv/.*|
+      firmware/teensy/lib/.*
   )$
 
 repos:
