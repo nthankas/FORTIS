@@ -1,16 +1,16 @@
 # fortis_arm
 
-Arm controller seam for FORTIS, gated by mission state. **Kinematics are deferred** -- this package is the architectural contract scaffold (action server + gripper services + state gating), not the motion implementation. The contract is what unblocks the targeting, grasp, and operator-UI work; the IK / trajectory / Teensy serial pipeline lands in a follow-up pass.
+Arm controller seam for FORTIS, gated by mission state. Provides gripper services and the contract surface for arm motion; targeting, grasp, and operator-UI work depend on this contract.
 
 ## What ships here
 
 | Endpoint | Type | Purpose |
 |---|---|---|
-| `open_gripper` | service, `std_srvs/srv/Trigger` | Stub; rejects on disallowed state with `success=False` + reason; returns `success=False, message="gripper actuation not implemented"` on allowed state. |
+| `open_gripper` | service, `std_srvs/srv/Trigger` | Rejects on disallowed state with `success=False` + reason; returns `success=False, message="gripper actuation not implemented"` on allowed state. |
 | `close_gripper` | service, `std_srvs/srv/Trigger` | Same shape as `open_gripper`. |
 | `/fortis/mission_state` | subscription, `std_msgs/String` | Latched (TRANSIENT_LOCAL + RELIABLE, depth=1). Same topic and QoS as `fortis_drive`. |
 
-The `move_to_pose` action server previously embedded here has been retired to `legacy/deprecated_arm_action/move_to_pose_action_server.py`. The planned replacement is a thin gate over MoveIt 2's `MoveGroup` action once `fortis_description` lands a real URDF. The `fortis_msgs/action/MoveToPose` definition is preserved in `fortis_msgs/` for that wrapper.
+A MoveIt 2 wrapper for arm motion is planned, using the `fortis_msgs/action/MoveToPose` contract.
 
 ### Allowed mission states for arm motion
 
@@ -48,7 +48,7 @@ Arm structural tubing: Clearwater Composites 1" ID x 1 1/8" OD pultruded square 
 
 Closed-loop feedback is provided by the CL57T's own encoder per joint -- there are no separate absolute encoders on the arm. On reboot the controller reads the **last-known position from a position file** rather than running a homing routine. Cycloidal gearboxes are near self-locking under the arm's payload, so position drift while powered down is small enough that file-based recovery is acceptable.
 
-When IK lands, the Teensy node will need to reconcile the file-recovered position against the CL57T's reported position at startup and refuse to act if they disagree by more than a configurable tolerance. The scaffold here does not implement that check.
+When IK lands, the Teensy node will need to reconcile the file-recovered position against the CL57T's reported position at startup and refuse to act if they disagree by more than a configurable tolerance.
 
 ## Why this design
 
@@ -69,7 +69,7 @@ colcon test-result --verbose
 ```
 
 Tests:
-- `test/test_state_gating.py` -- parametrised over every state in `MissionStateMachine.State`. The gripper services (`open_gripper`, `close_gripper`) are accepted inside `ALLOWED_ARM_STATES` (and return the "gripper actuation not implemented" stub) and rejected at the gate elsewhere. Action-goal gating was removed alongside the action server itself; the file's docstring notes the retirement.
+- `test/test_state_gating.py` -- parametrised over every state in `MissionStateMachine.State`. The gripper services (`open_gripper`, `close_gripper`) are accepted inside `ALLOWED_ARM_STATES` (and return the "gripper actuation not implemented" response) and rejected at the gate elsewhere.
 - `test/test_bringup.py` -- if `/fortis/mission_state` has not yet been published when a request arrives, the gate must reject. Mirrors the same race covered in `fortis_drive/test/test_drive_node.test_no_state_received_rejects_cmd_vel`.
 
 Lint (flake8, pep257) is no longer part of `colcon test`. It runs via pre-commit hooks and the `pre-commit` job in `.github/workflows/ci.yml`. See the root README "Pre-commit hooks" section.

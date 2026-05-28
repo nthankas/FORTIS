@@ -1,14 +1,9 @@
-"""
-State-gating tests for fortis_arm.arm_controller_node.
+"""State-gating tests for fortis_arm.arm_controller_node.
 
 Drives the mission-state topic through the full FSM and asserts that
 the open_gripper / close_gripper services are honoured only inside
 ALLOWED_ARM_STATES. Mirrors the gating structure of
 fortis_drive/test/test_drive_node.py.
-
-Note: the move_to_pose action-server scaffold was retired and moved to
-``legacy/deprecated_arm_action/``. Replaced by ros2_control + standard
-ROS 2 packages. Action-gating tests have been removed.
 """
 
 from __future__ import annotations

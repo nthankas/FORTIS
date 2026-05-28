@@ -33,7 +33,6 @@ OnShape model and `FORTIS_FINAL_BOM` are the source of truth; this table is a sn
 | Cameras (5x) | 4x Luxonis OAK-D Lite (Active Focus) A00483 — left/right toroidal depth (primary + secondary VIO with redundant BMI270 6-axis IMUs and bilateral depth), rear depth (outward, extraction obstacle), front depth (angled 30-45 deg up at center column). 1x Luxonis OAK-D Pro (Active Stereo IR, Active Focus, Standard FOV) A00546 on arm L4 midpoint, BNO085 9-axis IMU, IP66, includes Y-adapter + USB cable. All 4 TOPS each. |
 | Jetson USB assignment | Port 1: OAK-D Pro; Port 2: USB-CAN (drive); Port 3: Coolgear hub (4x OAK-D Lites); Port 4: Teensy 4.1 (arm) |
 | Power | Tether-supplied, no onboard battery. Power BOM is a separate sheet. |
-| Cable / winch | Deferred — TBD pending Sim4 |
 | Idler hardware | 20x idler rollers + 20x shoulder screws (McMaster) |
 
 ## Repo layout
@@ -49,15 +48,14 @@ src/                ROS 2 packages (colcon workspace)
   fortis_msgs/      Custom message + action types
   fortis_comms/     X-drive kinematics library (+ interim test helpers)
   fortis_drive/     X-drive ROS node, gated by mission state
-  fortis_arm/       Arm controller seam (action + gripper services), scaffold
-  fortis_bringup/   Top-level launch composition (scaffold, stub launches only)
+  fortis_arm/       Arm controller seam (gripper services + state gating)
+  fortis_bringup/   Top-level launch composition (bringup / sim / teleop)
   fortis_description/  URDF / xacro + meshes + RViz config
   fortis_control/   ros2_control wiring for the X-drive (odrive_ros2_control)
   fortis_integration_tests/   Cross-package launch_testing
 sim/                Isaac Sim 5.1 work (Windows host, outside the container)
-  isaac/xdrive/     Canonical chassis + arm sims, tools, deprecated/, results
+  isaac/xdrive/     Canonical chassis + arm sims, tools, results
   analysis/         Drivetrain and arm analysis writeups
-legacy/             Reference code from earlier design iterations
 ```
 
 ## Dev environment
@@ -177,17 +175,16 @@ The cross-package seam between safety and drive is exercised by
 | Dev environment | working; CPU `fortis-dev` is the default, opt-in `fortis-dev-gpu` (Isaac ROS Common base) staged for FORTIS PC / IdeaPad / Jetson |
 | `fortis_safety` | working; mission FSM + REPL console; end-to-end ROS round trip verified |
 | `fortis_msgs` | working; 4 messages + 1 action |
-| `fortis_comms` | X-drive kinematics in production. The earlier `odrive_s1.py` / `motor_base.py` / `ekf.py` helpers have been moved to `legacy/deprecated_*`; `odrive_s1.py` is now superseded by `fortis_control` + `odrive_ros2_control`. `robot_localization` integration still pending. See `docs/adr/` and `legacy/README.md`. |
+| `fortis_comms` | X-drive kinematics, packaged as an ament_python library consumed by `fortis_drive`. `robot_localization` integration still pending. |
 | `fortis_drive` | working; gated by mission state; also publishes `/wheel_velocity_controller/commands` for `fortis_control` |
 | `fortis_control` | scaffolded; `<ros2_control>` xacro + controller_manager YAMLs + bench-one-motor and full-chassis launch files. Bench bring-up against real hardware pending (calibration runbook at `tools/odrive_calibrate.md`). See `docs/adr/0002-odrive-ros2-control-integration.md`. |
-| `fortis_arm` | scaffold; gripper services (`open_gripper`, `close_gripper`) gated by mission state. The `move_to_pose` action-server scaffold previously embedded in this node has been retired to `legacy/deprecated_arm_action/`; the planned replacement is a thin gate over MoveIt 2's `MoveGroup`, see `docs/adr/`. **IK / trajectory / Teensy serial deferred.** Firmware-side skeleton + protocol live under `firmware/teensy/`. |
+| `fortis_arm` | gripper services (`open_gripper`, `close_gripper`) gated by mission state. A MoveIt 2 wrapper for arm motion is planned. Firmware-side skeleton + protocol live under `firmware/teensy/`. |
 | `fortis_bringup` | `bringup.launch.py` composes `mission_state_node` + `drive_node` + `odrive_health_monitor_node`; `sim.launch.py` brings up `robot_state_publisher` + `joint_state_publisher` + `foxglove_bridge`; `teleop.launch.py` brings up `teleop_twist_keyboard` with `/cmd_vel` remap. Arm-controller and perception includes pending. |
 | `fortis_description` | scaffold; first OnShape URDF export landed but requires cleanup before integration (95 links / 94 joints, naming + topology issues; Adrian + Carlos have the fix list). URDF authoring planned as a dual track: chassis from OnShape cleanup, arm hand-authored xacro |
 | `fortis_integration_tests` | safety-drive seam verified end-to-end |
 | Isaac Sim | chassis (`xdrive_realwheel.py`) + v3 arm canonical script + v4 Monte Carlo sweep tooling -- see `sim/README.md` |
 | Isaac Sim — R0 port entry | not started |
 | `fortis_perception`, `fortis_localization` | planned |
-| Cable / winch design | deferred pending Sim4 |
 
 ## Documentation
 

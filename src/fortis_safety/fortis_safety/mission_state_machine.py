@@ -30,15 +30,6 @@ and easy to test - the same step() call with different contexts produces
 deterministic outcomes. Known context keys are listed at the top of the
 Guards section below.
 
-Adding new states or events
----------------------------
-1. Add the new State or Event to its enum.
-2. If a new context field is needed, add a guard function that reads it.
-3. Append Transition entries to TRANSITIONS.
-4. If the new context field has to flow in over ROS, add it to
-   CONTEXT_FIELDS in mission_state_node.py.
-5. Add unit tests in test/test_mission_state_machine.py.
-
 Stow/deploy is intentionally NOT modeled here. Stow is a pose flag handled
 by the arm controller; the mission can be in any state with the arm stowed
 or deployed. Forcing stow into this state machine would create a

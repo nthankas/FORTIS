@@ -6,11 +6,9 @@
 
 ## Context
 
-`legacy/deprecated_motor_stack/odrive_s1.py` was an interim, hand-rolled
-ODrive S1 CAN wrapper that lived in `fortis_comms`. It was retired
-pending a real replacement. Without one, `fortis_drive` produces wheel
-velocities but nothing turns them into motor torque — the topic has no
-consumer.
+`fortis_drive` produces wheel velocities, but those need a consumer
+that turns them into ODrive S1 motor torque over CAN. We need to pick
+the right integration path for that consumer.
 
 Two upstream options exist in `odriverobotics/ros_odrive`:
 
@@ -114,10 +112,13 @@ misuse surface.
 - Operators have to remember to bring up SocketCAN before launching.
   Documented in `src/fortis_control/README.md`.
 - Per the upstream README, error feedback from the S1 (e.g. undervoltage
-  disarm) does not surface into the ros2_control state. The mission FSM
-  in `fortis_safety` cannot react to S1 faults until this is plumbed,
-  either upstream or via a thin adapter watching `/odrive_status`.
-  Tracked as a follow-up.
+  disarm) does not surface into the ros2_control state. FORTIS plumbs
+  this via `fortis_safety/odrive_health_monitor_node`, which consumes a
+  FORTIS-internal `fortis_msgs/OdriveHealth` snapshot (translated from
+  upstream `/odrive_status` by a small bridge node) and publishes
+  `/fortis/context/drive_healthy` plus `/fortis/events/fault` on
+  `True→False` edges. The mission FSM reacts via the existing FAULT
+  state.
 
 **What this does not commit us to:**
 

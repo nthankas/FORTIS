@@ -1,14 +1,9 @@
-"""
-Bring-up race test for fortis_arm.arm_controller_node.
+"""Bring-up race test for fortis_arm.arm_controller_node.
 
 Mirrors test_drive_node.test_no_state_received_rejects_cmd_vel: if a
 client sends a request before /fortis/mission_state has announced
 anything, the arm controller must reject (gripper services return
 success=False with an explanatory message).
-
-Note: the move_to_pose action-server scaffold was retired and moved to
-``legacy/deprecated_arm_action/``. Replaced by ros2_control + standard
-ROS 2 packages. Tests for the action server have been removed.
 """
 
 from __future__ import annotations

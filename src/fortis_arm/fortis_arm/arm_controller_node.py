@@ -42,13 +42,6 @@ service callbacks all do trivial work (state comparison + log +
 immediate response). MultiThreaded would buy nothing and would invite a
 data race on the cached state string.
 
-Migration note
---------------
-The MoveToPose action-server scaffold that previously lived in this
-node has been retired. Replaced by ros2_control + standard ROS 2
-packages. The original scaffold is preserved at
-``legacy/deprecated_arm_action/move_to_pose_action_server.py`` for
-historical reference.
 """
 
 from __future__ import annotations

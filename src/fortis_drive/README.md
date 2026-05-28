@@ -24,10 +24,8 @@ The drivetrain (per `FORTIS_FINAL_BOM`):
 
 This node consumes the kinematics from `fortis_comms` and is independent of the
 motor-driver layer, so the ODrive specifics above are hardware reference only.
-The earlier `fortis_comms/odrive_s1.py` interim CAN wrapper was retired to
-`legacy/deprecated_motor_stack/odrive_s1.py`; the production motor-side
-integration is `odrive_ros2_control` (see `src/fortis_control/` and
-`docs/adr/0002-odrive-ros2-control-integration.md`). `drive_node` publishes
+Motor-side integration lives in `src/fortis_control/` via `odrive_ros2_control`
+(see `docs/adr/0002-odrive-ros2-control-integration.md`); `drive_node` publishes
 into the velocity controller's command topic — see Topics below.
 
 ## Topics

@@ -48,15 +48,6 @@ in the shape ros2_control wants. We publish to both because:
     motors are explicitly commanded to a halt rather than left at the
     last accepted setpoint.
 
-Wheel ordering
---------------
-All wheel-related interfaces speak the canonical FL/FR/RL/RR order:
-the kinematics module (xdrive_kinematics), the WheelVelocities message,
-the WheelCommand dataclass, the controller-bound Float64MultiArray, and
-the ros2_control YAML's joints list. The earlier BL/BR naming (legacy
-from the senior-design module) was renamed end-to-end on 2026-05-27, so
-there is no relabel seam in this node anymore.
-
 Gating rules
 ------------
 The drive accepts /cmd_vel only while the mission state is one of the
