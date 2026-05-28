@@ -56,7 +56,7 @@ arm_controller:
     # arm_controller_node.py.
     reject_log_throttle_s: 1.0
     # Teensy heartbeat watchdog rate placeholder. The Teensy 4.1
-    # firmware (firmware/teensy/main.ino) expects a heartbeat every
+    # firmware (firmware/teensy/teensy.ino) expects a heartbeat every
     # 250 ms; if a heartbeat is missed for this many consecutive
     # cycles, the Teensy latches a fault and the arm controller must
     # surface it. Not wired up until the Teensy serial bridge lands.
