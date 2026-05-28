@@ -14,7 +14,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
 import yaml
 from ament_index_python.packages import get_package_share_directory
 
@@ -113,8 +112,10 @@ def test_bench_yaml_controller_type_matches_full():
     """Both YAMLs must use the same controller type; they only differ in joint list."""
     bench = _yaml("fortis_drive_controllers_bench.yaml")
     full = _yaml("fortis_drive_controllers.yaml")
-    bench_type = bench["controller_manager"]["ros__parameters"]["wheel_velocity_controller"]["type"]
-    full_type = full["controller_manager"]["ros__parameters"]["wheel_velocity_controller"]["type"]
+    bench_cm = bench["controller_manager"]["ros__parameters"]
+    full_cm = full["controller_manager"]["ros__parameters"]
+    bench_type = bench_cm["wheel_velocity_controller"]["type"]
+    full_type = full_cm["wheel_velocity_controller"]["type"]
     assert bench_type == full_type
 
 

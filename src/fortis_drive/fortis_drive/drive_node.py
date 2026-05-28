@@ -179,12 +179,11 @@ def _wheel_command_to_msg(cmd: WheelCommand, stamp: TimeMsg) -> WheelVelocities:
 
 
 def _wheel_command_to_controller_array(cmd: WheelCommand) -> Float64MultiArray:
-    """
-    Serialise a WheelCommand into the Float64MultiArray the ros2_control
-    JointGroupVelocityController expects.
+    """Serialise a WheelCommand into the controller's Float64MultiArray.
 
-    Order is [fl, fr, rl, rr] to match
-    fortis_control/config/fortis_drive_controllers.yaml's `joints:` list.
+    Array order is [fl, fr, rl, rr] to match
+    fortis_control/config/fortis_drive_controllers.yaml's `joints:` list,
+    which the velocity_controllers/JointGroupVelocityController consumes.
     """
     msg = Float64MultiArray()
     msg.data = [cmd.fl, cmd.fr, cmd.rl, cmd.rr]
