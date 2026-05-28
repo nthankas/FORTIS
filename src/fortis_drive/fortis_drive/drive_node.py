@@ -48,14 +48,14 @@ in the shape ros2_control wants. We publish to both because:
     motors are explicitly commanded to a halt rather than left at the
     last accepted setpoint.
 
-Wheel-order mapping
--------------------
-fortis_comms.xdrive_kinematics returns wheel speeds in FL/FR/BL/BR order
-(legacy from the senior-design module). The URDF + ros2_control config
-use FL/FR/RL/RR. The mapping is identity for the first two and a
-naming-only relabel for the last two; we do the relabel at the publish
-boundary so the kinematics module and the WheelVelocities message stay
-untouched. The renaming work itself is tracked as a follow-up.
+Wheel ordering
+--------------
+All wheel-related interfaces speak the canonical FL/FR/RL/RR order:
+the kinematics module (xdrive_kinematics), the WheelVelocities message,
+the WheelCommand dataclass, the controller-bound Float64MultiArray, and
+the ros2_control YAML's joints list. The earlier BL/BR naming (legacy
+from the senior-design module) was renamed end-to-end on 2026-05-27, so
+there is no relabel seam in this node anymore.
 
 Gating rules
 ------------
@@ -132,17 +132,17 @@ _UNKNOWN_STATE_KEY: str = "<no_state_received>"
 
 @dataclass(frozen=True)
 class WheelCommand:
-    """Per-wheel angular velocity command in rad/s, in canonical FL/FR/BL/BR order."""
+    """Per-wheel angular velocity command in rad/s, in canonical FL/FR/RL/RR order."""
 
     fl: float
     fr: float
-    bl: float
-    br: float
+    rl: float
+    rr: float
 
     @classmethod
     def zero(cls) -> WheelCommand:
         """Return an all-zero command, used for rejections and explicit stops."""
-        return cls(fl=0.0, fr=0.0, bl=0.0, br=0.0)
+        return cls(fl=0.0, fr=0.0, rl=0.0, rr=0.0)
 
 
 def _twist_to_wheel_command(cmd: Twist) -> WheelCommand:
@@ -152,7 +152,7 @@ def _twist_to_wheel_command(cmd: Twist) -> WheelCommand:
     Calls into xdrive_kinematics.xdrive_ik_solver (which returns wheel linear
     speeds in m/s, already saturated to MAX_WHEEL_SPEED) and divides by the
     wheel radius to get wheel shaft angular velocity. The H matrix in
-    fortis_comms encodes the FL/FR/BL/BR wheel order; we preserve it.
+    fortis_comms encodes the FL/FR/RL/RR wheel order; we preserve it.
     """
     wheel_linear = xdrive_ik_solver(
         cmd.linear.x,
@@ -162,8 +162,8 @@ def _twist_to_wheel_command(cmd: Twist) -> WheelCommand:
     return WheelCommand(
         fl=float(wheel_linear[0]) / WHEEL_RADIUS,
         fr=float(wheel_linear[1]) / WHEEL_RADIUS,
-        bl=float(wheel_linear[2]) / WHEEL_RADIUS,
-        br=float(wheel_linear[3]) / WHEEL_RADIUS,
+        rl=float(wheel_linear[2]) / WHEEL_RADIUS,
+        rr=float(wheel_linear[3]) / WHEEL_RADIUS,
     )
 
 
@@ -172,8 +172,8 @@ def _wheel_command_to_msg(cmd: WheelCommand, stamp: TimeMsg) -> WheelVelocities:
     msg = WheelVelocities()
     msg.fl = cmd.fl
     msg.fr = cmd.fr
-    msg.bl = cmd.bl
-    msg.br = cmd.br
+    msg.rl = cmd.rl
+    msg.rr = cmd.rr
     msg.stamp = stamp
     return msg
 
@@ -185,12 +185,9 @@ def _wheel_command_to_controller_array(cmd: WheelCommand) -> Float64MultiArray:
 
     Order is [fl, fr, rl, rr] to match
     fortis_control/config/fortis_drive_controllers.yaml's `joints:` list.
-    The BL/BR -> RL/RR rename happens here at the boundary; the kinematics
-    module and the WheelVelocities message both still speak BL/BR. See
-    the module docstring "Wheel-order mapping" section.
     """
     msg = Float64MultiArray()
-    msg.data = [cmd.fl, cmd.fr, cmd.bl, cmd.br]
+    msg.data = [cmd.fl, cmd.fr, cmd.rl, cmd.rr]
     return msg
 
 
@@ -305,7 +302,7 @@ class DriveNode(Node):
             f"Vx={msg.linear.x:.3f} Vy={msg.linear.y:.3f} "
             f"wz={msg.angular.z:.3f} -> "
             f"FL={cmd.fl:.2f} FR={cmd.fr:.2f} "
-            f"BL={cmd.bl:.2f} BR={cmd.br:.2f} rad/s"
+            f"RL={cmd.rl:.2f} RR={cmd.rr:.2f} rad/s"
         )
 
     # --- Helpers ------------------------------------------------------------

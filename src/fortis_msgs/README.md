@@ -21,7 +21,7 @@ source install/setup.bash
 | `ChassisCamClick` | `/fortis/targeting/chassis_click` | Operator click on a chassis camera image. Carries the pixel coordinate, the producing camera ID, and the click timestamp. The targeting pipeline consumes this to project the click into 3-D and propose an arm view-pose. |
 | `GraspCandidate` | `/fortis/planner/grasp_candidates` | A candidate grasp from the grasp planner. Carries the end-effector pose in the robot frame, planner confidence in `[0.0, 1.0]`, an approach unit vector, and a timestamp. |
 | `MissionState` | `/fortis/mission_state_v2` | Richer mission-state announcement than the latched `std_msgs/String` topic published today by `fortis_safety/mission_state_node`. Carries previous state and the transition timestamp so consumers can render transitions and detect stalls. The plain `String` topic is preserved for back-compat. |
-| `WheelVelocities` | `/fortis/drive/wheel_velocities`, `/fortis/drive/zero_velocities` | Per-wheel angular velocity command for the X-drive (FL, FR, BL, BR in rad/s at the wheel shaft). Published by `fortis_drive/drive_node`. |
+| `WheelVelocities` | `/fortis/drive/wheel_velocities`, `/fortis/drive/zero_velocities` | Per-wheel angular velocity command for the X-drive (FL, FR, RL, RR in rad/s at the wheel shaft). Published by `fortis_drive/drive_node`. |
 
 Topic names listed above are the intended use sites at the time this package
 was created. They are not enforced by the package itself.
@@ -34,7 +34,7 @@ was created. They are not enforced by the package itself.
 
 ## Field-naming conventions
 
-- Wheel order is always `fl, fr, bl, br` (front/back, left/right).
+- Wheel order is always `fl, fr, rl, rr` (front/rear, left/right).
 - Pose / point fields use `geometry_msgs/Pose` and `geometry_msgs/Point` so
   rviz, tf, and MoveIt can consume them directly.
 - Every message carries a `builtin_interfaces/Time stamp`. We don't use

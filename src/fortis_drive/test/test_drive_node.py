@@ -284,14 +284,12 @@ def test_orbit_accepts_cmd_vel_and_publishes_correct_wheel_velocities(harness):
     msg = harness.wheel_msgs[-1]
     assert msg.fl == pytest.approx(expected[0], abs=1e-6)
     assert msg.fr == pytest.approx(expected[1], abs=1e-6)
-    assert msg.bl == pytest.approx(expected[2], abs=1e-6)
-    assert msg.br == pytest.approx(expected[3], abs=1e-6)
+    assert msg.rl == pytest.approx(expected[2], abs=1e-6)
+    assert msg.rr == pytest.approx(expected[3], abs=1e-6)
 
     # Controller-bound Float64MultiArray must carry the same four values
-    # in [fl, fr, rl, rr] order. The kinematics module emits bl/br but
-    # the controller config in fortis_control treats wheel 2/3 as rl/rr
-    # (URDF naming); the rename happens at the publish boundary and we
-    # assert here that the data sequence is preserved through it.
+    # in [fl, fr, rl, rr] order, identical to the kinematics output now
+    # that everything in the wheel pipeline shares the same naming.
     arr = harness.controller_msgs[-1]
     assert list(arr.data) == pytest.approx(expected, abs=1e-6), \
         "controller array must carry [fl, fr, rl, rr] in that order"
@@ -319,8 +317,8 @@ def test_idle_rejects_cmd_vel_and_publishes_zeros(harness):
     msg = harness.zero_msgs[-1]
     assert msg.fl == 0.0
     assert msg.fr == 0.0
-    assert msg.bl == 0.0
-    assert msg.br == 0.0
+    assert msg.rl == 0.0
+    assert msg.rr == 0.0
 
     # Controller path must also receive an explicit zero, not silence.
     # The motor controller (downstream) must never coast at the last
@@ -347,8 +345,8 @@ def test_return_home_accepts_cmd_vel(harness):
     msg = harness.wheel_msgs[-1]
     assert msg.fl == pytest.approx(expected[0], abs=1e-6)
     assert msg.fr == pytest.approx(expected[1], abs=1e-6)
-    assert msg.bl == pytest.approx(expected[2], abs=1e-6)
-    assert msg.br == pytest.approx(expected[3], abs=1e-6)
+    assert msg.rl == pytest.approx(expected[2], abs=1e-6)
+    assert msg.rr == pytest.approx(expected[3], abs=1e-6)
 
 
 def test_state_transitions_gate_motion_correctly(harness):
@@ -428,8 +426,9 @@ def test_controller_array_ordering_matches_kinematics(harness):
     expected = _expected_wheel_speeds(0.1, 0.2, 0.3)
     arr = harness.controller_msgs[-1]
     assert len(arr.data) == 4
-    # Pairwise: index 0 = FL, 1 = FR, 2 = RL (kinematics calls BL),
-    #          3 = RR (kinematics calls BR). The rename is naming-only.
+    # Pairwise: index 0 = FL, 1 = FR, 2 = RL, 3 = RR — same ordering
+    # used by xdrive_kinematics, the WheelVelocities message, and the
+    # JointGroupVelocityController joints list.
     assert arr.data[0] == pytest.approx(expected[0], abs=1e-6)
     assert arr.data[1] == pytest.approx(expected[1], abs=1e-6)
     assert arr.data[2] == pytest.approx(expected[2], abs=1e-6)

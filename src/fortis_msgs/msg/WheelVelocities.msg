@@ -5,7 +5,7 @@
 # the four 45-deg chamfered corners.
 #
 #   FL = front-left   FR = front-right
-#   BL = back-left    BR = back-right
+#   RL = rear-left    RR = rear-right
 #
 # Units are rad/s at the wheel shaft (i.e. after any gearbox), positive in the
 # rolling-forward direction for that wheel as wired.
@@ -14,6 +14,6 @@
 
 float32 fl
 float32 fr
-float32 bl
-float32 br
+float32 rl
+float32 rr
 builtin_interfaces/Time stamp
