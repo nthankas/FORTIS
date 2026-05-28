@@ -11,7 +11,7 @@ so the operator workflow is `./stack <cmd>` instead of nested path typing.
 ## Quickstart
 
 ```bash
-cp .env.example .env       # copy template, then edit for this machine
+cp tools/stack/.env.example .env       # copy template, then edit for this machine
 ./stack up                 # bring the stack up
 ./stack exec               # open a shell inside the dev container
 ./stack status             # show what's running
@@ -210,7 +210,7 @@ exit
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| `[stack] No .env file at ...` | First run on this machine. | `cp .env.example .env` and edit. |
+| `[stack] No .env file at ...` | First run on this machine. | `cp tools/stack/.env.example .env` and edit. |
 | `[stack] Unknown COMPOSE_PROFILE=...` | Typo in `.env`. | Set `COMPOSE_PROFILE=cpu` or `gpu`. |
 | `docker: 'compose' is not a docker command` | Old docker without the compose v2 plugin. | Install Docker 24+ with the compose plugin (see `docker/README.md`). |
 | `[stack] Working tree is dirty.` blocking pull | Local uncommitted changes. | Commit / stash, or pass `--force`. |
