@@ -39,7 +39,22 @@ def generate_launch_description():
         parameters=[bringup_params],
     )
 
+    # Aggregates per-axis ODrive health snapshots into a single
+    # /fortis/context/drive_healthy Bool and emits /fortis/events/fault
+    # on the True->False edge. The mission_state_node consumes
+    # drive_healthy as a context field; the FAULT event drives the FSM
+    # into State.FAULT. See fortis_safety/odrive_health_monitor_node.py
+    # for the design rationale.
+    odrive_health_monitor_node = Node(
+        package='fortis_safety',
+        executable='odrive_health_monitor_node',
+        name='odrive_health_monitor_node',
+        output='screen',
+        parameters=[bringup_params],
+    )
+
     return LaunchDescription([
         mission_state_node,
         drive_node,
+        odrive_health_monitor_node,
     ])
