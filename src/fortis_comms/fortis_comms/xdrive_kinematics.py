@@ -34,8 +34,8 @@ MAX_WHEEL_SPEED = 1  # m/s, saturator clamp at the contact patch
 H = np.array([
     [1,  1,  (LEN_X + LEN_Y)],   # FL wheel
     [1, -1, -(LEN_X + LEN_Y)],   # FR wheel
-    [1, -1,  (LEN_X + LEN_Y)],   # BL wheel
-    [1,  1, -(LEN_X + LEN_Y)]    # BR wheel
+    [1, -1,  (LEN_X + LEN_Y)],   # RL wheel
+    [1,  1, -(LEN_X + LEN_Y)]    # RR wheel
 ])
 
 

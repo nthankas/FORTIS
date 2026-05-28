@@ -360,8 +360,8 @@ class TestSafetyDriveIntegration(unittest.TestCase):
         for msg in self.zero_msgs:
             self.assertEqual(msg.fl, 0.0)
             self.assertEqual(msg.fr, 0.0)
-            self.assertEqual(msg.bl, 0.0)
-            self.assertEqual(msg.br, 0.0)
+            self.assertEqual(msg.rl, 0.0)
+            self.assertEqual(msg.rr, 0.0)
 
     def test_02_orbit_accepts_cmd_vel_and_publishes_correct_ik(self):
         """ORBIT path: Twist -> wheel_velocities matching xdrive_ik_solver."""
@@ -393,9 +393,9 @@ class TestSafetyDriveIntegration(unittest.TestCase):
                                      abs_tol=WHEEL_SPEED_TOLERANCE))
         self.assertTrue(math.isclose(msg.fr, expected[1],
                                      abs_tol=WHEEL_SPEED_TOLERANCE))
-        self.assertTrue(math.isclose(msg.bl, expected[2],
+        self.assertTrue(math.isclose(msg.rl, expected[2],
                                      abs_tol=WHEEL_SPEED_TOLERANCE))
-        self.assertTrue(math.isclose(msg.br, expected[3],
+        self.assertTrue(math.isclose(msg.rr, expected[3],
                                      abs_tol=WHEEL_SPEED_TOLERANCE))
 
     def test_03_transition_out_of_orbit_returns_zeros_within_200ms(self):
@@ -443,8 +443,8 @@ class TestSafetyDriveIntegration(unittest.TestCase):
         msg = self.zero_msgs[-1]
         self.assertEqual(msg.fl, 0.0)
         self.assertEqual(msg.fr, 0.0)
-        self.assertEqual(msg.bl, 0.0)
-        self.assertEqual(msg.br, 0.0)
+        self.assertEqual(msg.rl, 0.0)
+        self.assertEqual(msg.rr, 0.0)
 
     def test_04_return_home_accepts_cmd_vel_and_publishes_correct_ik(self):
         """RETURN_HOME path: full FSM walk, then verify IK output as in ORBIT."""
@@ -474,7 +474,7 @@ class TestSafetyDriveIntegration(unittest.TestCase):
                                      abs_tol=WHEEL_SPEED_TOLERANCE))
         self.assertTrue(math.isclose(msg.fr, expected[1],
                                      abs_tol=WHEEL_SPEED_TOLERANCE))
-        self.assertTrue(math.isclose(msg.bl, expected[2],
+        self.assertTrue(math.isclose(msg.rl, expected[2],
                                      abs_tol=WHEEL_SPEED_TOLERANCE))
-        self.assertTrue(math.isclose(msg.br, expected[3],
+        self.assertTrue(math.isclose(msg.rr, expected[3],
                                      abs_tol=WHEEL_SPEED_TOLERANCE))

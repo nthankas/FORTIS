@@ -253,8 +253,3 @@ gives the topic on the bottom-left of that diagram an actual consumer.
   `wheels:=fl` arg in the same commit. Don't introduce a launch arg
   for this — the inevitable misuse (controller loaded for FL, S1 on
   bench is FR) would silently command the wrong motor.
-- **Renaming BL/BR → RL/RR is deferred.** The kinematics module
-  (`fortis_comms.xdrive_kinematics`) and the `WheelVelocities` message
-  still use BL/BR; the URDF + ros2_control config use RL/RR. The
-  rename happens at the boundary in `drive_node._wheel_command_to_controller_array`.
-  Tracked as a follow-up; see the `fortis_drive` module docstring.
