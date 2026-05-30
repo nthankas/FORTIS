@@ -70,14 +70,22 @@ the wheel controller loads INACTIVE on purpose.
 
 ## 4. Arm and drive — wheels OFF the ground for the first run
 
+All from the Foxglove layout — no CLI needed:
+
+- [ ] Click **ARM DRIVE** (green) → `drive_enable_node` activates the wheel
+      controller; the four ODrive S1s enter CLOSED_LOOP_CONTROL and
+      `/fortis/drive/armed` goes true.
+- [ ] Click **START ORBIT** → mission FSM IDLE → ORBIT; `drive_node` now
+      accepts `/cmd_vel`.
+- [ ] Drive with the **Translate** / **Rotate** pads.
+
+CLI equivalents (fallback / debugging):
 ```bash
-# arm (sends CLOSED_LOOP_CONTROL to all four S1s):
-ros2 control switch_controllers --activate wheel_velocity_controller
-# open the motion gate (mission FSM IDLE -> ORBIT):
-ros2 topic pub --once /fortis/events/start_orbit std_msgs/msg/Empty "{}"
+ros2 topic pub --once /fortis/commands/drive_enable std_msgs/msg/Bool "{data: true}"  # ARM
+ros2 topic pub --once /fortis/events/start_orbit std_msgs/msg/Empty "{}"              # gate
 ```
 
-Then drive slowly from the Foxglove Teleop panel and verify each axis:
+Verify each axis (slowly):
 
 - [ ] **Forward (Vx)** → all four wheels roll the robot forward.
 - [ ] **Strafe (Vy)** → robot translates sideways (no rotation).
