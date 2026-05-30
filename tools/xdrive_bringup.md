@@ -61,8 +61,12 @@ the wheel controller loads INACTIVE on purpose.
 
 - [ ] Foxglove Studio → Open connection → Foxglove WebSocket →
       `ws://100.93.172.109:8765` (Tailscale) or the wired/LAN IP.
-- [ ] Add a **Teleop** panel publishing `/cmd_vel`, and a **Raw Messages** /
-      plot panel on `/fortis/drive/wheel_velocities` to watch the IK output.
+- [ ] Import the ready-made layout **`foxglove/fortis_xdrive_teleop.json`**
+      (Studio → Layouts → Import from file…). It loads a **Translate** pad
+      (fwd/back + strafe), a **Rotate** pad, **START ORBIT** / **STOP** buttons,
+      a **plot** of `/fortis/drive/wheel_velocities`, the **mission_state**
+      readout, and a **3D** view. Once imported it persists in Studio's layout
+      list; re-import from the repo to restore it on any machine.
 
 ## 4. Arm and drive — wheels OFF the ground for the first run
 
