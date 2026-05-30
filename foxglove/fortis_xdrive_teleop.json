@@ -16,10 +16,28 @@
       "leftButton": { "field": "angular-z", "value": 0.4 },
       "rightButton": { "field": "angular-z", "value": -0.4 }
     },
+    "Publish!arm": {
+      "buttonText": "ARM DRIVE",
+      "buttonTooltip": "Publishes std_msgs/Bool true on /fortis/commands/drive_enable. drive_enable_node activates wheel_velocity_controller (ODrives -> CLOSED_LOOP_CONTROL).",
+      "buttonColor": "#68e24a",
+      "advancedView": true,
+      "topicName": "/fortis/commands/drive_enable",
+      "datatype": "std_msgs/msg/Bool",
+      "value": "{ \"data\": true }"
+    },
+    "Publish!disarm": {
+      "buttonText": "DISARM DRIVE",
+      "buttonTooltip": "Publishes std_msgs/Bool false on /fortis/commands/drive_enable. drive_enable_node deactivates wheel_velocity_controller (motors idle).",
+      "buttonColor": "#e2a44a",
+      "advancedView": true,
+      "topicName": "/fortis/commands/drive_enable",
+      "datatype": "std_msgs/msg/Bool",
+      "value": "{ \"data\": false }"
+    },
     "Publish!startorbit": {
       "buttonText": "START ORBIT (open gate)",
       "buttonTooltip": "Publishes std_msgs/Empty on /fortis/events/start_orbit to move the mission FSM IDLE -> ORBIT so /cmd_vel is accepted.",
-      "buttonColor": "#68e24a",
+      "buttonColor": "#4a9ce2",
       "advancedView": true,
       "topicName": "/fortis/events/start_orbit",
       "datatype": "std_msgs/msg/Empty",
@@ -69,14 +87,24 @@
         "direction": "column",
         "first": "Teleop!rotate",
         "second": {
-          "direction": "row",
-          "first": "Publish!startorbit",
-          "second": "Publish!stop",
+          "direction": "column",
+          "first": {
+            "direction": "row",
+            "first": "Publish!arm",
+            "second": "Publish!startorbit",
+            "splitPercentage": 50
+          },
+          "second": {
+            "direction": "row",
+            "first": "Publish!disarm",
+            "second": "Publish!stop",
+            "splitPercentage": 50
+          },
           "splitPercentage": 50
         },
-        "splitPercentage": 55
+        "splitPercentage": 42
       },
-      "splitPercentage": 38
+      "splitPercentage": 34
     },
     "second": {
       "direction": "column",

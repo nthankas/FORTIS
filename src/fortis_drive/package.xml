@@ -13,6 +13,7 @@
   <depend>builtin_interfaces</depend>
   <depend>fortis_msgs</depend>
   <depend>fortis_comms</depend>
+  <depend>controller_manager_msgs</depend>
 
   <test_depend>python3-pytest</test_depend>
 

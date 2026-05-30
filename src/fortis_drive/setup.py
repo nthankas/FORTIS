@@ -25,6 +25,7 @@ setup(
     entry_points={
         'console_scripts': [
             'drive_node = fortis_drive.drive_node:main',
+            'drive_enable_node = fortis_drive.drive_enable_node:main',
         ],
     },
 )
