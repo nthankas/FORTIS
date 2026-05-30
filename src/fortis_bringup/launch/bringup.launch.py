@@ -1,8 +1,9 @@
 """
 Top-level FORTIS bringup launch file.
 
-Composes mission_state_node (FSM) and drive_node (X-drive ROS
-interface) into a single launch entry point. Arm controller,
+Composes mission_state_node (FSM), drive_node (X-drive ROS interface),
+drive_enable_node (UI arm/disarm of the wheel controller), and the
+odrive health monitor into a single launch entry point. Arm controller,
 perception, localization, and diagnostics will be added as those
 packages come online.
 
@@ -39,6 +40,18 @@ def generate_launch_description():
         parameters=[bringup_params],
     )
 
+    # Wraps the controller_manager switch_controller service behind a
+    # plain Bool topic (/fortis/commands/drive_enable) so the operator
+    # can arm/disarm the wheel drive from the UI with a button, without
+    # touching ros2_control internals. See fortis_drive/drive_enable_node.py.
+    drive_enable_node = Node(
+        package='fortis_drive',
+        executable='drive_enable_node',
+        name='drive_enable_node',
+        output='screen',
+        parameters=[bringup_params],
+    )
+
     # Aggregates per-axis ODrive health snapshots into a single
     # /fortis/context/drive_healthy Bool and emits /fortis/events/fault
     # on the True->False edge. The mission_state_node consumes
@@ -56,5 +69,6 @@ def generate_launch_description():
     return LaunchDescription([
         mission_state_node,
         drive_node,
+        drive_enable_node,
         odrive_health_monitor_node,
     ])
