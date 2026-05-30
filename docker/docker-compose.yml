@@ -15,6 +15,11 @@ services:
       - DISPLAY=${DISPLAY:-:0}
       - QT_X11_NO_MITSHM=1
       - ROS_DOMAIN_ID=42
+      # All FORTIS ROS nodes are co-located in this container; host networking
+      # exposes tailscale0/docker0/wifi, which breaks default DDS multicast
+      # discovery between co-located nodes. Loopback-only DDS is correct here
+      # (only the Foxglove WebSocket crosses machines, not DDS).
+      - ROS_LOCALHOST_ONLY=1
     stdin_open: true
     tty: true
     command: /bin/bash
