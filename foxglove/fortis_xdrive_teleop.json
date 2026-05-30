@@ -1,0 +1,94 @@
+{
+  "configById": {
+    "Teleop!translate": {
+      "topic": "/cmd_vel",
+      "publishRate": 10,
+      "upButton": { "field": "linear-x", "value": 0.2 },
+      "downButton": { "field": "linear-x", "value": -0.2 },
+      "leftButton": { "field": "linear-y", "value": 0.2 },
+      "rightButton": { "field": "linear-y", "value": -0.2 }
+    },
+    "Teleop!rotate": {
+      "topic": "/cmd_vel",
+      "publishRate": 10,
+      "upButton": { "field": "linear-x", "value": 0 },
+      "downButton": { "field": "linear-x", "value": 0 },
+      "leftButton": { "field": "angular-z", "value": 0.4 },
+      "rightButton": { "field": "angular-z", "value": -0.4 }
+    },
+    "Publish!startorbit": {
+      "buttonText": "START ORBIT (open gate)",
+      "buttonTooltip": "Publishes std_msgs/Empty on /fortis/events/start_orbit to move the mission FSM IDLE -> ORBIT so /cmd_vel is accepted.",
+      "buttonColor": "#68e24a",
+      "advancedView": true,
+      "topicName": "/fortis/events/start_orbit",
+      "datatype": "std_msgs/msg/Empty",
+      "value": "{}"
+    },
+    "Publish!stop": {
+      "buttonText": "STOP (close gate)",
+      "buttonTooltip": "Publishes std_msgs/Empty on /fortis/events/stop to move ORBIT -> IDLE; drive_node then rejects /cmd_vel and commands zeros.",
+      "buttonColor": "#f54242",
+      "advancedView": true,
+      "topicName": "/fortis/events/stop",
+      "datatype": "std_msgs/msg/Empty",
+      "value": "{}"
+    },
+    "Plot!wheels": {
+      "paths": [
+        { "value": "/fortis/drive/wheel_velocities.fl", "enabled": true, "timestampMethod": "receiveTime" },
+        { "value": "/fortis/drive/wheel_velocities.fr", "enabled": true, "timestampMethod": "receiveTime" },
+        { "value": "/fortis/drive/wheel_velocities.rl", "enabled": true, "timestampMethod": "receiveTime" },
+        { "value": "/fortis/drive/wheel_velocities.rr", "enabled": true, "timestampMethod": "receiveTime" }
+      ],
+      "showLegend": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "sidebarDimension": 240
+    },
+    "RawMessages!mission": {
+      "topicPath": "/fortis/mission_state"
+    },
+    "3D!scene": {
+      "followMode": "follow-pose",
+      "scene": {},
+      "transforms": {},
+      "topics": {},
+      "layers": {}
+    }
+  },
+  "globalVariables": {},
+  "userNodes": {},
+  "playbackConfig": { "speed": 1 },
+  "layout": {
+    "direction": "row",
+    "first": {
+      "direction": "column",
+      "first": "Teleop!translate",
+      "second": {
+        "direction": "column",
+        "first": "Teleop!rotate",
+        "second": {
+          "direction": "row",
+          "first": "Publish!startorbit",
+          "second": "Publish!stop",
+          "splitPercentage": 50
+        },
+        "splitPercentage": 55
+      },
+      "splitPercentage": 38
+    },
+    "second": {
+      "direction": "column",
+      "first": "Plot!wheels",
+      "second": {
+        "direction": "row",
+        "first": "RawMessages!mission",
+        "second": "3D!scene",
+        "splitPercentage": 38
+      },
+      "splitPercentage": 55
+    },
+    "splitPercentage": 40
+  }
+}
