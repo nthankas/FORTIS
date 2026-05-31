@@ -198,6 +198,7 @@ COMMANDS
     pull                  git fetch + checkout to FORTIS_REF.
     restart [service]     Restart one or all services.
     rebuild [service]     Rebuild image for one or all services.
+    build [colcon-args]   colcon build the workspace inside the container.
     logs [service] [-f]   Tail logs for one or all services.
     exec [service]        Open a bash shell inside the running container.
     status                Print git ref, profile, container status.
@@ -308,6 +309,26 @@ Options:
 EOF
 }
 
+help_build() {
+    cat <<'EOF'
+./stack build [colcon-args...]
+
+Run `colcon build --symlink-install` for the FORTIS workspace INSIDE the
+running container (sources /opt/ros/humble first). This builds your ROS 2
+source tree -- distinct from `rebuild`, which rebuilds the docker IMAGE.
+
+Extra arguments pass straight to colcon, e.g.:
+    ./stack build                              # build everything
+    ./stack build --packages-select fortis_drive
+
+The container must be running (use `./stack up` first). After it finishes,
+open a fresh `./stack exec` shell (or source install/setup.bash) to use it.
+
+Options:
+    -h, --help    Print this help.
+EOF
+}
+
 help_logs() {
     cat <<'EOF'
 ./stack logs [service] [--follow]
@@ -399,6 +420,7 @@ help_for_command() {
         pull)     help_pull ;;
         restart)  help_restart ;;
         rebuild)  help_rebuild ;;
+        build)    help_build ;;
         logs)     help_logs ;;
         exec)     help_exec ;;
         status)   help_status ;;
@@ -576,6 +598,22 @@ cmd_rebuild() {
         dc build "${build_args[@]+"${build_args[@]}"}" "${svc}"
     fi
     ok "Build complete."
+}
+
+cmd_build() {
+    if handle_help_flag build "$@"; then return 0; fi
+    require_env_file
+
+    local container
+    container="$(default_container)"
+
+    # Pass any extra args straight through to colcon (e.g. --packages-select X).
+    # bash -lc so colcon and ROS are on PATH; we source the underlay explicitly
+    # because a non-interactive shell does not read the container's .bashrc.
+    info "colcon build --symlink-install in container '${container}'..."
+    docker exec "${container}" bash -lc \
+        "source /opt/ros/humble/setup.bash && cd /workspace && colcon build --symlink-install $*"
+    ok "colcon build done. Open a fresh './stack exec' shell (or source install/setup.bash) to use it."
 }
 
 cmd_logs() {
@@ -759,6 +797,7 @@ main() {
         pull)     cmd_pull "$@" ;;
         restart)  cmd_restart "$@" ;;
         rebuild)  cmd_rebuild "$@" ;;
+        build)    cmd_build "$@" ;;
         logs)     cmd_logs "$@" ;;
         exec)     cmd_exec "$@" ;;
         status)   cmd_status "$@" ;;

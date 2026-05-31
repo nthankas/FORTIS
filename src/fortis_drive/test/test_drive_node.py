@@ -36,7 +36,6 @@ from std_msgs.msg import Float64MultiArray, String
 
 from fortis_comms.xdrive_kinematics import WHEEL_RADIUS, xdrive_ik_solver
 from fortis_drive.drive_node import (
-    CMD_VEL_TIMEOUT_S,
     CMD_VEL_TOPIC,
     MISSION_STATE_TOPIC,
     WHEEL_CONTROLLER_COMMAND_TOPIC,
@@ -131,8 +130,11 @@ class _Harness:
     lists; tests assert on length and field values.
     """
 
-    def __init__(self) -> None:
-        self.node = DriveNode()
+    def __init__(self, cmd_vel_timeout_s: float = 100.0) -> None:
+        # Large watchdog timeout by default so the gating tests are immune to
+        # the dead-man stop firing mid-assertion on a slow runner. The
+        # watchdog test overrides this with a small value.
+        self.node = DriveNode(cmd_vel_timeout_s=cmd_vel_timeout_s)
         self.helper: Node = rclpy.create_node("drive_node_test_helper")
 
         # Match the latched QoS of mission_state_node so the state
@@ -469,28 +471,39 @@ def test_wheel_direction_reverses_right_side(harness):
     assert WHEEL_DIRECTION == (1.0, -1.0, 1.0, -1.0)
 
 
-def test_cmd_vel_watchdog_stops_when_commands_go_stale(harness):
+def test_cmd_vel_watchdog_stops_when_commands_go_stale(rclpy_session):
     """
     Dead-man: if /cmd_vel stops arriving, the watchdog commands zeros.
 
     Reproduces the "wheels keep spinning after the operator releases the
     teleop pad" bug: the teleop client stops publishing without sending a
     zero, so without a watchdog the controller latches the last command.
+
+    Uses a short, explicit watchdog timeout; the default harness uses a
+    large one so the gating tests aren't coupled to machine speed.
     """
-    harness.publish_state("ORBIT")
-    harness.spin()
-    harness.publish_twist(vx=0.5)
-    harness.spin()
-    assert len(harness.wheel_msgs) >= 1, "expected motion in ORBIT"
-    zeros_before = len(harness.zero_msgs)
+    h = _Harness(cmd_vel_timeout_s=0.2)
+    h.spin(SPIN_DURATION_S)  # discovery
+    try:
+        h.publish_state("ORBIT")
+        h.spin()
+        h.publish_twist(vx=0.5)
+        h.spin()
+        assert len(h.wheel_msgs) >= 1, "expected motion in ORBIT"
 
-    # Stop publishing /cmd_vel and let the watchdog time out.
-    harness.spin(CMD_VEL_TIMEOUT_S + 0.3)
+        # Stop publishing /cmd_vel and let the (short) watchdog time out.
+        # After the stale window the LAST command to the controller must be
+        # a zero, regardless of exactly when the watchdog fired.
+        h.spin(0.5)
 
-    assert len(harness.zero_msgs) > zeros_before, \
-        "watchdog must publish zeros after /cmd_vel goes stale"
-    assert list(harness.controller_msgs[-1].data) == [0.0, 0.0, 0.0, 0.0], \
-        "watchdog must command the controller to zero"
+        assert list(h.controller_msgs[-1].data) == [0.0, 0.0, 0.0, 0.0], \
+            "stale /cmd_vel must leave the controller commanded to zero"
+        assert any(
+            (m.fl, m.fr, m.rl, m.rr) == (0.0, 0.0, 0.0, 0.0)
+            for m in h.zero_msgs
+        ), "watchdog must publish an explicit zero"
+    finally:
+        h.cleanup()
 
 
 def test_stop_transition_zeros_immediately(harness):
