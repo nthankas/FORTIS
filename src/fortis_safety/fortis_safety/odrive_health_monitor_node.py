@@ -59,9 +59,9 @@ from __future__ import annotations
 from typing import Optional
 
 import rclpy
+from fortis_comms.qos_profiles import latched_qos_profile
 from fortis_msgs.msg import OdriveHealth
 from rclpy.node import Node
-from rclpy.qos import QoSDurabilityPolicy, QoSProfile, QoSReliabilityPolicy
 from rclpy.time import Time
 from std_msgs.msg import Bool, Empty
 
@@ -132,11 +132,7 @@ class OdriveHealthMonitorNode(Node):
         # late subscriber sees the most recent drive_healthy value on
         # connect rather than the absence of one. depth=1 is sufficient
         # because only the latest matters.
-        latched_qos = QoSProfile(
-            depth=1,
-            durability=QoSDurabilityPolicy.TRANSIENT_LOCAL,
-            reliability=QoSReliabilityPolicy.RELIABLE,
-        )
+        latched_qos = latched_qos_profile()
 
         self._context_pub = self.create_publisher(
             Bool, DRIVE_HEALTHY_CONTEXT_TOPIC, latched_qos

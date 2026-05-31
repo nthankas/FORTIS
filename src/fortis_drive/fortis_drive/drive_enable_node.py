@@ -37,10 +37,10 @@ Calls
 
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import QoSDurabilityPolicy, QoSProfile, QoSReliabilityPolicy
 from std_msgs.msg import Bool
 
 from controller_manager_msgs.srv import SwitchController
+from fortis_comms.qos_profiles import latched_qos_profile
 
 WHEEL_CONTROLLER = "wheel_velocity_controller"
 SWITCH_SERVICE = "/controller_manager/switch_controller"
@@ -56,9 +56,7 @@ class DriveEnableNode(Node):
         super().__init__("drive_enable_node")
 
         # Latched so a UI connecting later immediately learns the armed state.
-        latched = QoSProfile(depth=1)
-        latched.durability = QoSDurabilityPolicy.TRANSIENT_LOCAL
-        latched.reliability = QoSReliabilityPolicy.RELIABLE
+        latched = latched_qos_profile()
         self._armed_pub = self.create_publisher(Bool, ARMED_TOPIC, latched)
         self._publish_armed(False)
 
