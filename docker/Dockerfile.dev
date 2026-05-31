@@ -1,5 +1,24 @@
-ARG BASE_IMAGE=osrf/ros:humble-desktop
-FROM ${BASE_IMAGE}
+# syntax=docker/dockerfile:1.6
+#
+# FORTIS dev container (CPU / non-Isaac variant). Multi-arch base selection:
+#   amd64 -> osrf/ros:humble-desktop  (FORTIS PC / WSL)
+#   arm64 -> ros:humble-ros-base      (Jetson)
+#
+# Why arm64 uses a plain Humble base and not the GPU/Isaac image: NVIDIA's arm64
+# Isaac ROS base (Dockerfile.dev-gpu) is now Ubuntu 24.04 (Noble) / Isaac ROS
+# 4.x, which has NO ros-humble-* packages -- incompatible with the FORTIS Humble
+# stack. Until FORTIS moves to Jazzy (or a Humble-era Isaac image is re-pinned),
+# the Jetson runs the Humble nodes (incl. the OAK camera) on this Humble/Jammy
+# base via the cpu profile. CUDA/Isaac perception is a separate track.
+#
+# TARGETARCH is passed by ./stack -- docker compose build does not auto-populate
+# the predefined buildarg the way `docker buildx build` does.
+ARG BASE_IMAGE_AMD64=osrf/ros:humble-desktop
+ARG BASE_IMAGE_ARM64=ros:humble-ros-base
+FROM ${BASE_IMAGE_AMD64} AS base-amd64
+FROM ${BASE_IMAGE_ARM64} AS base-arm64
+ARG TARGETARCH
+FROM base-${TARGETARCH} AS fortis-dev
 
 ARG USERNAME=FORTIS
 ARG USER_UID=1000
