@@ -11,6 +11,12 @@ services:
     volumes:
       - ..:/workspace:cached
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      # OAK-D / USB-CAN passthrough. Bind the docker-desktop VM's live USB
+      # device tree so devices attached via `usbipd attach --wsl docker-desktop`
+      # are visible. Must be a live bind (not a one-time copy) because OAK
+      # cameras re-enumerate on boot (Movidius 03e7:2485 bootloader ->
+      # 03e7:f63b booted); new nodes must appear in the container too.
+      - /dev/bus/usb:/dev/bus/usb
     environment:
       - DISPLAY=${DISPLAY:-:0}
       - QT_X11_NO_MITSHM=1
