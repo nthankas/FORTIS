@@ -96,9 +96,14 @@ colcon test
   - `ros-humble-isaac-ros-cumotion-moveit`
 
 Both containers install the same `ros-humble-moveit`, `ros2_control`,
-`robot_localization`, `foxglove_bridge`, `xacro` packages plus the same pip
-deps (`depthai`, `python-can`, `pyserial`, `odrive`, numpy/scipy/matplotlib),
-and both create the same `FORTIS` user with passwordless sudo.
+`robot_localization`, `foxglove_bridge`, `xacro`, `depthai-ros` (the
+`depthai_ros_driver` OAK camera driver) packages plus the same pip deps
+(`depthai`, `python-can`, `pyserial`, `odrive`, numpy/scipy/matplotlib),
+and both create the same `FORTIS` user with passwordless sudo. The compose
+file binds `/dev/bus/usb` into the container for OAK / USB-CAN passthrough
+(live bind, since OAK cameras re-enumerate from bootloader to booted on
+plug-in). Live OAK streaming is intended for the Jetson over native USB; on
+Windows/WSL2 docker an OAK USB re-enumeration issue currently blocks it.
 
 ## Architecture notes (multi-arch)
 
