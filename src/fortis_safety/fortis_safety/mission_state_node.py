@@ -24,9 +24,9 @@ Test from a second terminal:
 
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import QoSProfile, QoSDurabilityPolicy, QoSReliabilityPolicy
 from std_msgs.msg import Bool, Empty, String
 
+from fortis_comms.qos_profiles import latched_qos_profile
 from fortis_safety.mission_state_machine import (
     Event,
     MissionStateMachine,
@@ -67,11 +67,7 @@ class MissionStateNode(Node):
         # transition fires. TRANSIENT_LOCAL durability replays the last
         # message to late subscribers, and RELIABLE makes the state
         # message non-droppable. depth=1 because only the latest matters.
-        latched_qos = QoSProfile(
-            depth=1,
-            durability=QoSDurabilityPolicy.TRANSIENT_LOCAL,
-            reliability=QoSReliabilityPolicy.RELIABLE,
-        )
+        latched_qos = latched_qos_profile()
         self.state_pub = self.create_publisher(
             String, "/fortis/mission_state", latched_qos
         )

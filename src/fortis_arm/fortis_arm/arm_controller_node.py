@@ -49,10 +49,11 @@ from __future__ import annotations
 import rclpy
 from rclpy.duration import Duration
 from rclpy.node import Node
-from rclpy.qos import QoSDurabilityPolicy, QoSProfile, QoSReliabilityPolicy
 from rclpy.time import Time
 from std_msgs.msg import String
 from std_srvs.srv import Trigger
+
+from fortis_comms.qos_profiles import latched_qos_profile
 
 
 # --- Constants ---------------------------------------------------------------
@@ -116,11 +117,7 @@ class ArmControllerNode(Node):
         # connect, depth=1 because only the latest matters. Diverging
         # from the publisher's profile causes DDS to silently drop the
         # connection -- keep them in sync.
-        latched_qos = QoSProfile(
-            depth=1,
-            durability=QoSDurabilityPolicy.TRANSIENT_LOCAL,
-            reliability=QoSReliabilityPolicy.RELIABLE,
-        )
+        latched_qos = latched_qos_profile()
 
         self.create_subscription(
             String,

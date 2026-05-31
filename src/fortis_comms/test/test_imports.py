@@ -41,3 +41,24 @@ def test_xdrive_fk_zero_wheel_speeds_returns_three_zeros():
     result = xdrive_fk_solver(np.zeros(4))
     assert result.shape == (3,)
     np.testing.assert_array_almost_equal(result, np.zeros(3))
+
+
+def test_qos_profiles_imports():
+    """The shared QoS helper imports."""
+    from fortis_comms.qos_profiles import latched_qos_profile  # noqa: F401
+
+
+def test_latched_qos_profile_is_the_mission_state_contract():
+    """latched_qos_profile must be depth=1 / TRANSIENT_LOCAL / RELIABLE.
+
+    Asserted here independently of the node call sites, so a regression in
+    the shared helper is caught even though every node now imports it.
+    """
+    from rclpy.qos import QoSDurabilityPolicy, QoSReliabilityPolicy
+
+    from fortis_comms.qos_profiles import latched_qos_profile
+
+    qos = latched_qos_profile()
+    assert qos.depth == 1
+    assert qos.durability == QoSDurabilityPolicy.TRANSIENT_LOCAL
+    assert qos.reliability == QoSReliabilityPolicy.RELIABLE
