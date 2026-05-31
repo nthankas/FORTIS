@@ -72,7 +72,7 @@ the wheel controller loads INACTIVE on purpose.
 
 All from the Foxglove layout — no CLI needed:
 
-- [ ] Click **ARM DRIVE** (green) → `drive_enable_node` activates the wheel
+- [ ] Click **ENABLE DRIVE** (green) → `drive_enable_node` activates the wheel
       controller; the four ODrive S1s enter CLOSED_LOOP_CONTROL and
       `/fortis/drive/armed` goes true.
 - [ ] Click **START ORBIT** → mission FSM IDLE → ORBIT; `drive_node` now

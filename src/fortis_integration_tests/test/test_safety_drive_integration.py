@@ -58,6 +58,7 @@ from fortis_drive.drive_node import (
     ALLOWED_DRIVE_STATES,
     CMD_VEL_TOPIC,
     MISSION_STATE_TOPIC,
+    WHEEL_DIRECTION,
     WHEEL_VELOCITIES_TOPIC,
     ZERO_VELOCITIES_TOPIC,
 )
@@ -148,9 +149,15 @@ def _context_topic(field: str) -> str:
 
 
 def _expected_wheel_speeds(vx: float, vy: float, wz: float) -> list[float]:
-    """Compute the IK output that the drive node should produce on (vx, vy, wz)."""
+    """Compute the signed wheel command the drive node should produce.
+
+    Raw IK / WHEEL_RADIUS, then WHEEL_DIRECTION applied -- the same pipeline
+    drive_node uses (the right-side motors FR/RR are mirror-mounted).
+    """
     linear = xdrive_ik_solver(vx, vy, wz)
-    return [float(linear[i]) / WHEEL_RADIUS for i in range(4)]
+    return [
+        float(linear[i]) / WHEEL_RADIUS * WHEEL_DIRECTION[i] for i in range(4)
+    ]
 
 
 # --- Test class -------------------------------------------------------------
@@ -372,10 +379,13 @@ class TestSafetyDriveIntegration(unittest.TestCase):
         self.wheel_msgs.clear()
 
         vx, vy, wz = 0.5, 0.0, 0.0
-        self._publish_twist(vx=vx, vy=vy, wz=wz)
-
-        end = time.monotonic() + DEFAULT_WAIT_TIMEOUT_S
-        while not self.wheel_msgs and time.monotonic() < end:
+        # Publish continuously so the drive node's dead-man watchdog stays
+        # fresh; a one-shot Twist would let it time out and inject zeros,
+        # breaking the "no zeros in ORBIT" check on a slow runner. Continuous
+        # input also matches how teleop actually drives.
+        end = time.monotonic() + 1.0
+        while time.monotonic() < end:
+            self._publish_twist(vx=vx, vy=vy, wz=wz)
             rclpy.spin_once(self.node, timeout_sec=SPIN_ONCE_TIMEOUT_S)
 
         self.assertGreater(
@@ -453,10 +463,11 @@ class TestSafetyDriveIntegration(unittest.TestCase):
         self.wheel_msgs.clear()
 
         vx, vy, wz = 0.3, 0.2, 0.0
-        self._publish_twist(vx=vx, vy=vy, wz=wz)
-
-        end = time.monotonic() + DEFAULT_WAIT_TIMEOUT_S
-        while not self.wheel_msgs and time.monotonic() < end:
+        # Publish continuously to keep the dead-man watchdog fresh (see
+        # test_02 for rationale).
+        end = time.monotonic() + 1.0
+        while time.monotonic() < end:
+            self._publish_twist(vx=vx, vy=vy, wz=wz)
             rclpy.spin_once(self.node, timeout_sec=SPIN_ONCE_TIMEOUT_S)
 
         self.assertGreater(

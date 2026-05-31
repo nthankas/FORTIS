@@ -233,8 +233,14 @@ class DriveNode(Node):
     timestamp of the last /cmd_vel (for the dead-man watchdog).
     """
 
-    def __init__(self) -> None:
+    def __init__(self, cmd_vel_timeout_s: float = CMD_VEL_TIMEOUT_S) -> None:
         super().__init__("drive_node")
+
+        # Dead-man timeout for this instance. Injectable so tests can pass a
+        # large value (watchdog effectively disabled, for timing-stable gating
+        # tests) or a tiny one (fires quickly). Production uses the
+        # CMD_VEL_TIMEOUT_S default.
+        self._cmd_vel_timeout_s: float = cmd_vel_timeout_s
 
         # Most recent mission state seen on /fortis/mission_state. None
         # until the first message arrives; this guarantees we reject
@@ -302,7 +308,7 @@ class DriveNode(Node):
         self.get_logger().info(
             f"drive_node up. Gated by states: "
             f"{sorted(ALLOWED_DRIVE_STATES)}. cmd_vel watchdog "
-            f"{CMD_VEL_TIMEOUT_S:.2f}s. Awaiting first mission_state."
+            f"{self._cmd_vel_timeout_s:.2f}s. Awaiting first mission_state."
         )
 
     # --- Callbacks ----------------------------------------------------------
@@ -371,12 +377,12 @@ class DriveNode(Node):
         if self._cmd_vel_stale:
             return  # already stopped; controller is holding zero
         elapsed = self.get_clock().now() - self._last_cmd_vel_time
-        if elapsed <= Duration(seconds=CMD_VEL_TIMEOUT_S):
+        if elapsed <= Duration(seconds=self._cmd_vel_timeout_s):
             return
         self._cmd_vel_stale = True
         self._publish_zero(self.get_clock().now().to_msg())
         self.get_logger().warning(
-            f"/cmd_vel stale > {CMD_VEL_TIMEOUT_S:.2f}s; "
+            f"/cmd_vel stale > {self._cmd_vel_timeout_s:.2f}s; "
             f"commanding zero (dead-man stop)."
         )
 

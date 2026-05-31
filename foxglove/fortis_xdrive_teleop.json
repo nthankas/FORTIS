@@ -17,7 +17,7 @@
       "rightButton": { "field": "angular-z", "value": -0.4 }
     },
     "Publish!arm": {
-      "buttonText": "ARM DRIVE",
+      "buttonText": "ENABLE DRIVE",
       "buttonTooltip": "Publishes std_msgs/Bool true on /fortis/commands/drive_enable. drive_enable_node activates wheel_velocity_controller (ODrives -> CLOSED_LOOP_CONTROL).",
       "buttonColor": "#68e24a",
       "advancedView": true,
@@ -26,7 +26,7 @@
       "value": "{ \"data\": true }"
     },
     "Publish!disarm": {
-      "buttonText": "DISARM DRIVE",
+      "buttonText": "DISABLE DRIVE",
       "buttonTooltip": "Publishes std_msgs/Bool false on /fortis/commands/drive_enable. drive_enable_node deactivates wheel_velocity_controller (motors idle).",
       "buttonColor": "#e2a44a",
       "advancedView": true,
@@ -68,11 +68,38 @@
       "topicPath": "/fortis/mission_state"
     },
     "3D!scene": {
+      "cameraState": {
+        "distance": 3.0,
+        "perspective": true,
+        "phi": 60,
+        "thetaOffset": 45,
+        "target": [0, 0, 0],
+        "targetOffset": [0, 0, 0],
+        "fovy": 45,
+        "near": 0.01,
+        "far": 5000
+      },
       "followMode": "follow-pose",
+      "followTf": "base_link",
       "scene": {},
       "transforms": {},
-      "topics": {},
-      "layers": {}
+      "topics": {
+        "/tf": { "visible": true },
+        "/tf_static": { "visible": true }
+      },
+      "layers": {
+        "fortis-urdf": {
+          "visible": true,
+          "frameLocked": false,
+          "label": "FORTIS URDF",
+          "instanceId": "fortis-urdf",
+          "layerId": "foxglove.Urdf",
+          "order": 1,
+          "sourceType": "topic",
+          "topic": "/robot_description",
+          "framePrefix": ""
+        }
+      }
     }
   },
   "globalVariables": {},
