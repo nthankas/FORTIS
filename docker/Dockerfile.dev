@@ -26,6 +26,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-humble-tf2-tools \
     ros-humble-rqt-tf-tree \
     ros-humble-foxglove-bridge \
+    ros-humble-depthai-ros \
     can-utils \
     iproute2 \
     kmod \
