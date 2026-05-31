@@ -21,9 +21,10 @@ build/
 Thumbs.db
 desktop.ini
 
-# IDE
+# IDE / local tooling
 .vscode/
 .idea/
+.claude/
 
 # Temporary simulation output
 *.tmp
