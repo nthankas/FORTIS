@@ -59,8 +59,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Package/launch are suffixed _v3 on Humble (depthai_ros_driver_v3 /
 # driver.launch.py); see src/fortis_bringup/launch/oak_chassis_front.launch.py.
 RUN apt-get update && apt-get install -y --no-install-recommends ros2-testing-apt-source \
- && apt-get update && apt-get install -y --no-install-recommends ros-humble-depthai-ros-v3 \
+ && apt-get update && apt-get install -y \
+      ros-humble-depthai-ros-v3 \
+      ros-humble-diagnostic-updater \
  && rm -rf /var/lib/apt/lists/*
+# NOTE: no --no-install-recommends on the depthai line. The arm64 base
+# (ros:humble-ros-base) is minimal -- unlike osrf desktop it omits packages the
+# driver dlopens (e.g. libdiagnostic_updater.so), and those come in as Recommends.
+# diagnostic_updater is also listed explicitly as a belt-and-suspenders guard.
 
 RUN pip install --no-cache-dir \
     depthai \

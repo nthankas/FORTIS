@@ -153,8 +153,12 @@ Check apt-cache search ros-humble-isaac-ros and the release-3 repo contents." \
 # ros-humble-depthai core file-conflicts with v3, so v2 is never installed.
 # -----------------------------------------------------------------------------
 RUN apt-get update && apt-get install -y --no-install-recommends ros2-testing-apt-source \
- && apt-get update && apt-get install -y --no-install-recommends ros-humble-depthai-ros-v3 \
+ && apt-get update && apt-get install -y \
+      ros-humble-depthai-ros-v3 \
+      ros-humble-diagnostic-updater \
  && rm -rf /var/lib/apt/lists/*
+# No --no-install-recommends on the depthai line: the driver dlopens libs (e.g.
+# libdiagnostic_updater.so) that come in only as Recommends on a minimal base.
 
 # -----------------------------------------------------------------------------
 # Python deps - same as Dockerfile.dev. Keep in sync.
