@@ -17,9 +17,9 @@ import threading
 
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import QoSDurabilityPolicy, QoSProfile, QoSReliabilityPolicy
 from std_msgs.msg import Bool, Empty, String
 
+from fortis_comms.qos_profiles import latched_qos_profile
 from fortis_safety.mission_state_machine import Event
 
 
@@ -41,11 +41,7 @@ class EventConsole(Node):
         super().__init__("event_console")
         # Latched QoS for state output: late subscribers (e.g. UI started
         # after the node) still get the most recent state on connect.
-        latched_qos = QoSProfile(
-            depth=1,
-            durability=QoSDurabilityPolicy.TRANSIENT_LOCAL,
-            reliability=QoSReliabilityPolicy.RELIABLE,
-        )
+        latched_qos = latched_qos_profile()
         self.current_state: str = "UNKNOWN"
         self.local_ctx: dict = {}
 

@@ -100,12 +100,12 @@ from dataclasses import dataclass
 
 import rclpy
 from builtin_interfaces.msg import Time as TimeMsg
+from fortis_comms.qos_profiles import latched_qos_profile
 from fortis_comms.xdrive_kinematics import WHEEL_RADIUS, xdrive_ik_solver
 from fortis_msgs.msg import WheelVelocities
 from geometry_msgs.msg import Twist
 from rclpy.duration import Duration
 from rclpy.node import Node
-from rclpy.qos import QoSDurabilityPolicy, QoSProfile, QoSReliabilityPolicy
 from rclpy.time import Time
 from std_msgs.msg import Float64MultiArray, String
 
@@ -279,11 +279,7 @@ class DriveNode(Node):
         # recent value on connect, depth=1 because only the latest
         # matters. If this profile diverges from the publisher's, DDS
         # silently drops the connection -- keep them in sync.
-        latched_qos = QoSProfile(
-            depth=1,
-            durability=QoSDurabilityPolicy.TRANSIENT_LOCAL,
-            reliability=QoSReliabilityPolicy.RELIABLE,
-        )
+        latched_qos = latched_qos_profile()
 
         self._wheel_pub = self.create_publisher(
             WheelVelocities, WHEEL_VELOCITIES_TOPIC, 10
