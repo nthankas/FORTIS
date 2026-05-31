@@ -1,51 +1,47 @@
-# depthai_ros_driver parameters for the FORTIS front chassis camera.
+# depthai_ros_driver_v3 parameters for the FORTIS front chassis camera.
 #
-# The top-level key MUST equal the node name set in
-# oak_chassis_front.launch.py (name:=oak_chassis_front). If they disagree,
-# the driver ignores this whole file and silently runs on its defaults.
+# Driver: depthai-ros v3 (ros-humble-depthai-ros-v3, from the ROS 2 *testing*
+# apt repo). v3 reorganized params vs v2: i_nn_type moved into pipeline_gen,
+# the device serial is driver.i_device_id (was camera.i_mx_id), depth align is
+# stereo.i_aligned (was stereo.i_align_depth), resolution is i_width/i_height
+# (was i_resolution), and depth tuning is via stereo.i_depth_preset.
 #
-# Scope: the FRONT OAK-D Lite only. rear / left / right are out of scope for
-# this bring-up. No VIO, no localization.
+# The top-level key MUST equal the node name set in oak_chassis_front.launch.py
+# (name:=oak_chassis_front) or the driver runs on defaults. ROS silently
+# ignores unknown params, so keep names in the v3 dialect -- a v2 name here
+# would be dropped with NO error.
 #
-# Driver version: these are depthai-ros v2 names (the ros-humble-depthai-ros
-# apt package / `humble` branch), runtime-verified on this hardware. depthai-ros
-# v3 renames several -- i_mx_id -> camera.i_device_id, i_resolution -> i_width +
-# i_height, stereo.i_align_depth -> stereo.i_aligned, camera.i_pipeline_type ->
-# pipeline_gen.i_pipeline_type. ROS silently ignores unknown params, so a v3
-# upgrade would read this file as defaults (wrong camera / resolution) with NO
-# error. Rename only when the installed driver is actually bumped to v3.
+# Scope: the FRONT OAK-D Lite only. No VIO, no localization.
 /oak_chassis_front:
   ros__parameters:
-    camera:
-      # No on-device neural network yet: the Graphite detection model has not
-      # been trained or compiled to a Myriad-X .blob. To enable object
-      # detection later, set this to 'rgb' (2D) or 'spatial' (3D) and point
-      # nn.i_nn_config_path at the blob/config.
-      i_nn_type: none
+    driver:
+      # Pin this driver to the physical FRONT camera by serial. With four
+      # identical OAK-D Lites on the chassis, an unset id grabs whichever
+      # enumerates first (non-deterministic). Same serial value as the v2
+      # mxid, read via depthai getAllAvailableDevices().
+      i_device_id: "19443010C1DF397E00"
 
-      # Bind this driver to the physical FRONT camera by its serial (MXID).
-      # Four identical OAK-D Lites share the chassis; with this unset the
-      # driver grabs whichever USB device enumerates first, which is NOT
-      # deterministic across reboots. This serial was read off the unit via
-      # depthai's getAllAvailableDevices() (deviceId).
-      i_mx_id: "19443010C1DF397E00"
+    pipeline_gen:
+      i_pipeline_type: rgbd     # RGB + stereo depth, synced for RGBD
+      i_enable_rgbd: true       # publish the colored RGBD point cloud
+      i_nn_type: none           # no on-device NN yet (Graphite not trained)
+      i_enable_imu: true        # publish IMU if the unit has one
 
-    rgb:
-      # 1080p color. Drop to '720' if USB3 bandwidth becomes the bottleneck
-      # once more cameras share the bus.
-      i_resolution: '1080'
-
-    # Stereo depth: quality vs USB-bandwidth / FPS tradeoff.
-    # 480p mono + subpixel gives clean depth without saturating USB3, leaving
-    # headroom for when all four chassis cameras share the bus. i_align_depth
-    # registers the depth map onto the RGB image so the point cloud comes out
-    # colored and correctly overlaid.
-    # NOTE: left / right / stereo are TOP-LEVEL param groups (4-space indent,
-    # siblings of camera / rgb) -- NOT children of rgb.
-    left:
-      i_resolution: '480'
-    right:
-      i_resolution: '480'
     stereo:
-      i_subpixel: true
-      i_align_depth: true
+      i_aligned: true           # align depth to RGB -> colored, registered cloud
+      i_subpixel: true          # sub-pixel disparity for cleaner depth
+      i_depth_preset: DEFAULT   # v3 depth-quality preset
+
+    # RGB + mono resolution. v3 uses i_width/i_height (not v2's i_resolution).
+    # 1080p color, 480p mono: clean depth without saturating USB3, with headroom
+    # for when all four cameras share the bus. Confirm these took on hardware
+    # with `ros2 param get /oak_chassis_front rgb.i_width` (silent-ignore guard).
+    rgb:
+      i_width: 1920
+      i_height: 1080
+    left:
+      i_width: 640
+      i_height: 480
+    right:
+      i_width: 640
+      i_height: 480
