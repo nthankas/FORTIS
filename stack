@@ -79,9 +79,19 @@ load_env() {
     : "${COMPOSE_PROJECT_NAME:=fortis}"
     : "${FORTIS_JETSON_HOST:=}"
     : "${NGC_API_KEY:=}"
+    # Host architecture for multi-arch Dockerfile base selection. `docker
+    # compose build` does NOT auto-populate the predefined TARGETARCH buildarg
+    # the way `docker buildx build` does, so docker-compose.gpu.yml reads it
+    # from here (FROM base-${TARGETARCH} in Dockerfile.dev-gpu).
+    : "${TARGETARCH:=$(dpkg --print-architecture 2>/dev/null || echo amd64)}"
+    # Activate the docker compose profile matching COMPOSE_PROFILE so exactly
+    # one dev service builds/runs: the cpu `dev` OR the gpu `fortis-dev-gpu`,
+    # never both. The gpu profile composes both -f files, so without this the
+    # x86-only `dev` service would also try to build -- and fail on arm64.
+    COMPOSE_PROFILES="${COMPOSE_PROFILE}"
 
     export FORTIS_REF COMPOSE_PROFILE ROS_DOMAIN_ID COMPOSE_PROJECT_NAME
-    export FORTIS_JETSON_HOST NGC_API_KEY
+    export FORTIS_JETSON_HOST NGC_API_KEY TARGETARCH COMPOSE_PROFILES
 }
 
 require_env_file() {

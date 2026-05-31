@@ -5,6 +5,10 @@ services:
       dockerfile: docker/Dockerfile.dev
     image: fortis-dev:latest
     container_name: fortis-dev
+    # Only built/run under the cpu profile. ./stack maps COMPOSE_PROFILE=cpu to
+    # COMPOSE_PROFILES=cpu. This keeps the x86-only base (osrf/ros:humble-desktop)
+    # from being built on the arm64 Jetson, which uses the gpu profile instead.
+    profiles: ["cpu"]
     network_mode: host
     ipc: host
     privileged: true
