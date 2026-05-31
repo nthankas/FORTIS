@@ -66,10 +66,30 @@ def generate_launch_description():
                 "the ODrive plugin."
             ),
         ),
+        DeclareLaunchArgument(
+            "wheels",
+            default_value="fl,fr,rl,rr",
+            description=(
+                "Comma-separated wheels to enable in the ros2_control "
+                "xacro. Production is all four (fl,fr,rl,rr); the bench "
+                "launch overrides this to a single wheel."
+            ),
+        ),
+        DeclareLaunchArgument(
+            "controllers_file",
+            default_value="fortis_drive_controllers.yaml",
+            description=(
+                "Filename (under fortis_control/config) of the "
+                "controller_manager YAML. Production uses the four-wheel "
+                "config; the bench launch overrides to the single-wheel one."
+            ),
+        ),
     ]
 
     can_interface = LaunchConfiguration("can_interface")
     use_mock_hardware = LaunchConfiguration("use_mock_hardware")
+    wheels = LaunchConfiguration("wheels")
+    controllers_file = LaunchConfiguration("controllers_file")
 
     robot_description_content = Command([
         PathJoinSubstitution([FindExecutable(name="xacro")]),
@@ -80,7 +100,7 @@ def generate_launch_description():
             "fortis_robot.urdf.xacro",
         ]),
         " enable_ros2_control:=true",
-        " wheels:=fl,fr,rl,rr",
+        " wheels:=", wheels,
         " can_interface:=", can_interface,
         " use_mock_hardware:=", use_mock_hardware,
     ])
@@ -94,7 +114,7 @@ def generate_launch_description():
     controllers_yaml = PathJoinSubstitution([
         FindPackageShare("fortis_control"),
         "config",
-        "fortis_drive_controllers.yaml",
+        controllers_file,
     ])
 
     control_node = Node(
