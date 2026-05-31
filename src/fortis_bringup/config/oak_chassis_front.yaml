@@ -1,0 +1,43 @@
+# depthai_ros_driver parameters for the FORTIS front chassis camera.
+#
+# The top-level key MUST equal the node name set in
+# oak_chassis_front.launch.py (name:=oak_chassis_front). If they disagree,
+# the driver ignores this whole file and silently runs on its defaults.
+#
+# Scope: the FRONT OAK-D Lite only. rear / left / right are out of scope for
+# this bring-up. No VIO, no localization.
+/oak_chassis_front:
+  ros__parameters:
+    camera:
+      # No on-device neural network yet: the Graphite detection model has not
+      # been trained or compiled to a Myriad-X .blob. To enable object
+      # detection later, set this to 'rgb' (2D) or 'spatial' (3D) and point
+      # nn.i_nn_config_path at the blob/config.
+      i_nn_type: none
+
+      # Bind this driver to the physical FRONT camera by its serial (MXID).
+      # Four identical OAK-D Lites share the chassis; with this unset the
+      # driver grabs whichever USB device enumerates first, which is NOT
+      # deterministic across reboots. This serial was read off the unit via
+      # depthai's getAllAvailableDevices() (deviceId).
+      i_mx_id: "19443010C1DF397E00"
+
+    rgb:
+      # 1080p color. Drop to '720' if USB3 bandwidth becomes the bottleneck
+      # once more cameras share the bus.
+      i_resolution: '1080'
+
+    # Stereo depth: quality vs USB-bandwidth / FPS tradeoff.
+    # 480p mono + subpixel gives clean depth without saturating USB3, leaving
+    # headroom for when all four chassis cameras share the bus. i_align_depth
+    # registers the depth map onto the RGB image so the point cloud comes out
+    # colored and correctly overlaid.
+    # NOTE: left / right / stereo are TOP-LEVEL param groups (4-space indent,
+    # siblings of camera / rgb) -- NOT children of rgb.
+    left:
+      i_resolution: '480'
+    right:
+      i_resolution: '480'
+    stereo:
+      i_subpixel: true
+      i_align_depth: true
