@@ -131,6 +131,19 @@ REJECT_LOG_THROTTLE_S: float = 1.0
 #: COMMAND only; encoder feedback keeps each motor's native sign.
 WHEEL_DIRECTION: tuple[float, float, float, float] = (1.0, -1.0, 1.0, -1.0)
 
+#: Sign applied to the /cmd_vel (Vx, Vy, wz) before the kinematics, in canonical
+#: order. FORTIS's chassis "front" is base_link -X (opposite REP-103; see the
+#: chassis-front convention), but teleop sends +linear.x to mean "drive toward
+#: the front". So Vx is negated: a forward command moves the robot toward its
+#: front, not its back. This is a *command-frame* correction at the hardware
+#: boundary -- the H matrix stays pure base_link kinematics, like WHEEL_DIRECTION
+#: is the motor-mounting correction.
+#: NOTE: only Vx is flipped (the confirmed forward/back inversion). If strafe
+#: (Vy) is ALSO inverted on the robot, the front flip is a full 180deg yaw and
+#: Vy should become -1.0 too; left at +1.0 until strafe is verified. wz (yaw) is
+#: unchanged -- a 180deg yaw about Z does not flip the rotation sense.
+CMD_VEL_FRAME_SIGN: tuple[float, float, float] = (-1.0, 1.0, 1.0)
+
 #: /cmd_vel watchdog timeout. Teleop sources stop publishing on release
 #: without sending a zero, and the velocity controller latches its last
 #: setpoint -- so without this the robot keeps moving. If no /cmd_vel
@@ -186,9 +199,9 @@ def _twist_to_wheel_command(cmd: Twist) -> WheelCommand:
     FL/FR/RL/RR wheel order; we preserve it.
     """
     wheel_linear = xdrive_ik_solver(
-        cmd.linear.x,
-        cmd.linear.y,
-        cmd.angular.z,
+        cmd.linear.x * CMD_VEL_FRAME_SIGN[0],
+        cmd.linear.y * CMD_VEL_FRAME_SIGN[1],
+        cmd.angular.z * CMD_VEL_FRAME_SIGN[2],
     )
     return WheelCommand(
         fl=float(wheel_linear[0]) / WHEEL_RADIUS * WHEEL_DIRECTION[0],

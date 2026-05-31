@@ -36,6 +36,7 @@ from std_msgs.msg import Float64MultiArray, String
 
 from fortis_comms.xdrive_kinematics import WHEEL_RADIUS, xdrive_ik_solver
 from fortis_drive.drive_node import (
+    CMD_VEL_FRAME_SIGN,
     CMD_VEL_TOPIC,
     MISSION_STATE_TOPIC,
     WHEEL_CONTROLLER_COMMAND_TOPIC,
@@ -258,12 +259,16 @@ def _expected_wheel_speeds(vx: float, vy: float, wz: float) -> list[float]:
     """
     Compute reference wheel speeds for a given Twist (the assertion target).
 
-    Computed via the same xdrive_ik_solver the node calls, divided by
-    WHEEL_RADIUS for the m/s -> rad/s conversion, then signed by
-    WHEEL_DIRECTION -- exactly the pipeline drive_node applies. Asserting
-    against this is the contract: same inputs in, same signed outputs out.
+    Mirrors drive_node's full pipeline: CMD_VEL_FRAME_SIGN (chassis front
+    convention) applied to the Twist, then xdrive_ik_solver, then / WHEEL_RADIUS
+    (m/s -> rad/s), then * WHEEL_DIRECTION (motor mounting). Asserting against
+    this is the contract: same inputs in, same signed outputs out.
     """
-    linear = xdrive_ik_solver(vx, vy, wz)
+    linear = xdrive_ik_solver(
+        vx * CMD_VEL_FRAME_SIGN[0],
+        vy * CMD_VEL_FRAME_SIGN[1],
+        wz * CMD_VEL_FRAME_SIGN[2],
+    )
     return [
         float(linear[i]) / WHEEL_RADIUS * WHEEL_DIRECTION[i] for i in range(4)
     ]
@@ -444,30 +449,32 @@ def test_controller_array_ordering_matches_kinematics(harness):
 
 def test_wheel_direction_reverses_right_side(harness):
     """
-    A pure-forward command inverts the right-side wheel COMMANDS.
+    Right-side wheels (FR, RR) carry the inverse command of the left side.
 
-    The right-side motors (FR, RR) are mirror-mounted, so to make them roll
-    physically forward they receive a NEGATIVE shaft command. A forward Twist
-    therefore yields +, -, +, - on [FL, FR, RL, RR]: left side positive, right
-    side inverted. (Physical motion is all-forward; only the command sign
-    differs.) Regression guard for the wrong-direction bug found on the first
-    real drive.
+    WHEEL_DIRECTION inverts the mirror-mounted right side, so for a pure
+    forward/back command each right wheel carries the opposite sign of its left
+    counterpart at equal magnitude. We assert the pairing (and a match to the
+    canonical pipeline) rather than a fixed sign, so the test is independent of
+    the CMD_VEL_FRAME_SIGN forward convention. Regression guard for the
+    wrong-direction bug found on the first real drive.
     """
     harness.publish_state("ORBIT")
     harness.spin()
-    harness.publish_twist(vx=0.5)  # pure forward
+    harness.publish_twist(vx=0.5)  # pure forward/back command
     harness.spin()
 
     assert len(harness.wheel_msgs) >= 1
     msg = harness.wheel_msgs[-1]
-    # Left wheels: positive command. Right wheels: inverted (negative).
-    assert msg.fl > 0.0, "FL commanded positive for forward"
-    assert msg.rl > 0.0, "RL commanded positive for forward"
-    assert msg.fr < 0.0, "FR mirror-mounted -> inverted (negative) command"
-    assert msg.rr < 0.0, "RR mirror-mounted -> inverted (negative) command"
-    # Equal magnitude, opposite sign across each side for a pure-forward cmd.
+    # Matches the full pipeline (frame sign + IK + WHEEL_DIRECTION).
+    expected = _expected_wheel_speeds(0.5, 0.0, 0.0)
+    assert msg.fl == pytest.approx(expected[0], abs=1e-6)
+    assert msg.fr == pytest.approx(expected[1], abs=1e-6)
+    assert msg.rl == pytest.approx(expected[2], abs=1e-6)
+    assert msg.rr == pytest.approx(expected[3], abs=1e-6)
+    # Right side is the per-wheel inverse of the left (equal mag, opposite sign).
     assert msg.fl == pytest.approx(-msg.fr, abs=1e-6)
     assert msg.rl == pytest.approx(-msg.rr, abs=1e-6)
+    assert abs(msg.fl) > 0.0
     assert WHEEL_DIRECTION == (1.0, -1.0, 1.0, -1.0)
 
 

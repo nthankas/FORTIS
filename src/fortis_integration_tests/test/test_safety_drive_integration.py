@@ -56,6 +56,7 @@ import rclpy
 from fortis_comms.xdrive_kinematics import WHEEL_RADIUS, xdrive_ik_solver
 from fortis_drive.drive_node import (
     ALLOWED_DRIVE_STATES,
+    CMD_VEL_FRAME_SIGN,
     CMD_VEL_TOPIC,
     MISSION_STATE_TOPIC,
     WHEEL_DIRECTION,
@@ -151,10 +152,15 @@ def _context_topic(field: str) -> str:
 def _expected_wheel_speeds(vx: float, vy: float, wz: float) -> list[float]:
     """Compute the signed wheel command the drive node should produce.
 
-    Raw IK / WHEEL_RADIUS, then WHEEL_DIRECTION applied -- the same pipeline
-    drive_node uses (the right-side motors FR/RR are mirror-mounted).
+    CMD_VEL_FRAME_SIGN (chassis front convention) applied to the Twist, then
+    raw IK / WHEEL_RADIUS, then WHEEL_DIRECTION -- the same pipeline drive_node
+    uses (front = base_link -X; right-side motors FR/RR mirror-mounted).
     """
-    linear = xdrive_ik_solver(vx, vy, wz)
+    linear = xdrive_ik_solver(
+        vx * CMD_VEL_FRAME_SIGN[0],
+        vy * CMD_VEL_FRAME_SIGN[1],
+        wz * CMD_VEL_FRAME_SIGN[2],
+    )
     return [
         float(linear[i]) / WHEEL_RADIUS * WHEEL_DIRECTION[i] for i in range(4)
     ]
