@@ -1,35 +1,32 @@
 """
-Front chassis camera bring-up (single OAK-D Lite).
+Front chassis camera bring-up (single OAK-D Lite) on depthai-ros v3.
 
-Launches Luxonis's official depthai_ros_driver ``camera.launch.py`` for the
-ONE front-facing OAK-D Lite and nothing else. The other three chassis
-cameras (rear / left / right) are intentionally out of scope here -- this
-file exists to prove the front camera streams RGB, depth, an RGBD point
-cloud, and raw IMU into Foxglove. EKF / localization / VIO are deliberately
-NOT wired up.
+Includes Luxonis's depthai_ros_driver_v3 ``driver.launch.py`` for the ONE
+front-facing OAK-D Lite: RGB + stereo depth + a colored RGBD point cloud +
+IMU. The other three chassis cameras (rear / left / right) and any VIO /
+localization are intentionally out of scope here.
 
-Why include the driver's launch instead of spawning a Node
-----------------------------------------------------------
-depthai_ros_driver builds the on-device pipeline (color + stereo + optional
-point cloud + optional NN) and publishes the camera_info / TF tree from the
-device's factory calibration. Re-implementing that as a bare Node would mean
-re-deriving all of it. We only override four things: the node name, the
-parent TF frame, our params file, and turning the point cloud on.
+depthai-ros v3 vs the old v2 driver (what changed here)
+-------------------------------------------------------
+  * package ``depthai_ros_driver_v3`` (plugin depthai_ros_driver::Driver),
+    launch ``driver.launch.py``  -- was depthai_ros_driver / camera.launch.py.
+  * the device is pinned by ``driver.i_device_id`` in the params yaml -- was
+    ``camera.i_mx_id``.
+  * the colored point cloud publishes on ``<name>/rgbd/points`` when
+    pointcloud.enable:=true -- was ``<name>/points``.
+  * ``publish_tf_from_calibration`` (v3 default true) builds the camera TF
+    tree under ``parent_frame``, so parent_frame:=front_camera_link still
+    hangs the optical frames off the URDF link, same as v2.
 
 Frame tie-in
 ------------
-parent_frame is set to ``front_camera_link`` -- the link the URDF already
-places on the chassis (see fortis_chassis.urdf.xacro, camera name "front").
-The driver hangs its own optical frames off that link, so the point cloud
-and images land in the right place relative to base_link in the 3D view.
-cam_pos_* are left at 0 because the URDF, not the driver, owns the mounting
-pose.
+parent_frame is ``front_camera_link`` -- the link the URDF places on the
+chassis (fortis_chassis.urdf.xacro, camera name "front"). cam_pos_* stay 0:
+the URDF owns the mounting pose, the driver only adds the camera-internal
+frames below it.
 
-Pairs with
-----------
-- robot_state_publisher (for /robot_description + the URDF TF tree)
-- foxglove_bridge (to view it; load foxglove/fortis_chassis_cam.json)
-Run those via bringup or in separate terminals.
+Pairs with robot_state_publisher (for the URDF /tf tree) + foxglove_bridge;
+load foxglove/fortis_chassis_cam.json.
 """
 
 import os
@@ -50,9 +47,9 @@ PARENT_FRAME = "front_camera_link"
 
 def generate_launch_description():
     driver_launch = os.path.join(
-        get_package_share_directory("depthai_ros_driver"),
+        get_package_share_directory("depthai_ros_driver_v3"),
         "launch",
-        "camera.launch.py",
+        "driver.launch.py",
     )
     params_file = os.path.join(
         get_package_share_directory("fortis_bringup"),
@@ -69,7 +66,6 @@ def generate_launch_description():
             "camera_model": "OAK-D-LITE",
             # Publish the colored RGBD point cloud (default off in the driver).
             "pointcloud.enable": "true",
-            "rectify_rgb": "true",
             "use_rviz": "false",
         }.items(),
     )

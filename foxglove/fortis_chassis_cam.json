@@ -40,7 +40,7 @@
       "topics": {
         "/tf": { "visible": true },
         "/tf_static": { "visible": true },
-        "/oak_chassis_front/points": { "visible": true }
+        "/oak_chassis_front/rgbd/points": { "visible": true }
       },
       "layers": {
         "fortis-urdf": {

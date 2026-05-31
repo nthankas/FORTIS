@@ -26,12 +26,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-humble-tf2-tools \
     ros-humble-rqt-tf-tree \
     ros-humble-foxglove-bridge \
-    ros-humble-depthai-ros \
     can-utils \
     iproute2 \
     kmod \
     python3-vcstool \
     && rm -rf /var/lib/apt/lists/*
+
+# depthai-ros v3 (RVC2 + RVC4 OAK camera driver). v3 lives in the ROS 2
+# *testing* apt repo, enabled by the ros2-testing-apt-source package. The v3
+# core lib (ros-humble-depthai-v3) conflicts on files with the v2
+# ros-humble-depthai, so this image installs ONLY v3 -- the v2
+# ros-humble-depthai-ros line was deliberately removed from the list above.
+# Package/launch are suffixed _v3 on Humble (depthai_ros_driver_v3 /
+# driver.launch.py); see src/fortis_bringup/launch/oak_chassis_front.launch.py.
+RUN apt-get update && apt-get install -y --no-install-recommends ros2-testing-apt-source \
+ && apt-get update && apt-get install -y --no-install-recommends ros-humble-depthai-ros-v3 \
+ && rm -rf /var/lib/apt/lists/*
 
 RUN pip install --no-cache-dir \
     depthai \

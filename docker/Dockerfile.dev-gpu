@@ -142,6 +142,21 @@ Check apt-cache search ros-humble-isaac-ros and the release-3 repo contents." \
  && rm -rf /var/lib/apt/lists/*
 
 # -----------------------------------------------------------------------------
+# depthai-ros v3 (OAK camera driver, RVC2 + RVC4). Mirrors the v3 install in
+# Dockerfile.dev so the camera node runs on the GPU image too (this is the
+# image the Jetson uses). v3 lives in the ROS 2 *testing* apt repo, enabled by
+# ros2-testing-apt-source. The package name is arch-neutral: apt + the
+# TARGETARCH base stage above pull the amd64 deb on a GPU PC and the arm64 deb
+# on the Jetson automatically -- no per-arch branching needed. Installed fatal
+# (no `|| echo`) because the camera bring-up REQUIRES it; a missing per-arch
+# binary should fail the build loudly rather than surface at runtime. The v2
+# ros-humble-depthai core file-conflicts with v3, so v2 is never installed.
+# -----------------------------------------------------------------------------
+RUN apt-get update && apt-get install -y --no-install-recommends ros2-testing-apt-source \
+ && apt-get update && apt-get install -y --no-install-recommends ros-humble-depthai-ros-v3 \
+ && rm -rf /var/lib/apt/lists/*
+
+# -----------------------------------------------------------------------------
 # Python deps - same as Dockerfile.dev. Keep in sync.
 # -----------------------------------------------------------------------------
 RUN pip install --no-cache-dir \
