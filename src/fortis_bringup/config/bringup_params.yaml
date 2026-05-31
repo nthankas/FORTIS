@@ -42,11 +42,14 @@ drive_node:
     # most one rejection warning per state name per this interval.
     # Hardcoded as REJECT_LOG_THROTTLE_S in drive_node.py.
     reject_log_throttle_s: 1.0
-    # cmd_vel watchdog placeholder. When the operator stops sending
-    # /cmd_vel, the drive will eventually need to publish zeros
-    # rather than freezing at the last value. Not implemented yet;
-    # the value below is the proposed default. Wire up via the
-    # watchdog-on-cmd-vel feature when bringup-on-hardware needs it.
+    # cmd_vel dead-man watchdog timeout, seconds. The watchdog IS
+    # implemented in drive_node.py (CMD_VEL_TIMEOUT_S = 0.5): if no
+    # /cmd_vel arrives within the timeout, the drive commands zeros instead
+    # of freezing at the last value. Like every value in this file it is
+    # NOT read via declare_parameter -- the in-code constant is
+    # authoritative and this entry documents/matches it. To make it a real
+    # per-run override, wire declare_parameter("cmd_vel_timeout_s") into
+    # drive_node (the value is already constructor-injectable).
     cmd_vel_timeout_s: 0.5
 
 arm_controller:
