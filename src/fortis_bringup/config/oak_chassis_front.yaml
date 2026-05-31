@@ -6,6 +6,14 @@
 #
 # Scope: the FRONT OAK-D Lite only. rear / left / right are out of scope for
 # this bring-up. No VIO, no localization.
+#
+# Driver version: these are depthai-ros v2 names (the ros-humble-depthai-ros
+# apt package / `humble` branch), runtime-verified on this hardware. depthai-ros
+# v3 renames several -- i_mx_id -> camera.i_device_id, i_resolution -> i_width +
+# i_height, stereo.i_align_depth -> stereo.i_aligned, camera.i_pipeline_type ->
+# pipeline_gen.i_pipeline_type. ROS silently ignores unknown params, so a v3
+# upgrade would read this file as defaults (wrong camera / resolution) with NO
+# error. Rename only when the installed driver is actually bumped to v3.
 /oak_chassis_front:
   ros__parameters:
     camera:
