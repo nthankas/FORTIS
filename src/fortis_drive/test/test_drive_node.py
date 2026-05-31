@@ -13,8 +13,8 @@ The whole point of this node is the QoS contract with /fortis/mission_state
 which messages reach which callbacks in which order. A unit test that
 mocks rclpy and calls _on_cmd_vel directly would test the formula but not
 the ROS plumbing. We do both: the formula is verified by comparing
-against xdrive_ik_solver, and the plumbing is verified by going through
-DDS.
+against xdrive_ik_solver (with WHEEL_DIRECTION applied), and the plumbing
+is verified by going through DDS.
 
 Run with:
     cd /workspace
@@ -36,9 +36,11 @@ from std_msgs.msg import Float64MultiArray, String
 
 from fortis_comms.xdrive_kinematics import WHEEL_RADIUS, xdrive_ik_solver
 from fortis_drive.drive_node import (
+    CMD_VEL_TIMEOUT_S,
     CMD_VEL_TOPIC,
     MISSION_STATE_TOPIC,
     WHEEL_CONTROLLER_COMMAND_TOPIC,
+    WHEEL_DIRECTION,
     WHEEL_VELOCITIES_TOPIC,
     ZERO_VELOCITIES_TOPIC,
     DriveNode,
@@ -52,6 +54,8 @@ from fortis_msgs.msg import WheelVelocities
 #: 300 ms is enough for DDS discovery between two in-process nodes on
 #: every machine we have tried, and for a single message to round-trip
 #: through both subscriptions. Increase if tests flake on a slower box.
+#: Kept < CMD_VEL_TIMEOUT_S so a single drive+spin doesn't trip the
+#: dead-man watchdog mid-assertion.
 SPIN_DURATION_S: float = 0.3
 
 #: Per-spin_once timeout. Small enough that the harness drains promptly
@@ -252,15 +256,15 @@ def _expected_wheel_speeds(vx: float, vy: float, wz: float) -> list[float]:
     """
     Compute reference wheel speeds for a given Twist (the assertion target).
 
-    Computed via the same xdrive_ik_solver that the node calls so the test
-    verifies "the kinematics are being applied correctly" rather than
-    re-deriving the H matrix here (which would just duplicate the
-    library and test the duplicate). Asserting against this is the
-    contract: same inputs in, same outputs out, with the m/s -> rad/s
-    conversion applied.
+    Computed via the same xdrive_ik_solver the node calls, divided by
+    WHEEL_RADIUS for the m/s -> rad/s conversion, then signed by
+    WHEEL_DIRECTION -- exactly the pipeline drive_node applies. Asserting
+    against this is the contract: same inputs in, same signed outputs out.
     """
     linear = xdrive_ik_solver(vx, vy, wz)
-    return [float(linear[i]) / WHEEL_RADIUS for i in range(4)]
+    return [
+        float(linear[i]) / WHEEL_RADIUS * WHEEL_DIRECTION[i] for i in range(4)
+    ]
 
 
 # --- Tests ------------------------------------------------------------------
@@ -287,9 +291,8 @@ def test_orbit_accepts_cmd_vel_and_publishes_correct_wheel_velocities(harness):
     assert msg.rl == pytest.approx(expected[2], abs=1e-6)
     assert msg.rr == pytest.approx(expected[3], abs=1e-6)
 
-    # Controller-bound Float64MultiArray must carry the same four values
-    # in [fl, fr, rl, rr] order, identical to the kinematics output now
-    # that everything in the wheel pipeline shares the same naming.
+    # Controller-bound Float64MultiArray must carry the same four signed
+    # values in [fl, fr, rl, rr] order (WHEEL_DIRECTION applied).
     arr = harness.controller_msgs[-1]
     assert list(arr.data) == pytest.approx(expected, abs=1e-6), \
         "controller array must carry [fl, fr, rl, rr] in that order"
@@ -370,8 +373,10 @@ def test_state_transitions_gate_motion_correctly(harness):
     zeros_after_orbit = len(harness.zero_msgs)
     assert wheels_after_orbit > wheels_after_idle, \
         "ORBIT should have produced new wheel_velocities"
-    assert zeros_after_orbit == zeros_after_idle, \
-        "ORBIT should not produce additional zero_velocities"
+    # NOTE: we no longer assert zeros stayed constant across IDLE->ORBIT.
+    # The /cmd_vel dead-man watchdog may legitimately emit a zero if the
+    # gap between commands (e.g. the publish_state poll) exceeds
+    # CMD_VEL_TIMEOUT_S. The wheel-count growth is the gate signal.
 
     # ORBIT -> IDLE: rejects again.
     harness.publish_state("IDLE")
@@ -416,7 +421,7 @@ def test_controller_array_ordering_matches_kinematics(harness):
     fires before a bench session swaps two motors.
 
     Asymmetric Twist (vy != 0) so the four wheel speeds are all
-    different and order-sensitive.
+    different and order-sensitive. Expected values include WHEEL_DIRECTION.
     """
     harness.publish_state("ORBIT")
     harness.spin()
@@ -433,3 +438,79 @@ def test_controller_array_ordering_matches_kinematics(harness):
     assert arr.data[1] == pytest.approx(expected[1], abs=1e-6)
     assert arr.data[2] == pytest.approx(expected[2], abs=1e-6)
     assert arr.data[3] == pytest.approx(expected[3], abs=1e-6)
+
+
+def test_wheel_direction_reverses_right_side(harness):
+    """
+    A pure-forward command inverts the right-side wheel COMMANDS.
+
+    The right-side motors (FR, RR) are mirror-mounted, so to make them roll
+    physically forward they receive a NEGATIVE shaft command. A forward Twist
+    therefore yields +, -, +, - on [FL, FR, RL, RR]: left side positive, right
+    side inverted. (Physical motion is all-forward; only the command sign
+    differs.) Regression guard for the wrong-direction bug found on the first
+    real drive.
+    """
+    harness.publish_state("ORBIT")
+    harness.spin()
+    harness.publish_twist(vx=0.5)  # pure forward
+    harness.spin()
+
+    assert len(harness.wheel_msgs) >= 1
+    msg = harness.wheel_msgs[-1]
+    # Left wheels: positive command. Right wheels: inverted (negative).
+    assert msg.fl > 0.0, "FL commanded positive for forward"
+    assert msg.rl > 0.0, "RL commanded positive for forward"
+    assert msg.fr < 0.0, "FR mirror-mounted -> inverted (negative) command"
+    assert msg.rr < 0.0, "RR mirror-mounted -> inverted (negative) command"
+    # Equal magnitude, opposite sign across each side for a pure-forward cmd.
+    assert msg.fl == pytest.approx(-msg.fr, abs=1e-6)
+    assert msg.rl == pytest.approx(-msg.rr, abs=1e-6)
+    assert WHEEL_DIRECTION == (1.0, -1.0, 1.0, -1.0)
+
+
+def test_cmd_vel_watchdog_stops_when_commands_go_stale(harness):
+    """
+    Dead-man: if /cmd_vel stops arriving, the watchdog commands zeros.
+
+    Reproduces the "wheels keep spinning after the operator releases the
+    teleop pad" bug: the teleop client stops publishing without sending a
+    zero, so without a watchdog the controller latches the last command.
+    """
+    harness.publish_state("ORBIT")
+    harness.spin()
+    harness.publish_twist(vx=0.5)
+    harness.spin()
+    assert len(harness.wheel_msgs) >= 1, "expected motion in ORBIT"
+    zeros_before = len(harness.zero_msgs)
+
+    # Stop publishing /cmd_vel and let the watchdog time out.
+    harness.spin(CMD_VEL_TIMEOUT_S + 0.3)
+
+    assert len(harness.zero_msgs) > zeros_before, \
+        "watchdog must publish zeros after /cmd_vel goes stale"
+    assert list(harness.controller_msgs[-1].data) == [0.0, 0.0, 0.0, 0.0], \
+        "watchdog must command the controller to zero"
+
+
+def test_stop_transition_zeros_immediately(harness):
+    """
+    Leaving a driving state commands zeros at once, without a new /cmd_vel.
+
+    Reproduces the "STOP doesn't stop the wheels" bug: on ORBIT->IDLE no
+    /cmd_vel is in flight (operator released), so the rejection-zero never
+    fired. drive_node must zero on the state transition itself.
+    """
+    harness.publish_state("ORBIT")
+    harness.spin()
+    harness.publish_twist(vx=0.5)
+    harness.spin()
+    zeros_before = len(harness.zero_msgs)
+
+    # Transition ORBIT -> IDLE with NO /cmd_vel in flight.
+    harness.publish_state("IDLE")
+    harness.spin()
+
+    assert len(harness.zero_msgs) > zeros_before, \
+        "gate-close must publish zeros immediately, not wait for next /cmd_vel"
+    assert list(harness.controller_msgs[-1].data) == [0.0, 0.0, 0.0, 0.0]

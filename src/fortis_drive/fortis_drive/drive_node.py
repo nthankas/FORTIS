@@ -57,6 +57,26 @@ zeros to be published. Rejections log a warning at most once per second per
 state name, throttled manually so a flood of /cmd_vel messages can't flood
 the log.
 
+Safety stops
+------------
+Two mechanisms guarantee the wheels stop, independent of the teleop client:
+  * /cmd_vel watchdog: teleop panels stop publishing on release WITHOUT
+    sending a zero, and the velocity controller latches its last setpoint --
+    so if no /cmd_vel arrives within CMD_VEL_TIMEOUT_S, we command zeros
+    (dead-man stop).
+  * Gate-close stop: leaving a driving state publishes zeros immediately
+    rather than waiting for the next (possibly never-arriving) /cmd_vel, so
+    STOP halts the wheels at once.
+
+Wheel direction
+---------------
+WHEEL_DIRECTION applies a per-wheel sign at the hardware boundary to correct
+for the mirror-mounted right-side motors (FR, RR): a positive command spins
+them backward, so we invert them. The kinematics stay "ideal" (positive =
+roll forward for every wheel); the physical mounting is corrected here. This
+signs the COMMAND only -- encoder feedback retains each motor's native sign
+until odometry applies the same correction.
+
 Why std_msgs/String for the state subscription
 ----------------------------------------------
 fortis_safety/mission_state_node currently publishes the canonical state
@@ -67,11 +87,11 @@ switches, this subscription updates; the gating logic does not change.
 
 Threading
 ---------
-Single-threaded executor on purpose. The two callbacks (cmd_vel and
-mission_state) are short, allocate nothing significant, and have no async
+Single-threaded executor on purpose. The callbacks (cmd_vel, mission_state,
+watchdog timer) are short, allocate nothing significant, and have no async
 work to wait on. A MultiThreadedExecutor would add no throughput and
-introduce a data race on the cached state string. If real-time guarantees
-are ever needed, revisit -- but it should not be the default.
+introduce a data race on the cached state. If real-time guarantees are ever
+needed, revisit -- but it should not be the default.
 """
 
 from __future__ import annotations
@@ -101,6 +121,25 @@ ALLOWED_DRIVE_STATES: frozenset[str] = frozenset({"ORBIT", "RETURN_HOME"})
 #: typically arrives at 20-50 Hz; without throttling the log would be
 #: useless during any non-driving state.
 REJECT_LOG_THROTTLE_S: float = 1.0
+
+#: Per-wheel command-direction sign, canonical [FL, FR, RL, RR] order. The
+#: right-side motors (FR, RR) are mirror-mounted, so a positive command
+#: spins them backward; these signs invert them so "+ = roll forward" holds
+#: for every wheel. This is a physical *mounting* correction applied at the
+#: hardware boundary -- it lives here and NOT in the kinematics (the H matrix
+#: stays "ideal"). Verified by single-wheel bench test 2026-05-31. Signs the
+#: COMMAND only; encoder feedback keeps each motor's native sign.
+WHEEL_DIRECTION: tuple[float, float, float, float] = (1.0, -1.0, 1.0, -1.0)
+
+#: /cmd_vel watchdog timeout. Teleop sources stop publishing on release
+#: without sending a zero, and the velocity controller latches its last
+#: setpoint -- so without this the robot keeps moving. If no /cmd_vel
+#: arrives within this window, command zeros (dead-man stop).
+CMD_VEL_TIMEOUT_S: float = 0.5
+
+#: Watchdog tick period (10 Hz): a released teleop stops within
+#: ~CMD_VEL_TIMEOUT_S + WATCHDOG_PERIOD_S, cheap enough to ignore.
+WATCHDOG_PERIOD_S: float = 0.1
 
 CMD_VEL_TOPIC: str = "/cmd_vel"
 MISSION_STATE_TOPIC: str = "/fortis/mission_state"
@@ -141,9 +180,10 @@ def _twist_to_wheel_command(cmd: Twist) -> WheelCommand:
     Map a Twist (Vx, Vy, omega) to per-wheel angular velocities (rad/s).
 
     Calls into xdrive_kinematics.xdrive_ik_solver (which returns wheel linear
-    speeds in m/s, already saturated to MAX_WHEEL_SPEED) and divides by the
-    wheel radius to get wheel shaft angular velocity. The H matrix in
-    fortis_comms encodes the FL/FR/RL/RR wheel order; we preserve it.
+    speeds in m/s, already saturated to MAX_WHEEL_SPEED), divides by the wheel
+    radius to get wheel shaft angular velocity, then applies WHEEL_DIRECTION to
+    correct for the mirror-mounted right-side motors. The H matrix encodes the
+    FL/FR/RL/RR wheel order; we preserve it.
     """
     wheel_linear = xdrive_ik_solver(
         cmd.linear.x,
@@ -151,10 +191,10 @@ def _twist_to_wheel_command(cmd: Twist) -> WheelCommand:
         cmd.angular.z,
     )
     return WheelCommand(
-        fl=float(wheel_linear[0]) / WHEEL_RADIUS,
-        fr=float(wheel_linear[1]) / WHEEL_RADIUS,
-        rl=float(wheel_linear[2]) / WHEEL_RADIUS,
-        rr=float(wheel_linear[3]) / WHEEL_RADIUS,
+        fl=float(wheel_linear[0]) / WHEEL_RADIUS * WHEEL_DIRECTION[0],
+        fr=float(wheel_linear[1]) / WHEEL_RADIUS * WHEEL_DIRECTION[1],
+        rl=float(wheel_linear[2]) / WHEEL_RADIUS * WHEEL_DIRECTION[2],
+        rr=float(wheel_linear[3]) / WHEEL_RADIUS * WHEEL_DIRECTION[3],
     )
 
 
@@ -188,9 +228,9 @@ class DriveNode(Node):
     """
     ROS node that converts /cmd_vel to wheel velocities, gated by mission state.
 
-    The node holds two pieces of runtime state: the most recent mission state
-    string (or None if none has been received) and a per-state timestamp of
-    the last "rejected /cmd_vel" warning, used for throttling.
+    Runtime state: the most recent mission state string (or None), a per-state
+    timestamp of the last "rejected /cmd_vel" warning (for throttling), and the
+    timestamp of the last /cmd_vel (for the dead-man watchdog).
     """
 
     def __init__(self) -> None:
@@ -206,6 +246,12 @@ class DriveNode(Node):
         # content; we want one warning per state per second, not one
         # warning per second across all states.
         self._last_reject_log: dict[str, Time] = {}
+
+        # Dead-man watchdog state: time of the last /cmd_vel, and whether we
+        # have already commanded a stop because it went stale (so we zero
+        # once per stale episode, not every tick).
+        self._last_cmd_vel_time: Time | None = None
+        self._cmd_vel_stale: bool = False
 
         # Latched QoS for the mission_state subscription. Matches the
         # publisher in fortis_safety/mission_state_node: TRANSIENT_LOCAL
@@ -248,15 +294,21 @@ class DriveNode(Node):
             10,
         )
 
+        # Dead-man watchdog: zeros the wheels if /cmd_vel goes stale.
+        self._watchdog_timer = self.create_timer(
+            WATCHDOG_PERIOD_S, self._on_watchdog
+        )
+
         self.get_logger().info(
             f"drive_node up. Gated by states: "
-            f"{sorted(ALLOWED_DRIVE_STATES)}. Awaiting first mission_state."
+            f"{sorted(ALLOWED_DRIVE_STATES)}. cmd_vel watchdog "
+            f"{CMD_VEL_TIMEOUT_S:.2f}s. Awaiting first mission_state."
         )
 
     # --- Callbacks ----------------------------------------------------------
 
     def _on_state(self, msg: String) -> None:
-        """Cache the latest mission state and log transitions at info level."""
+        """Cache the latest mission state; stop the wheels on gate-close."""
         new_state = msg.data
         if new_state == self._current_state:
             return  # idempotent re-publish; nothing to do
@@ -269,6 +321,12 @@ class DriveNode(Node):
             self._last_reject_log.pop(_UNKNOWN_STATE_KEY, None)
         else:
             self._last_reject_log.pop(previous, None)
+        # Entering a non-driving state: command an explicit stop NOW rather
+        # than waiting for the next /cmd_vel (which may never come if the
+        # operator released teleop). Makes STOP / any gate-close halt the
+        # wheels immediately.
+        if new_state not in ALLOWED_DRIVE_STATES:
+            self._publish_zero(self.get_clock().now().to_msg())
         previous_label = previous if previous is not None else "<none>"
         self.get_logger().info(
             f"mission_state: {previous_label} -> {new_state}"
@@ -276,7 +334,11 @@ class DriveNode(Node):
 
     def _on_cmd_vel(self, msg: Twist) -> None:
         """Translate /cmd_vel into wheel velocities, gated by mission state."""
-        stamp = self.get_clock().now().to_msg()
+        now = self.get_clock().now()
+        # Freshen the watchdog: a command just arrived.
+        self._last_cmd_vel_time = now
+        self._cmd_vel_stale = False
+        stamp = now.to_msg()
         state = self._current_state
 
         if state is None or state not in ALLOWED_DRIVE_STATES:
@@ -295,6 +357,29 @@ class DriveNode(Node):
             f"RL={cmd.rl:.2f} RR={cmd.rr:.2f} rad/s"
         )
 
+    def _on_watchdog(self) -> None:
+        """Dead-man stop: if /cmd_vel has gone stale, command zeros once.
+
+        Teleop panels stop publishing on release without sending a zero, and
+        the velocity controller latches its last setpoint -- so without this
+        the wheels keep spinning after the operator lets go. We zero once per
+        stale episode (the controller then holds zero); a fresh /cmd_vel
+        clears the stale flag in _on_cmd_vel.
+        """
+        if self._last_cmd_vel_time is None:
+            return  # never commanded; nothing to stop
+        if self._cmd_vel_stale:
+            return  # already stopped; controller is holding zero
+        elapsed = self.get_clock().now() - self._last_cmd_vel_time
+        if elapsed <= Duration(seconds=CMD_VEL_TIMEOUT_S):
+            return
+        self._cmd_vel_stale = True
+        self._publish_zero(self.get_clock().now().to_msg())
+        self.get_logger().warning(
+            f"/cmd_vel stale > {CMD_VEL_TIMEOUT_S:.2f}s; "
+            f"commanding zero (dead-man stop)."
+        )
+
     # --- Helpers ------------------------------------------------------------
 
     def _publish_zero(self, stamp: TimeMsg) -> None:
@@ -302,8 +387,9 @@ class DriveNode(Node):
 
         Emits on both the legacy WheelVelocities zero topic AND the
         ros2_control controller-bound topic. The controller path must
-        receive zeros explicitly on rejection so it never coasts at the
-        last accepted setpoint.
+        receive zeros explicitly so it never coasts at the last accepted
+        setpoint -- used by the rejection path, the gate-close stop, and the
+        dead-man watchdog.
         """
         zero = WheelCommand.zero()
         self._zero_pub.publish(_wheel_command_to_msg(zero, stamp))
