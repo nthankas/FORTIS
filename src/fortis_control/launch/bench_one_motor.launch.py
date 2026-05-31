@@ -65,131 +65,52 @@ How to use after launch
 """
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, RegisterEventHandler
-from launch.event_handlers import OnProcessExit
-from launch.substitutions import (
-    Command,
-    FindExecutable,
-    LaunchConfiguration,
-    PathJoinSubstitution,
-)
-from launch_ros.actions import Node
-from launch_ros.parameter_descriptions import ParameterValue
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.substitutions import FindPackageShare
 
 
 def generate_launch_description():
-    # ----- Args ---------------------------------------------------------
+    # Thin wrapper over drive_hw.launch.py. The bench is the same control
+    # stack -- controller_manager + odrive plugin + joint_state_broadcaster
+    # + an --inactive wheel_velocity_controller, brought up in the same
+    # order -- but with only the FL wheel enabled and the single-wheel
+    # controllers YAML. Delegating to drive_hw keeps ONE launch
+    # implementation, so the bench and production bring-ups can never drift
+    # in spawner ordering or plugin wiring; only the wheel set and the
+    # controllers file differ.
     declared_arguments = [
         DeclareLaunchArgument(
             "can_interface",
             default_value="can0",
-            description=(
-                "SocketCAN interface name passed to "
-                "odrive_ros2_control_plugin/ODriveHardwareInterface."
-            ),
+            description="SocketCAN interface name, passed through to drive_hw.",
         ),
         DeclareLaunchArgument(
             "use_mock_hardware",
             default_value="false",
             description=(
-                "If true, use mock_components/GenericSystem instead of "
-                "the ODrive plugin. Useful for testing the launch + "
-                "controller wiring without a CAN bus."
+                "If true, use mock_components/GenericSystem instead of the "
+                "ODrive plugin. Useful for testing the launch + controller "
+                "wiring without a CAN bus."
             ),
         ),
     ]
 
-    can_interface = LaunchConfiguration("can_interface")
-    use_mock_hardware = LaunchConfiguration("use_mock_hardware")
-
-    # ----- robot_description --------------------------------------------
-    # Expand the chassis xacro with ros2_control enabled, only FL wired,
-    # and the can interface threaded through. The wheels arg "fl" matches
-    # the joints list in fortis_drive_controllers_bench.yaml.
-    robot_description_content = Command([
-        PathJoinSubstitution([FindExecutable(name="xacro")]),
-        " ",
-        PathJoinSubstitution([
-            FindPackageShare("fortis_description"),
-            "urdf",
-            "fortis_robot.urdf.xacro",
-        ]),
-        " enable_ros2_control:=true",
-        " wheels:=fl",
-        " can_interface:=", can_interface,
-        " use_mock_hardware:=", use_mock_hardware,
-    ])
-    # ParameterValue(..., value_type=str) prevents launch_ros from trying
-    # to YAML-parse the xacro output (a long XML string starts with `<`,
-    # which yaml interprets as a flow-sequence error). Required for any
-    # robot_description that comes from a Command substitution.
-    robot_description = {
-        "robot_description": ParameterValue(
-            robot_description_content, value_type=str
-        )
-    }
-
-    controllers_yaml = PathJoinSubstitution([
-        FindPackageShare("fortis_control"),
-        "config",
-        "fortis_drive_controllers_bench.yaml",
-    ])
-
-    # ----- Nodes --------------------------------------------------------
-    control_node = Node(
-        package="controller_manager",
-        executable="ros2_control_node",
-        parameters=[robot_description, controllers_yaml],
-        output="both",
+    drive_hw = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            PathJoinSubstitution([
+                FindPackageShare("fortis_control"),
+                "launch",
+                "drive_hw.launch.py",
+            ])
+        ),
+        launch_arguments={
+            "wheels": "fl",
+            "controllers_file": "fortis_drive_controllers_bench.yaml",
+            "can_interface": LaunchConfiguration("can_interface"),
+            "use_mock_hardware": LaunchConfiguration("use_mock_hardware"),
+        }.items(),
     )
 
-    robot_state_pub_node = Node(
-        package="robot_state_publisher",
-        executable="robot_state_publisher",
-        output="both",
-        parameters=[robot_description],
-    )
-
-    joint_state_broadcaster_spawner = Node(
-        package="controller_manager",
-        executable="spawner",
-        arguments=[
-            "joint_state_broadcaster",
-            "--controller-manager", "/controller_manager",
-        ],
-    )
-
-    wheel_velocity_controller_spawner = Node(
-        package="controller_manager",
-        executable="spawner",
-        arguments=[
-            "wheel_velocity_controller",
-            "--controller-manager", "/controller_manager",
-            # --inactive: load the controller but do not activate it on
-            # spawn. The bench operator activates it explicitly once the
-            # ODrive axis is in CLOSED_LOOP_CONTROL. Prevents the
-            # controller from claiming the velocity command interface
-            # against an axis that is still IDLE, which on some
-            # combinations of odrive_ros2_control + ros2_control will log
-            # an error every update cycle.
-            "--inactive",
-        ],
-    )
-
-    # joint_state_broadcaster must come up before any other controller is
-    # spawned so DDS discovery for /joint_states is established. The
-    # botwheel_explorer example uses the same OnProcessExit pattern.
-    delay_wheel_controller_after_joint_state_broadcaster = RegisterEventHandler(
-        event_handler=OnProcessExit(
-            target_action=joint_state_broadcaster_spawner,
-            on_exit=[wheel_velocity_controller_spawner],
-        )
-    )
-
-    return LaunchDescription(declared_arguments + [
-        control_node,
-        robot_state_pub_node,
-        joint_state_broadcaster_spawner,
-        delay_wheel_controller_after_joint_state_broadcaster,
-    ])
+    return LaunchDescription(declared_arguments + [drive_hw])
