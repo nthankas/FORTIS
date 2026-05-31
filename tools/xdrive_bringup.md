@@ -45,7 +45,7 @@ sudo ip link set canX txqueuelen 1000
 ## 2. Launch the stack (one command)
 
 ```bash
-ros2 launch fortis_bringup test_drive.launch.py can_interface:=canX
+ros2 launch fortis_bringup drive_test.launch.py can_interface:=canX
 ```
 
 Brings up controller_manager + ODrive plugin (all 4 wheels), the mission FSM,
@@ -122,7 +122,7 @@ path before the bus is wired:
 
 ```bash
 sudo modprobe vcan && sudo ip link add dev vcan0 type vcan && sudo ip link set up vcan0
-ros2 launch fortis_bringup test_drive.launch.py can_interface:=vcan0
+ros2 launch fortis_bringup drive_test.launch.py can_interface:=vcan0
 # in another shell: candump vcan0   (after activating the controller in §4)
 ```
 

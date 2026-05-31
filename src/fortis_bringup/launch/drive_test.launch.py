@@ -33,7 +33,7 @@ energised by launching this file). Arming and opening the motion gate
 are deliberate, separate manual steps:
 
     # 0. SocketCAN already up + 4 heartbeats seen (see tools/xdrive_bringup.md)
-    ros2 launch fortis_bringup test_drive.launch.py can_interface:=can0
+    ros2 launch fortis_bringup drive_test.launch.py can_interface:=can0
 
     # 1. arm the wheels (sends CLOSED_LOOP_CONTROL to all four S1s):
     ros2 control switch_controllers --activate wheel_velocity_controller
