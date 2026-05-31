@@ -14,8 +14,17 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile.dev-gpu
+      args:
+        # `docker compose build` does NOT auto-populate the predefined
+        # TARGETARCH buildarg (only `docker buildx build` does), so pass it
+        # explicitly for the `FROM base-${TARGETARCH}` stage selection in
+        # Dockerfile.dev-gpu. ./stack exports TARGETARCH from
+        # `dpkg --print-architecture` (amd64 GPU PC / arm64 Jetson).
+        TARGETARCH: "${TARGETARCH:-amd64}"
     image: fortis-dev-gpu:latest
     container_name: fortis-dev-gpu
+    # Only built/run under the gpu profile (the arm64 Jetson + GPU PCs).
+    profiles: ["gpu"]
     network_mode: host
     ipc: host
     privileged: true
