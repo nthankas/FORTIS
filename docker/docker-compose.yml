@@ -20,12 +20,16 @@ services:
     volumes:
       - ..:/workspace:cached
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
-      # OAK-D / USB-CAN passthrough. Bind the docker-desktop VM's live USB
-      # device tree so devices attached via `usbipd attach --wsl docker-desktop`
-      # are visible. Must be a live bind (not a one-time copy) because OAK
-      # cameras re-enumerate on boot (Movidius 03e7:2485 bootloader ->
-      # 03e7:f63b booted); new nodes must appear in the container too.
-      - /dev/bus/usb:/dev/bus/usb
+      # OAK-D / USB-CAN passthrough: bind the WHOLE host /dev, not just
+      # /dev/bus/usb. OAK cameras re-enumerate during FW upload (USB2 bootloader
+      # -> USB3 SuperSpeed runtime), which destroys and recreates the USB device
+      # node. A narrow /dev/bus/usb bind can leave the container holding a stale
+      # handle across that switch, so the driver fails with "Failed to find
+      # device after booting". Binding all of /dev lets the new SuperSpeed node
+      # appear inside the container. On the PC/WSL, attach first with
+      # `usbipd attach --wsl docker-desktop --busid <id>`; the Jetson is native
+      # Linux and needs no attach step.
+      - /dev:/dev
     environment:
       - DISPLAY=${DISPLAY:-:0}
       - QT_X11_NO_MITSHM=1

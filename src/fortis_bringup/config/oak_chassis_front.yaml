@@ -14,13 +14,12 @@
 # Scope: the FRONT OAK-D Lite only. No VIO, no localization.
 /oak_chassis_front:
   ros__parameters:
-    driver:
-      # Pin this driver to the physical FRONT camera by serial. With four
-      # identical OAK-D Lites on the chassis, an unset id grabs whichever
-      # enumerates first (non-deterministic). Same serial value as the v2
-      # mxid, read via depthai getAllAvailableDevices().
-      i_device_id: "19443010C1DF397E00"
-
+    # NOTE: no driver.i_device_id here. With a single camera the driver grabs
+    # the only OAK on the bus ("connecting to the next available device"). For
+    # the future 4-camera chassis, pin each node by serial again
+    # (driver.i_device_id, from depthai getAllAvailableDevices()); now that the
+    # container binds the full /dev tree, the post-boot re-find works with the
+    # id set. TF prefix/parent params are injected by the launch file.
     pipeline_gen:
       i_pipeline_type: rgbd     # RGB + stereo depth, synced for RGBD
       i_enable_rgbd: true       # publish the colored RGBD point cloud
@@ -29,19 +28,34 @@
 
     stereo:
       i_aligned: true           # align depth to RGB -> colored, registered cloud
-      i_subpixel: true          # sub-pixel disparity for cleaner depth
+      # Subpixel sharpens far depth but adds RVC2 load. With it ON at 1080p
+      # RGBD the OAK-D Lite couldn't hold frame rate, so color and depth drifted
+      # apart and the Sync node spammed "messages still not in sync". OFF =
+      # lighter pipeline, steady sync. Flip to true if you need finer far-range
+      # depth and can accept lower fps.
+      i_subpixel: false
       i_depth_preset: DEFAULT   # v3 depth-quality preset
 
-    # RGB + mono resolution. v3 uses i_width/i_height (not v2's i_resolution).
-    # 1080p color, 480p mono: clean depth without saturating USB3, with headroom
-    # for when all four cameras share the bus. Confirm these took on hardware
-    # with `ros2 param get /oak_chassis_front rgb.i_width` (silent-ignore guard).
+    # RGB + mono resolution and frame rate. v3 uses i_width/i_height (not v2's
+    # i_resolution). 1080p color + 480p mono keeps the cloud light -- point
+    # count is bounded by the 640x480 depth, not the color res -- while RGB
+    # stays crisp.
+    #
+    # i_fps MUST match across rgb/left/right. The RGBD Sync node pairs a color
+    # frame to a depth frame by timestamp; mismatched rates never line up and it
+    # never syncs. 15 fps (matched) also roughly halves device + network load vs
+    # 30 -- smoother over the Foxglove link. Verify each took:
+    # `ros2 param get /oak_chassis_front rgb.i_fps` (driver silently drops
+    # unknown/mistyped param names).
     rgb:
       i_width: 1920
       i_height: 1080
+      i_fps: 15.0
     left:
       i_width: 640
       i_height: 480
+      i_fps: 15.0
     right:
       i_width: 640
       i_height: 480
+      i_fps: 15.0
