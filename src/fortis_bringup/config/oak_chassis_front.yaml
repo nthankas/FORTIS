@@ -59,15 +59,27 @@
     # Verify each took:
     # `ros2 param get /oak_chassis_front rgb.i_fps` (driver silently drops
     # unknown/mistyped param names).
+    # Hardware frame-sync (FSIN). The OAK-D Lite's three sensors free-run, so
+    # their capture timestamps drift and the device color+depth Sync never
+    # matches a pair -> no /rgbd/points, and the backpressure throttles RGB to
+    # ~half rate. Tying them to one trigger pulse makes them capture on the same
+    # edge, so timestamps match at the source and the Sync succeeds. RGB is the
+    # source (continuous); the mono pair trigger off it. NOTE: this depends on
+    # the OAK-D Lite routing FSIN to all three sensors -- if the spam persists
+    # AND /rgbd/points still doesn't publish after this, the Lite doesn't wire
+    # color<->mono FSIN and we fall back to a host-built colored cloud.
     rgb:
       i_width: 1920
       i_height: 1080
       i_fps: 15.0
+      i_fsync_continuous: true
     left:
       i_width: 640
       i_height: 480
       i_fps: 15.0
+      i_fsync_trigger: true
     right:
       i_width: 640
       i_height: 480
       i_fps: 15.0
+      i_fsync_trigger: true
