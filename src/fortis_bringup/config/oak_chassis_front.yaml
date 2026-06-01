@@ -26,13 +26,24 @@
       i_nn_type: none           # no on-device NN yet (Graphite not trained)
       i_enable_imu: true        # publish IMU if the unit has one
 
+    # RGBD assembly node. The OAK-D Lite's color (IMX214) and mono (OV7251)
+    # sensors free-run and are NOT capture-synced, so their frame timestamps
+    # drift 60-130 ms apart. The ON-DEVICE Sync node has a fixed, narrow
+    # threshold and never matches a color+depth pair at that offset -> it
+    # spammed "messages still not in sync" and published no /rgbd/points.
+    # Running sync on the HOST swaps that strict device matcher for ROS's
+    # approximate-time sync, which tolerates the offset and emits the colored
+    # cloud. (depthai-ros exposes no syncThreshold/syncAttempts param to widen
+    # the device matcher; relocating the sync is the available lever.)
+    rgbd:
+      i_run_sync_on_host: true
+
     stereo:
       i_aligned: true           # align depth to RGB -> colored, registered cloud
-      # Subpixel sharpens far depth but adds RVC2 load. With it ON at 1080p
-      # RGBD the OAK-D Lite couldn't hold frame rate, so color and depth drifted
-      # apart and the Sync node spammed "messages still not in sync". OFF =
-      # lighter pipeline, steady sync. Flip to true if you need finer far-range
-      # depth and can accept lower fps.
+      # Subpixel sharpens far depth but adds RVC2 load and lowers depth fps. Off
+      # keeps the pipeline light for a smoother stream; flip to true if you need
+      # finer far-range depth and can accept lower fps. (The Sync-node warnings
+      # were a capture-phase issue fixed by rgbd host-sync above, NOT subpixel.)
       i_subpixel: false
       i_depth_preset: DEFAULT   # v3 depth-quality preset
 
@@ -41,10 +52,11 @@
     # count is bounded by the 640x480 depth, not the color res -- while RGB
     # stays crisp.
     #
-    # i_fps MUST match across rgb/left/right. The RGBD Sync node pairs a color
-    # frame to a depth frame by timestamp; mismatched rates never line up and it
-    # never syncs. 15 fps (matched) also roughly halves device + network load vs
-    # 30 -- smoother over the Foxglove link. Verify each took:
+    # i_fps matched across rgb/left/right holds one rate (and 15 vs 30 roughly
+    # halves device + network load -- smoother over Foxglove). Matched fps is
+    # necessary but NOT sufficient for RGBD sync: the sensors still free-run out
+    # of phase, which is why sync is moved to the host (rgbd block above).
+    # Verify each took:
     # `ros2 param get /oak_chassis_front rgb.i_fps` (driver silently drops
     # unknown/mistyped param names).
     rgb:
