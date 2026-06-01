@@ -1,85 +1,67 @@
 # depthai_ros_driver_v3 parameters for the FORTIS front chassis camera.
 #
-# Driver: depthai-ros v3 (ros-humble-depthai-ros-v3, from the ROS 2 *testing*
-# apt repo). v3 reorganized params vs v2: i_nn_type moved into pipeline_gen,
-# the device serial is driver.i_device_id (was camera.i_mx_id), depth align is
-# stereo.i_aligned (was stereo.i_align_depth), resolution is i_width/i_height
-# (was i_resolution), and depth tuning is via stereo.i_depth_preset.
-#
-# The top-level key MUST equal the node name set in oak_chassis_front.launch.py
-# (name:=oak_chassis_front) or the driver runs on defaults. ROS silently
-# ignores unknown params, so keep names in the v3 dialect -- a v2 name here
-# would be dropped with NO error.
+# Driver: depthai-ros v3 (ros-humble-depthai-ros-v3, ROS 2 *testing* apt repo).
+# v3 dialect: i_nn_type under pipeline_gen; device serial is driver.i_device_id;
+# depth align is stereo.i_aligned; resolution is i_width/i_height; depth tuning
+# via stereo.i_depth_preset. The top-level key MUST equal the launch node name
+# (oak_chassis_front) or the driver runs on defaults; unknown names are silently
+# dropped (so verify with `ros2 param get`).
 #
 # Scope: the FRONT OAK-D Lite only. No VIO, no localization.
+#
+# --- Two facts from the Luxonis v3 docs that drive this config ---
+#
+# 1. RESOLUTION sets the cloud cost. The RGBD node aligns depth to the COLOR
+#    image and emits one point per COLOR pixel. At 1080p that is ~2M points/
+#    frame; the OAK-D Lite RVC2 only assembled it at ~0.2-0.5 Hz (measured) and
+#    the backpressure throttled RGB too. The official v3 RGBD example runs color
+#    AND stereo at 640x400 (~256k points) at 30 Hz. We match 640x400 so the
+#    cloud is usable -- and a smaller cloud also lightens the USB + Jetson +
+#    network load. (docs.luxonis.com/software-v3 -> examples/rgbd/rgbd)
+#
+# 2. SYNC is automatic at matched fps. depthai firmware drift-corrects + uses
+#    sequence numbers to align left/right/color capture stamps when they share
+#    one fps (on by default, sub-ms). The OAK-D Lite CANNOT hardware frame-sync
+#    color<->mono (Luxonis frame-sync docs: the Lite does not wire color/stereo
+#    FSIN together; OV7251 FSYNC is unimplemented in FW). So i_fsync_* is a
+#    no-op here -- matched i_fps below IS the sync.
 /oak_chassis_front:
   ros__parameters:
-    # NOTE: no driver.i_device_id here. With a single camera the driver grabs
-    # the only OAK on the bus ("connecting to the next available device"). For
-    # the future 4-camera chassis, pin each node by serial again
-    # (driver.i_device_id, from depthai getAllAvailableDevices()); now that the
-    # container binds the full /dev tree, the post-boot re-find works with the
-    # id set. TF prefix/parent params are injected by the launch file.
+    # No driver.i_device_id: single camera grabs the only OAK on the bus. For
+    # the future 4-camera chassis, pin each node by serial. TF prefix/parent
+    # come from the launch file.
     pipeline_gen:
-      i_pipeline_type: rgbd     # RGB + stereo depth, synced for RGBD
-      i_enable_rgbd: true       # publish the colored RGBD point cloud
-      i_nn_type: none           # no on-device NN yet (Graphite not trained)
-      i_enable_imu: true        # publish IMU if the unit has one
+      i_pipeline_type: rgbd
+      i_enable_rgbd: true
+      i_nn_type: none
+      i_enable_imu: true
 
-    # RGBD assembly node. With hardware FSIN frame-sync (rgb/left/right below)
-    # the color+depth capture stamps match, so the ON-DEVICE Sync succeeds --
-    # run sync AND align on the VPU, not the host. Host-side (i_run_*_on_host
-    # true) DID emit the cloud but only at ~0.5 Hz, because the Jetson CPU did
-    # the depth->color align + point-cloud assembly every frame; the RVC2 does
-    # it far faster. (Earlier host-sync was a wrong-layer fix for the desync --
-    # fsync at the capture layer is the real fix, so the host crutch is removed.)
+    # Build the RGBD cloud + depth->color align ON THE DEVICE (RVC2), matching
+    # the Luxonis example. This offloads the Jetson CPU. The earlier "device is
+    # slow" result was the 1080p point count, NOT where the work ran -- at
+    # 640x400 the device path is what Luxonis ships at 30 Hz.
     rgbd:
       i_run_sync_on_host: false
       i_run_align_on_host: false
 
     stereo:
-      i_aligned: true           # align depth to RGB -> colored, registered cloud
-      i_run_align_on_host: false  # do the depth->RGB align on the VPU, not the Jetson CPU
-      # Subpixel sharpens far depth but adds RVC2 load and lowers depth fps. Off
-      # keeps the pipeline light for a smoother stream; flip to true if you need
-      # finer far-range depth and can accept lower fps. (The Sync-node warnings
-      # were a capture-phase issue fixed by rgbd host-sync above, NOT subpixel.)
-      i_subpixel: false
-      i_depth_preset: DEFAULT   # v3 depth-quality preset
+      i_aligned: true             # align depth to color -> colored registered cloud
+      i_run_align_on_host: false  # align on the VPU, not the Jetson
+      i_subpixel: false           # off keeps depth fps up on the RVC2
+      i_depth_preset: DEFAULT
 
-    # RGB + mono resolution and frame rate. v3 uses i_width/i_height (not v2's
-    # i_resolution). 1080p color + 480p mono keeps the cloud light -- point
-    # count is bounded by the 640x480 depth, not the color res -- while RGB
-    # stays crisp.
-    #
-    # i_fps matched across rgb/left/right holds one rate (and 15 vs 30 roughly
-    # halves device + network load -- smoother over Foxglove). Matched fps is
-    # necessary but NOT sufficient for RGBD sync: the sensors still free-run out
-    # of phase, which is why sync is moved to the host (rgbd block above).
-    # Verify each took:
-    # `ros2 param get /oak_chassis_front rgb.i_fps` (driver silently drops
-    # unknown/mistyped param names).
-    # Hardware frame-sync (FSIN). The OAK-D Lite's three sensors free-run, so
-    # their capture timestamps drift and the device color+depth Sync never
-    # matches a pair -> no /rgbd/points, and the backpressure throttles RGB to
-    # ~half rate. Tying them to one trigger pulse makes them capture on the same
-    # edge, so timestamps match at the source and the Sync succeeds. RGB is the
-    # source (continuous); the mono pair trigger off it. NOTE: this depends on
-    # the OAK-D Lite routing FSIN to all three sensors -- if the spam persists
-    # AND /rgbd/points still doesn't publish after this, the Lite doesn't wire
-    # color<->mono FSIN and we fall back to a host-built colored cloud.
+    # All three sensors at 640x400 @ matched 15 fps. Matched fps triggers the
+    # automatic firmware/sequence-number sync. 640x400 keeps the cloud ~256k
+    # points. Verify a value took: `ros2 param get /oak_chassis_front rgb.i_width`.
     rgb:
-      i_width: 1920
-      i_height: 1080
+      i_width: 640
+      i_height: 400
       i_fps: 15.0
-      i_fsync_continuous: true
     left:
       i_width: 640
-      i_height: 480
+      i_height: 400
       i_fps: 15.0
-      i_fsync_trigger: true
     right:
       i_width: 640
-      i_height: 480
+      i_height: 400
       i_fps: 15.0
-      i_fsync_trigger: true
