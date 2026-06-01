@@ -26,20 +26,20 @@
       i_nn_type: none           # no on-device NN yet (Graphite not trained)
       i_enable_imu: true        # publish IMU if the unit has one
 
-    # RGBD assembly node. The OAK-D Lite's color (IMX214) and mono (OV7251)
-    # sensors free-run and are NOT capture-synced, so their frame timestamps
-    # drift 60-130 ms apart. The ON-DEVICE Sync node has a fixed, narrow
-    # threshold and never matches a color+depth pair at that offset -> it
-    # spammed "messages still not in sync" and published no /rgbd/points.
-    # Running sync on the HOST swaps that strict device matcher for ROS's
-    # approximate-time sync, which tolerates the offset and emits the colored
-    # cloud. (depthai-ros exposes no syncThreshold/syncAttempts param to widen
-    # the device matcher; relocating the sync is the available lever.)
+    # RGBD assembly node. With hardware FSIN frame-sync (rgb/left/right below)
+    # the color+depth capture stamps match, so the ON-DEVICE Sync succeeds --
+    # run sync AND align on the VPU, not the host. Host-side (i_run_*_on_host
+    # true) DID emit the cloud but only at ~0.5 Hz, because the Jetson CPU did
+    # the depth->color align + point-cloud assembly every frame; the RVC2 does
+    # it far faster. (Earlier host-sync was a wrong-layer fix for the desync --
+    # fsync at the capture layer is the real fix, so the host crutch is removed.)
     rgbd:
-      i_run_sync_on_host: true
+      i_run_sync_on_host: false
+      i_run_align_on_host: false
 
     stereo:
       i_aligned: true           # align depth to RGB -> colored, registered cloud
+      i_run_align_on_host: false  # do the depth->RGB align on the VPU, not the Jetson CPU
       # Subpixel sharpens far depth but adds RVC2 load and lowers depth fps. Off
       # keeps the pipeline light for a smoother stream; flip to true if you need
       # finer far-range depth and can accept lower fps. (The Sync-node warnings
