@@ -10,11 +10,16 @@ FORTIS robot_state_publisher, spamming "Robot state publisher ignored an
 invalid JointState message" at ~10 Hz. We don't need the OAK's visual URDF --
 the FORTIS URDF already provides ``front_camera_link`` -- so we skip it.
 
-We still get the camera's optical-frame TF: the Driver publishes it from the
-factory calibration (``driver.i_publish_tf_from_calibration``), parented to
-``front_camera_link``. So the frame chain is
-``base_link -> (FORTIS URDF) -> front_camera_link -> (driver calibration) ->
-oak_chassis_front_*_optical_frame``, and the RGBD point cloud
+The Driver publishes the camera-internal frames from factory calibration
+(``driver.i_publish_tf_from_calibration``), but rooted at its OWN base frame
+``oak_chassis_front`` (= driver.i_tf_base_frame) -- NOT attached to the robot.
+``driver.i_tf_parent_frame`` is a xacro arg consumed by the OAK's RSP, which we
+skip, so it does nothing here and the camera frames are left a disconnected TF
+tree (confirmed live with ``tf2_echo``: "not part of the same tree"). We bridge
+the gap with a static transform ``front_camera_link -> oak_chassis_front``
+(identity; the URDF owns the mount pose). Full chain: ``base_link -> (FORTIS
+URDF) -> front_camera_link -> (static) -> oak_chassis_front -> (calibration) ->
+oak_chassis_front_*_optical_frame``, so the RGBD cloud
 (``/oak_chassis_front/rgbd/points``) resolves correctly in the 3D view.
 
 The other three chassis cameras and any VIO / localization are out of scope.
@@ -26,7 +31,7 @@ import os
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch_ros.actions import ComposableNodeContainer
+from launch_ros.actions import ComposableNodeContainer, Node
 from launch_ros.descriptions import ComposableNode
 
 
@@ -46,13 +51,15 @@ def generate_launch_description():
         "oak_chassis_front.yaml",
     )
 
-    # TF + RGBD params that driver.launch.py would normally inject. cam_pos_*
-    # default to 0: the URDF owns the mounting pose; the driver only adds the
-    # camera-internal optical frames below PARENT_FRAME.
+    # TF + RGBD params. i_publish_tf_from_calibration makes the Driver publish
+    # the camera-internal optical frames, rooted at i_tf_base_frame
+    # (CAMERA_NAME). i_tf_parent_frame is ignored without the OAK RSP (which we
+    # skip) -- the static_transform_publisher below does the parent attach.
+    # (i_tf_tf_prefix is not a real v3 param -- it was silently dropped -- so
+    # it's removed; the frame prefix comes from i_tf_base_frame.)
     driver_params = {
         "driver": {
             "i_publish_tf_from_calibration": True,
-            "i_tf_tf_prefix": CAMERA_NAME,
             "i_tf_base_frame": CAMERA_NAME,
             "i_tf_parent_frame": PARENT_FRAME,
         },
@@ -80,6 +87,19 @@ def generate_launch_description():
         output="both",
     )
 
+    # Bridge the FORTIS URDF tree to the OAK's calibration TF tree. The driver
+    # roots its frames at CAMERA_NAME but never attaches that to the robot (see
+    # module docstring). Identity transform: front_camera_link is the mount
+    # point; the camera-internal offsets come from calibration below it.
+    mount_tf = Node(
+        package="tf2_ros",
+        executable="static_transform_publisher",
+        name=f"{CAMERA_NAME}_mount_tf",
+        arguments=["0", "0", "0", "0", "0", "0", PARENT_FRAME, CAMERA_NAME],
+        output="both",
+    )
+
     return LaunchDescription([
+        mount_tf,
         container,
     ])
