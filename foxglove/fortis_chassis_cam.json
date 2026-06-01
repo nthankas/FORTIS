@@ -1,8 +1,12 @@
 {
   "configById": {
-    "Image!stream": {
+    "Image!rgb": {
       "imageTopic": "/oak_chassis_front/rgb/image_raw",
       "calibrationTopic": "/oak_chassis_front/rgb/camera_info"
+    },
+    "Image!depth": {
+      "imageTopic": "/oak_chassis_front/stereo/image_raw",
+      "calibrationTopic": "/oak_chassis_front/stereo/camera_info"
     },
     "Plot!imu": {
       "paths": [
@@ -14,9 +18,10 @@
         { "value": "/oak_chassis_front/imu/data.linear_acceleration.z", "enabled": true, "timestampMethod": "receiveTime" }
       ],
       "showLegend": true,
+      "legendDisplay": "top",
       "isSynced": true,
       "xAxisVal": "timestamp",
-      "sidebarDimension": 240
+      "sidebarDimension": 120
     },
     "RawMessages!imu": {
       "topicPath": "/oak_chassis_front/imu/data"
@@ -35,12 +40,18 @@
       },
       "followMode": "follow-pose",
       "followTf": "base_link",
-      "scene": {},
+      "scene": {
+        "transforms": {
+          "showLabel": false,
+          "axisScale": 0.1,
+          "lineWidth": 1
+        }
+      },
       "transforms": {},
       "topics": {
         "/tf": { "visible": true },
         "/tf_static": { "visible": true },
-        "/oak_chassis_front/rgbd/points": { "visible": true }
+        "/oak_chassis_front/rgbd/points": { "visible": true, "pointSize": 2 }
       },
       "layers": {
         "fortis-urdf": {
@@ -65,15 +76,20 @@
     "first": "3D!rgbd",
     "second": {
       "direction": "column",
-      "first": "Image!stream",
+      "first": {
+        "direction": "row",
+        "first": "Image!rgb",
+        "second": "Image!depth",
+        "splitPercentage": 50
+      },
       "second": {
         "direction": "column",
         "first": "Plot!imu",
         "second": "RawMessages!imu",
-        "splitPercentage": 55
+        "splitPercentage": 60
       },
-      "splitPercentage": 50
+      "splitPercentage": 62
     },
-    "splitPercentage": 55
+    "splitPercentage": 50
   }
 }
