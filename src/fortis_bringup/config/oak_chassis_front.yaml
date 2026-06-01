@@ -65,3 +65,16 @@
       i_width: 640
       i_height: 400
       i_fps: 15.0
+
+    # image_transport plugins for the COLOR topic. The driver auto-advertises
+    # compressedDepth + theora on every image topic; compressedDepth errors
+    # every frame on the bgr8 color image ("Compression requires single-channel
+    # ... depth"). Restrict the color topic to raw + JPEG compressed. The depth
+    # topic keeps its default (compressedDepth is correct there). Param name +
+    # plugin strings read from the live node's enable_pub_plugins default.
+    oak_chassis_front:
+      rgb:
+        image_raw:
+          enable_pub_plugins:
+            - image_transport/raw
+            - image_transport/compressed
