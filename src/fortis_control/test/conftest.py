@@ -1,19 +1,40 @@
 """
 Per-process pytest setup for fortis_control.
 
-Mirror of src/fortis_drive/test/conftest.py: gives each test process a
-distinct ROS_DOMAIN_ID so the launch_testing-driven controller_manager
-spin-up in test_bench_launch.py does not cross-talk with other packages'
-test processes running concurrently under colcon test.
+Pins this package's tests to a FIXED, unique ROS_DOMAIN_ID before any
+test imports rclpy or launches child nodes. colcon test runs each
+package's tests in a separate process, and on the default
+ROS_DOMAIN_ID those processes share one DDS domain: the
+launch_testing-driven controller_manager spin-up in test_bench_launch.py
+then cross-talks with other packages' concurrent test processes,
+producing flakes that pass when each package is tested alone.
+
+A fixed per-package ID (not a pid-derived one) makes isolation
+deterministic: pid % N silently collides when two concurrent test
+processes share a residue, which is exactly the flake we are removing.
+
+ROS_DOMAIN_ID registry -- keep in sync across ALL test conftests:
+    fortis_drive ............. 91
+    fortis_arm ............... 92
+    fortis_control ........... 93
+    fortis_integration_tests . 94
+IDs are in the safe 0-101 range (avoids the ephemeral-port band > 101),
+clear of the container/CI default (42) and hand-used values (0-9). A new
+ROS test package takes the next unused ID here.
 """
 
 import os
 
+#: This package's dedicated test domain. See the registry in the module
+#: docstring before changing it.
+ROS_DOMAIN_ID = "93"
+
 
 def _isolate_ros_domain():
     # Always override -- the dev container ships with a default
-    # ROS_DOMAIN_ID baked into the shell environment.
-    os.environ['ROS_DOMAIN_ID'] = str((os.getpid() % 100) + 50)
+    # ROS_DOMAIN_ID baked into the shell environment, which would
+    # otherwise re-introduce the cross-talk this isolation prevents.
+    os.environ["ROS_DOMAIN_ID"] = ROS_DOMAIN_ID
 
 
 _isolate_ros_domain()

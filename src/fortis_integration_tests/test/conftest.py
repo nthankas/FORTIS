@@ -1,29 +1,42 @@
 """
 Per-process pytest setup for fortis_integration_tests.
 
-Sets ROS_DOMAIN_ID to a per-PID value before any test imports rclpy or
-launches child nodes. Without this isolation, colcon test runs the
-launch_testing-based integration tests in parallel with
-fortis_arm and fortis_drive unit tests on the default
-ROS_DOMAIN_ID=0; the test-side mission_state publishers cross-talk
-with the launched mission_state_node, producing intermittent
-state-flip flakes that pass when each package is tested alone.
+Pins this package's tests to a FIXED, unique ROS_DOMAIN_ID before any
+test imports rclpy or launches child nodes. colcon test runs each
+package's tests in a separate process, and on the default
+ROS_DOMAIN_ID those processes share one DDS domain: the
+launch_testing-launched mission_state_node here latches IDLE
+(TRANSIENT_LOCAL) onto /fortis/mission_state, which then flips a
+colliding drive/arm unit test's gate shut -- the intermittent
+state-flip flake that passes when each package is tested alone.
+Subprocess nodes launched by launch_testing inherit this env var.
 
-Range chosen to stay well clear of values commonly used by hand (0-9)
-or by ros2cli defaults; PID modulo gives enough variety across
-concurrent test processes without coordination.
+A fixed per-package ID (not a pid-derived one) makes isolation
+deterministic: pid % N silently collides when two concurrent test
+processes share a residue, which is exactly the flake we are removing.
+
+ROS_DOMAIN_ID registry -- keep in sync across ALL test conftests:
+    fortis_drive ............. 91
+    fortis_arm ............... 92
+    fortis_control ........... 93
+    fortis_integration_tests . 94
+IDs are in the safe 0-101 range (avoids the ephemeral-port band > 101),
+clear of the container/CI default (42) and hand-used values (0-9). A new
+ROS test package takes the next unused ID here.
 """
 
 import os
+
+#: This package's dedicated test domain. See the registry in the module
+#: docstring before changing it.
+ROS_DOMAIN_ID = "94"
 
 
 def _isolate_ros_domain():
     # Always override -- the dev container ships with a default
     # ROS_DOMAIN_ID baked into the shell environment, which would
-    # short-circuit any "respect existing value" check and re-introduce
-    # the very cross-talk we are trying to prevent. Subprocess nodes
-    # launched by launch_testing inherit this env var.
-    os.environ['ROS_DOMAIN_ID'] = str((os.getpid() % 100) + 50)
+    # otherwise re-introduce the cross-talk this isolation prevents.
+    os.environ["ROS_DOMAIN_ID"] = ROS_DOMAIN_ID
 
 
 _isolate_ros_domain()
