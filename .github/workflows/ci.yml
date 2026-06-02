@@ -58,7 +58,13 @@ jobs:
         run: |
           source /opt/ros/humble/setup.bash
           source install/setup.bash
-          colcon test --event-handlers console_cohesion+ --return-code-on-test-failure
+          # --executor sequential: run one package's tests at a time so
+          # ROS-using test processes never overlap on a shared DDS domain.
+          # The per-package fixed ROS_DOMAIN_ID in each test/conftest.py
+          # is the primary isolation; this is the belt-and-suspenders that
+          # holds even if a new package forgets its conftest.
+          colcon test --executor sequential \
+            --event-handlers console_cohesion+ --return-code-on-test-failure
 
       - name: colcon test-result
         if: always()
