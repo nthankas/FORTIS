@@ -97,11 +97,11 @@ Adjust in `urdf/fortis_constants.xacro`.
 
 ## Build and run
 
-Drop this package under `src/` in your colcon workspace (so
-`E:\Capstone\Projects\FORTIS\src\fortis_description\`), then:
+This package lives under `src/` in the colcon workspace (mounted at
+`/workspace` inside the dev container). Build and run:
 
 ```bash
-cd ~/your_ws
+cd /workspace
 colcon build --packages-select fortis_description
 source install/setup.bash
 ros2 launch fortis_description display.launch.py
