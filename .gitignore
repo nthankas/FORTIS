@@ -60,3 +60,6 @@ CLAUDE.md
 # These live in src/ for colcon's sake but the source of truth is the pin in
 # tools/vendor_repos.yaml; committing the clone would freeze it twice.
 src/ros_odrive/
+
+# git worktrees (local dev, not tracked)
+.worktrees/
