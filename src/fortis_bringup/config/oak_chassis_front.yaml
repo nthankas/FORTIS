@@ -1,62 +1,56 @@
-# depthai_ros_driver_v3 parameters for the FORTIS front chassis camera.
+# depthai_ros_driver_v3 parameters for a FORTIS chassis OAK-D Lite.
 #
 # Driver: depthai-ros v3 (ros-humble-depthai-ros-v3, ROS 2 *testing* apt repo).
 # v3 dialect: i_nn_type under pipeline_gen; device serial is driver.i_device_id;
 # depth align is stereo.i_aligned; resolution is i_width/i_height; depth tuning
-# via stereo.i_depth_preset. The top-level key MUST equal the launch node name
-# (oak_chassis_front) or the driver runs on defaults; unknown names are silently
-# dropped (so verify with `ros2 param get`).
+# via stereo.i_depth_preset. The top-level key MUST equal the node name or the
+# driver silently runs on defaults (verify with `ros2 param get`). The multi-cam
+# launch (oak_chassis_cameras.launch.py) re-applies these same values per device
+# as a node-scoped dict, so they work under any node name there.
 #
-# Scope: the FRONT OAK-D Lite only. No VIO, no localization.
+# Mode: two INDEPENDENT streams -- on-device MJPEG-encoded RGB + regular (aligned
+# 16UC1) depth. No RGBD cloud (i_enable_rgbd false); fusion is a later task.
+# IMU on. Scope: one OAK-D Lite; no VIO, no localization.
 #
-# --- Two facts from the Luxonis v3 docs that drive this config ---
+# Capture/timing is frozen-as-tested -- only the cloud and the RGB transport
+# changed. The fps/resolution/sync below must not drift or the depth<->color
+# timing mismatches come back.
 #
-# 1. RESOLUTION sets the cloud cost. The RGBD node aligns depth to the COLOR
-#    image and emits one point per COLOR pixel. At 1080p that is ~2M points/
-#    frame; the OAK-D Lite RVC2 only assembled it at ~0.2-0.5 Hz (measured) and
-#    the backpressure throttled RGB too. The official v3 RGBD example runs color
-#    AND stereo at 640x400 (~256k points) at 30 Hz. We match 640x400 so the
-#    cloud is usable -- and a smaller cloud also lightens the USB + Jetson +
-#    network load. (docs.luxonis.com/software-v3 -> examples/rgbd/rgbd)
-#
-# 2. SYNC is automatic at matched fps. depthai firmware drift-corrects + uses
-#    sequence numbers to align left/right/color capture stamps when they share
-#    one fps (on by default, sub-ms). The OAK-D Lite CANNOT hardware frame-sync
-#    color<->mono (Luxonis frame-sync docs: the Lite does not wire color/stereo
-#    FSIN together; OV7251 FSYNC is unimplemented in FW). So i_fsync_* is a
-#    no-op here -- matched i_fps below IS the sync.
+# SYNC is automatic at matched fps: depthai drift-corrects + uses sequence
+# numbers to align color/left/right capture stamps when they share one fps (on by
+# default, sub-ms). The OAK-D Lite CANNOT hardware frame-sync color<->mono (the
+# Lite doesn't wire color/stereo FSIN; OV7251 FSYNC unimplemented in FW), so
+# i_fsync_* is a no-op -- matched i_fps below IS the per-camera sync. Across the
+# 4 cameras we rely on the shared ROS clock (approx), not hardware sync.
 /oak_chassis_front:
   ros__parameters:
-    # No driver.i_device_id: single camera grabs the only OAK on the bus. For
-    # the future 4-camera chassis, pin each node by serial. TF prefix/parent
-    # come from the launch file.
+    # No driver.i_device_id here: the single-camera launch grabs the only OAK on
+    # the bus. The multi-cam launch pins each node by serial. TF base/parent come
+    # from the launch file.
     pipeline_gen:
-      i_pipeline_type: rgbd
-      i_enable_rgbd: true
+      i_pipeline_type: rgbd     # "RGBD" = publish RGB + Depth streams (NOT the cloud)
+      i_enable_rgbd: false      # no fused/registered cloud -- streams stay independent
       i_nn_type: none
       i_enable_imu: true
 
-    # Build the RGBD cloud + depth->color align ON THE DEVICE (RVC2), matching
-    # the Luxonis example. This offloads the Jetson CPU. The earlier "device is
-    # slow" result was the 1080p point count, NOT where the work ran -- at
-    # 640x400 the device path is what Luxonis ships at 30 Hz.
-    rgbd:
-      i_run_sync_on_host: false
-      i_run_align_on_host: false
-
     stereo:
-      i_aligned: true             # align depth to color -> colored registered cloud
+      i_aligned: true             # depth registered to the color frame (still its own topic)
       i_run_align_on_host: false  # align on the VPU, not the Jetson
-      i_subpixel: false           # off keeps depth fps up on the RVC2
+      i_subpixel: false           # off keeps depth fps up; also required with low_bandwidth
       i_depth_preset: DEFAULT
 
-    # All three sensors at 640x400 @ matched 15 fps. Matched fps triggers the
-    # automatic firmware/sequence-number sync. 640x400 keeps the cloud ~256k
-    # points. Verify a value took: `ros2 param get /oak_chassis_front rgb.i_width`.
+    # All three sensors at 640x400 @ matched 15 fps -> matched fps is the sync
+    # (see header). Verify a value took: `ros2 param get <node> rgb.i_width`.
+    # RGB is MJPEG-encoded ON THE DEVICE and published as sensor_msgs/CompressedImage
+    # (i_publish_compressed), so the Jetson never decodes it and Foxglove shows it
+    # natively. profile 4 (MJPEG) is the default, so it's not repeated here.
     rgb:
       i_width: 640
       i_height: 400
       i_fps: 15.0
+      i_low_bandwidth: true        # on-device VideoEncoder (MJPEG) -> low latency, low USB
+      i_low_bandwidth_quality: 50  # MJPEG quality % -- the variable-quality knob
+      i_publish_compressed: true   # publish CompressedImage(jpeg), don't decode on host
     left:
       i_width: 640
       i_height: 400
@@ -66,21 +60,17 @@
       i_height: 400
       i_fps: 15.0
 
-    # image_transport plugins for the COLOR topic. The driver auto-advertises
-    # compressedDepth + theora on every image topic; compressedDepth errors
-    # every frame on the bgr8 color image ("Compression requires single-channel
-    # ... depth"). Restrict the color topic to raw + JPEG compressed. The depth
-    # topic keeps its default (compressedDepth is correct there). Param name +
-    # plugin strings read from the live node's enable_pub_plugins default.
+    # image_transport plugins for the DEPTH topic. The driver auto-advertises
+    # compressedDepth + theora on every image topic; depth is 16UC1, so the JPEG
+    # `compressed` plugin errors on it ("not a color format"). Keep raw +
+    # compressedDepth (the depth-specific codec), drop JPEG compressed + theora.
+    # (RGB needs no entry here: i_publish_compressed already makes it a single
+    # CompressedImage(jpeg) topic, not a raw image with transport plugins.)
+    #
+    # NOTE: this block is keyed by the NODE NAME. For the single-cam front launch
+    # that is oak_chassis_front. The multi-cam launch strips this key and applies
+    # it node-scoped, so it follows whatever the per-device node is named.
     oak_chassis_front:
-      rgb:
-        image_raw:
-          enable_pub_plugins:
-            - image_transport/raw
-            - image_transport/compressed
-      # Depth is 16UC1: the JPEG `compressed` plugin errors on it ("not a color
-      # format"). Keep raw + compressedDepth (the depth-specific codec), drop
-      # JPEG compressed + theora.
       stereo:
         image_raw:
           enable_pub_plugins:
