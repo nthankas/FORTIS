@@ -19,12 +19,13 @@ tree (confirmed live with ``tf2_echo``: "not part of the same tree"). We bridge
 the gap with a static transform ``front_camera_link -> oak_chassis_front``
 (identity; the URDF owns the mount pose). Full chain: ``base_link -> (FORTIS
 URDF) -> front_camera_link -> (static) -> oak_chassis_front -> (calibration) ->
-oak_chassis_front_*_optical_frame``, so the RGBD cloud
-(``/oak_chassis_front/rgbd/points``) resolves correctly in the 3D view.
+oak_chassis_front_*_optical_frame``. (The RGBD cloud is off in this mode -- RGB
+and depth publish as independent streams -- so the TF chain only matters once we
+re-enable fusion; the image panels don't need it.)
 
-The other three chassis cameras and any VIO / localization are out of scope.
-Pairs with robot_state_publisher (FORTIS URDF) + foxglove_bridge; load
-foxglove/fortis_chassis_cam.json.
+This is the single-camera (front) bring-up. To start ALL connected OAKs at once,
+use oak_chassis_cameras.launch.py. VIO / localization are out of scope.
+Pairs with robot_state_publisher (FORTIS URDF) + foxglove_bridge.
 """
 
 import os
@@ -51,23 +52,16 @@ def generate_launch_description():
         "oak_chassis_front.yaml",
     )
 
-    # TF + RGBD params. i_publish_tf_from_calibration makes the Driver publish
-    # the camera-internal optical frames, rooted at i_tf_base_frame
-    # (CAMERA_NAME). i_tf_parent_frame is ignored without the OAK RSP (which we
-    # skip) -- the static_transform_publisher below does the parent attach.
-    # (i_tf_tf_prefix is not a real v3 param -- it was silently dropped -- so
-    # it's removed; the frame prefix comes from i_tf_base_frame.)
+    # TF params. i_publish_tf_from_calibration makes the Driver publish the
+    # camera-internal optical frames, rooted at i_tf_base_frame (CAMERA_NAME).
+    # i_tf_parent_frame is ignored without the OAK RSP (which we skip) -- the
+    # static_transform_publisher below does the parent attach.
+    # (RGBD cloud is OFF: i_enable_rgbd comes from the params file, now false.)
     driver_params = {
         "driver": {
             "i_publish_tf_from_calibration": True,
             "i_tf_base_frame": CAMERA_NAME,
             "i_tf_parent_frame": PARENT_FRAME,
-        },
-        # Publish the colored RGBD point cloud (driver.launch.py sets this when
-        # pointcloud.enable:=true). The rest of the pipeline_gen / stereo / rgb
-        # config comes from params_file.
-        "pipeline_gen": {
-            "i_enable_rgbd": True,
         },
     }
 
