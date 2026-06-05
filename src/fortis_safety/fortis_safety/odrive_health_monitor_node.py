@@ -21,9 +21,10 @@ Publishes
     /fortis/events/fault           std_msgs/Empty
         Emitted on the True->False edge of drive_healthy. This is the
         signal that triggers mission_state_machine.Event.FAULT and drives
-        the FSM into State.FAULT (see mission_state_machine.py line 195).
-        Not emitted on the inverse edge — recovery requires explicit
-        operator acknowledgement (Event.RESET + operator_ack=True).
+        the FSM into State.FAULT (the wildcard FAULT transition in
+        mission_state_machine.TRANSITIONS). Not emitted on the inverse
+        edge — recovery requires explicit operator acknowledgement
+        (Event.RESET + operator_ack=True).
 
 Why this node exists
 --------------------

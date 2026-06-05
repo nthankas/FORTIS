@@ -59,23 +59,17 @@ the log.
 
 Safety stops
 ------------
-Two mechanisms guarantee the wheels stop, independent of the teleop client:
-  * /cmd_vel watchdog: teleop panels stop publishing on release WITHOUT
-    sending a zero, and the velocity controller latches its last setpoint --
-    so if no /cmd_vel arrives within CMD_VEL_TIMEOUT_S, we command zeros
-    (dead-man stop).
-  * Gate-close stop: leaving a driving state publishes zeros immediately
-    rather than waiting for the next (possibly never-arriving) /cmd_vel, so
-    STOP halts the wheels at once.
+Two mechanisms guarantee the wheels stop independent of the teleop client:
+a /cmd_vel dead-man watchdog (CMD_VEL_TIMEOUT_S) and a gate-close stop on
+leaving a driving state. See the CMD_VEL_TIMEOUT_S constant and _on_state /
+_on_watchdog for the details and rationale.
 
-Wheel direction
----------------
-WHEEL_DIRECTION applies a per-wheel sign at the hardware boundary to correct
-for the mirror-mounted right-side motors (FR, RR): a positive command spins
-them backward, so we invert them. The kinematics stay "ideal" (positive =
-roll forward for every wheel); the physical mounting is corrected here. This
-signs the COMMAND only -- encoder feedback retains each motor's native sign
-until odometry applies the same correction.
+Wheel direction / command frame
+--------------------------------
+Two hardware-boundary corrections sit between the kinematics and the wheels,
+each documented in full on its constant: WHEEL_DIRECTION (per-wheel sign for
+the mirror-mounted right-side motors) and CMD_VEL_FRAME_SIGN (the base_link
+-X "front" convention). The H matrix stays ideal; the corrections live here.
 
 Why std_msgs/String for the state subscription
 ----------------------------------------------

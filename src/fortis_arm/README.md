@@ -14,7 +14,7 @@ A MoveIt 2 wrapper for arm motion is planned, using the `fortis_msgs/action/Move
 
 ### Allowed mission states for arm motion
 
-`ARM_AT_VIEW`, `INSPECT`, `PICK`, `HOLDING`, `RETURN_HOME`. Any other state -- including "no `/fortis/mission_state` has been received yet" -- causes the action goal to be rejected at the gate and the gripper services to return `success=False`.
+`ARM_AT_VIEW`, `INSPECT`, `PICK`, `HOLDING`, `RETURN_HOME`. Any other state -- including "no `/fortis/mission_state` has been received yet" -- causes the gripper services to return `success=False`. The planned `MoveToPose` action will apply the same gate.
 
 ### Why `std_srvs/Trigger` for the gripper
 
@@ -53,7 +53,7 @@ When IK lands, the Teensy node will need to reconcile the file-recovered positio
 ## Why this design
 
 - **State gating is the same shape as `fortis_drive`.** Same topic, same QoS, same throttled rejection log pattern. Reading one node tells you how the other works. Diverging the QoS would silently break DDS matching and is not worth the flexibility.
-- **The action contract exists before the kinematics.** Targeting and the operator UI need a stable thing to call so they can be developed in parallel; them getting `succeeded=False, "kinematics not implemented"` back is the worst case, but it is a deterministic worst case, not a hung goal or a missing endpoint.
+- **The contract exists before the kinematics.** Targeting and the operator UI need a stable thing to call so they can be developed in parallel. The gripper services ship today (returning a deterministic "not implemented" inside allowed states); the `MoveToPose` action type is reserved in `fortis_msgs` for the MoveIt 2 wrapper. A deterministic stub beats a hung goal or a missing endpoint.
 - **The gripper is two services rather than one with an "open" boolean.** Two endpoints map directly to two operator buttons and to two distinct mission events (`OPEN_GRIPPER`, `CLOSE_GRIPPER`) when those land in `fortis_safety`. Single-service-with-flag would force every caller to know the convention.
 
 ## Testing

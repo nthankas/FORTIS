@@ -178,12 +178,10 @@ odrv0.axis0.config.motor.phase_inductance = 9.9e-6      # M8325s 100KV datasheet
 odrv0.axis0.config.motor.phase_resistance_valid = True
 odrv0.axis0.config.motor.phase_inductance_valid = True
 
-# Lock-in current for encoder calibration (firmware uses this to hold the
-# rotor at a known position during the offset sweep). Per ODrive docs:
-# Lock-in current for ENCODER_OFFSET_CALIBRATION. Per the ODrive wizard,
-# half of the motor's continuous current rating. M8325s continuous = 40 A,
-# so calibration_lockin.current = 20. Without this, encoder calibration can
-# silently fail (no rotor lock).
+# Lock-in current for ENCODER_OFFSET_CALIBRATION — firmware uses it to hold
+# the rotor at a known position during the offset sweep. Per the ODrive
+# wizard, half the motor's continuous current rating (M8325s = 40 A), so 20.
+# Without this, encoder calibration can silently fail (no rotor lock).
 odrv0.axis0.config.calibration_lockin.current = 20
 
 # Velocity / position limits (bench-safe; raise after wheels attached)
@@ -307,21 +305,21 @@ In this order:
 
 ## Next motor
 
-Bring the next motor (FR, then RL, then RR) onto the bench and **go back to step 1**. Only `node_id` in step 11 and the sharpie label in step 15 change.
+Bring the next motor (FR, then RR, then RL) onto the bench and **go back to step 1**. Only `node_id` in step 11 and the sharpie label in step 15 change.
 
 ---
 
 # All four calibrated — assemble the CAN bus
 
-Once FL / FR / RL / RR are all labelled and set aside:
+Once FL / FR / RR / RL are all labelled and set aside:
 
 ## 16. Confirm 48 V supply is OFF.
 
-## 17. Daisy-chain CAN: **USB-CAN adapter → FL → FR → RL → RR**.
-Wire each S1's `CAN H` to its neighbour's `CAN H`, and `CAN L` to `CAN L`. Polarity matters. Physical position in the chain is unrelated to `node_id`.
+## 17. Daisy-chain CAN: **USB-CAN adapter → FL → FR → RR → RL**.
+Wire each S1's `CAN H` to its neighbour's `CAN H`, and `CAN L` to `CAN L`. Polarity matters. Chain position matches `node_id` (FL=0 nearest the adapter ... RL=3 at the far end).
 
-## 18. Flip the on-board 120 Ω termination jumper on the **RR** S1 only.
-RR is the last S1 in the chain. The USB-CAN adapter already terminates the *other* end internally, so no external resistor is needed.
+## 18. Flip the on-board 120 Ω termination jumper on the **RL** S1 only.
+RL is the last S1 in the chain. The USB-CAN adapter already terminates the *other* end internally, so no external resistor is needed.
 
 ## 19. Plug the USB-CAN adapter into the **Jetson** (not your laptop).
 
