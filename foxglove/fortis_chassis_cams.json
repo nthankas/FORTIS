@@ -1,0 +1,109 @@
+{
+  "configById": {
+    "Tab!cams": {
+      "activeTabIdx": 0,
+      "tabs": [
+        {
+          "title": "Front",
+          "layout": {
+            "direction": "row",
+            "first": { "direction": "column", "first": "Image!rgbF", "second": "Image!depthF", "splitPercentage": 50 },
+            "second": { "direction": "column", "first": "Plot!imuF", "second": "RawMessages!imuF", "splitPercentage": 60 },
+            "splitPercentage": 64
+          }
+        },
+        {
+          "title": "Rear",
+          "layout": {
+            "direction": "row",
+            "first": { "direction": "column", "first": "Image!rgbR", "second": "Image!depthR", "splitPercentage": 50 },
+            "second": { "direction": "column", "first": "Plot!imuR", "second": "RawMessages!imuR", "splitPercentage": 60 },
+            "splitPercentage": 64
+          }
+        },
+        {
+          "title": "Left",
+          "layout": {
+            "direction": "row",
+            "first": { "direction": "column", "first": "Image!rgbL", "second": "Image!depthL", "splitPercentage": 50 },
+            "second": { "direction": "column", "first": "Plot!imuL", "second": "RawMessages!imuL", "splitPercentage": 60 },
+            "splitPercentage": 64
+          }
+        },
+        {
+          "title": "Right",
+          "layout": {
+            "direction": "row",
+            "first": { "direction": "column", "first": "Image!rgbRt", "second": "Image!depthRt", "splitPercentage": 50 },
+            "second": { "direction": "column", "first": "Plot!imuRt", "second": "RawMessages!imuRt", "splitPercentage": 60 },
+            "splitPercentage": 64
+          }
+        }
+      ]
+    },
+
+    "Image!rgbF": { "imageTopic": "/oak_chassis_front/rgb/image_raw/compressed", "calibrationTopic": "/oak_chassis_front/rgb/camera_info" },
+    "Image!depthF": { "imageTopic": "/oak_chassis_front/stereo/image_raw", "calibrationTopic": "/oak_chassis_front/stereo/camera_info" },
+    "Plot!imuF": {
+      "paths": [
+        { "value": "/oak_chassis_front/imu/data.angular_velocity.x", "enabled": true, "timestampMethod": "receiveTime" },
+        { "value": "/oak_chassis_front/imu/data.angular_velocity.y", "enabled": true, "timestampMethod": "receiveTime" },
+        { "value": "/oak_chassis_front/imu/data.angular_velocity.z", "enabled": true, "timestampMethod": "receiveTime" },
+        { "value": "/oak_chassis_front/imu/data.linear_acceleration.x", "enabled": true, "timestampMethod": "receiveTime" },
+        { "value": "/oak_chassis_front/imu/data.linear_acceleration.y", "enabled": true, "timestampMethod": "receiveTime" },
+        { "value": "/oak_chassis_front/imu/data.linear_acceleration.z", "enabled": true, "timestampMethod": "receiveTime" }
+      ],
+      "showLegend": true, "legendDisplay": "top", "isSynced": true, "xAxisVal": "timestamp", "sidebarDimension": 120
+    },
+    "RawMessages!imuF": { "topicPath": "/oak_chassis_front/imu/data" },
+
+    "Image!rgbR": { "imageTopic": "/oak_chassis_rear/rgb/image_raw/compressed", "calibrationTopic": "/oak_chassis_rear/rgb/camera_info" },
+    "Image!depthR": { "imageTopic": "/oak_chassis_rear/stereo/image_raw", "calibrationTopic": "/oak_chassis_rear/stereo/camera_info" },
+    "Plot!imuR": {
+      "paths": [
+        { "value": "/oak_chassis_rear/imu/data.angular_velocity.x", "enabled": true, "timestampMethod": "receiveTime" },
+        { "value": "/oak_chassis_rear/imu/data.angular_velocity.y", "enabled": true, "timestampMethod": "receiveTime" },
+        { "value": "/oak_chassis_rear/imu/data.angular_velocity.z", "enabled": true, "timestampMethod": "receiveTime" },
+        { "value": "/oak_chassis_rear/imu/data.linear_acceleration.x", "enabled": true, "timestampMethod": "receiveTime" },
+        { "value": "/oak_chassis_rear/imu/data.linear_acceleration.y", "enabled": true, "timestampMethod": "receiveTime" },
+        { "value": "/oak_chassis_rear/imu/data.linear_acceleration.z", "enabled": true, "timestampMethod": "receiveTime" }
+      ],
+      "showLegend": true, "legendDisplay": "top", "isSynced": true, "xAxisVal": "timestamp", "sidebarDimension": 120
+    },
+    "RawMessages!imuR": { "topicPath": "/oak_chassis_rear/imu/data" },
+
+    "Image!rgbL": { "imageTopic": "/oak_chassis_left/rgb/image_raw/compressed", "calibrationTopic": "/oak_chassis_left/rgb/camera_info" },
+    "Image!depthL": { "imageTopic": "/oak_chassis_left/stereo/image_raw", "calibrationTopic": "/oak_chassis_left/stereo/camera_info" },
+    "Plot!imuL": {
+      "paths": [
+        { "value": "/oak_chassis_left/imu/data.angular_velocity.x", "enabled": true, "timestampMethod": "receiveTime" },
+        { "value": "/oak_chassis_left/imu/data.angular_velocity.y", "enabled": true, "timestampMethod": "receiveTime" },
+        { "value": "/oak_chassis_left/imu/data.angular_velocity.z", "enabled": true, "timestampMethod": "receiveTime" },
+        { "value": "/oak_chassis_left/imu/data.linear_acceleration.x", "enabled": true, "timestampMethod": "receiveTime" },
+        { "value": "/oak_chassis_left/imu/data.linear_acceleration.y", "enabled": true, "timestampMethod": "receiveTime" },
+        { "value": "/oak_chassis_left/imu/data.linear_acceleration.z", "enabled": true, "timestampMethod": "receiveTime" }
+      ],
+      "showLegend": true, "legendDisplay": "top", "isSynced": true, "xAxisVal": "timestamp", "sidebarDimension": 120
+    },
+    "RawMessages!imuL": { "topicPath": "/oak_chassis_left/imu/data" },
+
+    "Image!rgbRt": { "imageTopic": "/oak_chassis_right/rgb/image_raw/compressed", "calibrationTopic": "/oak_chassis_right/rgb/camera_info" },
+    "Image!depthRt": { "imageTopic": "/oak_chassis_right/stereo/image_raw", "calibrationTopic": "/oak_chassis_right/stereo/camera_info" },
+    "Plot!imuRt": {
+      "paths": [
+        { "value": "/oak_chassis_right/imu/data.angular_velocity.x", "enabled": true, "timestampMethod": "receiveTime" },
+        { "value": "/oak_chassis_right/imu/data.angular_velocity.y", "enabled": true, "timestampMethod": "receiveTime" },
+        { "value": "/oak_chassis_right/imu/data.angular_velocity.z", "enabled": true, "timestampMethod": "receiveTime" },
+        { "value": "/oak_chassis_right/imu/data.linear_acceleration.x", "enabled": true, "timestampMethod": "receiveTime" },
+        { "value": "/oak_chassis_right/imu/data.linear_acceleration.y", "enabled": true, "timestampMethod": "receiveTime" },
+        { "value": "/oak_chassis_right/imu/data.linear_acceleration.z", "enabled": true, "timestampMethod": "receiveTime" }
+      ],
+      "showLegend": true, "legendDisplay": "top", "isSynced": true, "xAxisVal": "timestamp", "sidebarDimension": 120
+    },
+    "RawMessages!imuRt": { "topicPath": "/oak_chassis_right/imu/data" }
+  },
+  "globalVariables": {},
+  "userNodes": {},
+  "playbackConfig": { "speed": 1 },
+  "layout": "Tab!cams"
+}
