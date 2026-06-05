@@ -3,12 +3,11 @@ Multi-camera bring-up: discover every connected OAK-D Lite and start each one as
 an independent depthai-ros v3 ``Driver`` (on-device MJPEG RGB + regular depth,
 no RGBD cloud). Each camera runs in its own ComposableNodeContainer.
 
-Naming: cameras are named ``oak_cam_1 .. oak_cam_N`` in DISCOVERY ORDER and pinned
-to the discovered device serial, so topics are stable for this run. Positions
-(front / rear / left / right) are NOT assigned here -- bring all cameras up,
-read off the ``oak_cam_i -> <serial>`` mapping the launch logs, identify which is
-which from the streams, then pin serials / rename. TF attach to the robot URDF is
-deferred (the independent RGB + depth image panels don't need it).
+Naming: each camera is pinned by serial to its chassis position via CAMERA_ROSTER
+below (oak_chassis_front / _rear / _left / _right), so topics are stable across
+runs regardless of USB enumeration order. Discovery only spawns the cameras that
+are actually plugged in. TF attach to the robot URDF is deferred (the independent
+RGB + depth image panels don't need it).
 
 Params come from config/oak_chassis_front.yaml (the tested capture config), read
 once and re-applied to every node as a node-scoped dict so the values are a single
@@ -71,7 +70,7 @@ def _discover_device_ids():
         return []
 
 
-def build_camera_node(index, device_id, camera_params):
+def build_camera_node(camera_name, device_id, camera_params):
     """Build the ComposableNodeContainer that runs ONE camera's Driver.
 
     Same Driver as the single-cam front launch; the only per-camera differences
@@ -79,7 +78,6 @@ def build_camera_node(index, device_id, camera_params):
     at the node name so each camera's calibration frames stay namespaced (TF
     attach to the robot URDF is deferred).
     """
-    camera_name = f"oak_cam_{index}"
     per_node_params = {
         "driver": {
             "i_device_id": device_id,
@@ -104,6 +102,18 @@ def build_camera_node(index, device_id, camera_params):
     )
 
 
+# Physical OAK serial -> chassis position. Confirmed live 2026-06-05 by bringing
+# all four up and identifying each stream in Foxglove. Discovery only spawns the
+# cameras that are actually connected; a serial not in this map gets a generic
+# name so it still comes up (and is obvious in the logs) rather than being dropped.
+CAMERA_ROSTER = {
+    "19443010610BDE7D00": "oak_chassis_front",
+    "19443010C1DF397E00": "oak_chassis_rear",
+    "1944301011323C7E00": "oak_chassis_left",
+    "1944301031353C7E00": "oak_chassis_right",
+}
+
+
 def _spawn_cameras(context):
     camera_params = _load_camera_params()
     device_ids = _discover_device_ids()
@@ -111,9 +121,10 @@ def _spawn_cameras(context):
         return [LogInfo(msg="[oak_chassis_cameras] no OAK devices found -- nothing to start.")]
 
     actions = [LogInfo(msg=f"[oak_chassis_cameras] starting {len(device_ids)} camera(s):")]
-    for index, device_id in enumerate(device_ids, start=1):
-        actions.append(LogInfo(msg=f"   oak_cam_{index} -> {device_id}"))
-        actions.append(build_camera_node(index, device_id, camera_params))
+    for device_id in device_ids:
+        camera_name = CAMERA_ROSTER.get(device_id, f"oak_chassis_unknown_{device_id[:6]}")
+        actions.append(LogInfo(msg=f"   {camera_name} -> {device_id}"))
+        actions.append(build_camera_node(camera_name, device_id, camera_params))
     return actions
 
 
