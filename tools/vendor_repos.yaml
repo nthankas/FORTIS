@@ -5,9 +5,10 @@
 #     ./tools/vendor_import.sh
 #
 # That wraps `vcs import src < tools/vendor_repos.yaml` (cloning each repo
-# under src/, where colcon picks it up on the next build) and then prunes
-# odrive_botwheel_explorer (unused upstream example; reference-only) so it
-# never adds build time. odrive_ros2_control + odrive_base are what we build.
+# under src/, where colcon picks it up on the next build) and then prunes the
+# unused upstream packages odrive_botwheel_explorer (example; reference-only)
+# and odrive_node (standalone CAN node) so they never add build time.
+# odrive_ros2_control + odrive_base are what we build.
 # vcstool is preinstalled in both fortis-dev and fortis-dev-gpu (transitively,
 # via ros-humble-* tooling).
 #
@@ -19,10 +20,11 @@ repositories:
 
   # odriverobotics/ros_odrive — upstream ROS 2 packages for the ODrive
   # Pro / S1 / Micro. Provides:
-  #   - odrive_node:                  standalone CAN node (we don't use this)
+  #   - odrive_node:                  standalone CAN node (unused; pruned)
   #   - odrive_ros2_control:          SystemInterface plugin for ros2_control
   #                                   (THIS is what fortis_control loads)
-  #   - odrive_botwheel_explorer:     example differential drive (reference only)
+  #   - odrive_base:                  shared lib odrive_ros2_control needs (kept)
+  #   - odrive_botwheel_explorer:     example differential drive (unused; pruned)
   #
   # Pin: main @ 8ed510b (2026-04-21). Last commit before pin was a YAML-only
   # change to disable open_loop in the example controllers config; no
