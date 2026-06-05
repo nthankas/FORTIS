@@ -18,6 +18,7 @@
   <test_depend>fortis_comms</test_depend>
   <test_depend>fortis_safety</test_depend>
   <test_depend>fortis_drive</test_depend>
+  <test_depend>fortis_arm</test_depend>
   <test_depend>fortis_bringup</test_depend>
 
   <export>
