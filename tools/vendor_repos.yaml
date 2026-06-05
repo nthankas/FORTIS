@@ -1,12 +1,15 @@
 # vcs import file for in-source third-party ROS 2 packages that are not
 # distributed via apt. After cloning the repo (or any time this file
-# changes), run from the workspace root:
+# changes), run the canonical vendoring wrapper from the workspace root:
 #
-#     vcs import src < tools/vendor_repos.yaml
+#     ./tools/vendor_import.sh
 #
-# That clones each repo under src/, where colcon will pick it up on the
-# next build. vcstool is preinstalled in both fortis-dev and
-# fortis-dev-gpu (transitively, via ros-humble-* tooling).
+# That wraps `vcs import src < tools/vendor_repos.yaml` (cloning each repo
+# under src/, where colcon picks it up on the next build) and then prunes
+# odrive_botwheel_explorer (unused upstream example; reference-only) so it
+# never adds build time. odrive_ros2_control + odrive_base are what we build.
+# vcstool is preinstalled in both fortis-dev and fortis-dev-gpu (transitively,
+# via ros-humble-* tooling).
 #
 # Pin policy: every entry pins a specific commit hash, never a branch.
 # Bumping the pin is a deliberate review-time decision because a moving
