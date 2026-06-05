@@ -19,9 +19,9 @@ or higher-level controller stack.
 
 ## 1. Pin assignments (informative)
 
-These are the pins chosen by `firmware/teensy/main.ino`. They are repeated
+These are the pins chosen by `firmware/teensy/teensy.ino`. They are repeated
 here so a host implementer or hardware integrator can wire the board without
-opening the `.ino` file. Any change to `main.ino` MUST be reflected here.
+opening the `.ino` file. Any change to `teensy.ino` MUST be reflected here.
 
 | Function                       | Teensy pin | Direction (Teensy view) | Notes                                     |
 |--------------------------------|-----------:|-------------------------|-------------------------------------------|
@@ -423,4 +423,5 @@ The protocol major/minor is reported in `EVT_BOOT`. Hosts MUST verify the
 major version matches what they were built against; minor version increases
 add fields/messages backwards-compatibly. Major bumps are breaking.
 
-Current version: **1.0**.
+Current version: **1.1** (PROTO_MAJOR 1, PROTO_MINOR 1; the 0->1 minor bump
+added the J4 bit to `CMD_HOME_REQUEST`).

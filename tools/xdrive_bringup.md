@@ -19,13 +19,12 @@ Everything runs **in the container on the Jetson**. From the PC:
 
 ## 1. CAN interface up
 
-The Jetson is **JetPack 6**, whose kernel lacks `gs_usb`, so the **USB-CAN adapter
-will not appear** until that driver is installed. Two routes:
-
-- **Onboard Tegra CAN** (`can0`, driver `mttcan`) — works today, needs an external
-  CAN transceiver wired to the Jetson CAN pins.
-- **ODrive USB-CAN adapter** — needs `gs_usb` (install via the slamcore-dkms route
-  the ODrive CAN guide links). Then it appears as e.g. `can1`.
+The committed interface is the **ODrive USB-CAN adapter**. JetPack 6's stock
+kernel lacked `gs_usb`, but it is now installed on the Jetson (slamcore-dkms)
+and auto-loads on plug-in, so the adapter appears as `canX` (e.g. `can1`) when
+plugged. (Onboard Tegra CAN — `can0`, driver `mttcan` — also works if a CAN
+transceiver is wired to the Jetson CAN pins, but the USB-CAN adapter is the
+committed path; use it.)
 
 Identify the interface, then bring it up at the bus bitrate:
 
