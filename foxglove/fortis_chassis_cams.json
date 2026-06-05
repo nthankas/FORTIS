@@ -43,7 +43,7 @@
     },
 
     "Image!rgbF": { "imageTopic": "/oak_chassis_front/rgb/image_raw/compressed", "calibrationTopic": "/oak_chassis_front/rgb/camera_info" },
-    "Image!depthF": { "imageTopic": "/oak_chassis_front/stereo/image_raw/compressedDepth", "calibrationTopic": "/oak_chassis_front/stereo/camera_info" },
+    "Image!depthF": { "imageTopic": "/oak_chassis_front/stereo/image_raw", "calibrationTopic": "/oak_chassis_front/stereo/camera_info" },
     "Plot!imuF": {
       "paths": [
         { "value": "/oak_chassis_front/imu/data.angular_velocity.x", "enabled": true, "timestampMethod": "receiveTime" },
@@ -58,7 +58,7 @@
     "RawMessages!imuF": { "topicPath": "/oak_chassis_front/imu/data" },
 
     "Image!rgbR": { "imageTopic": "/oak_chassis_rear/rgb/image_raw/compressed", "calibrationTopic": "/oak_chassis_rear/rgb/camera_info" },
-    "Image!depthR": { "imageTopic": "/oak_chassis_rear/stereo/image_raw/compressedDepth", "calibrationTopic": "/oak_chassis_rear/stereo/camera_info" },
+    "Image!depthR": { "imageTopic": "/oak_chassis_rear/stereo/image_raw", "calibrationTopic": "/oak_chassis_rear/stereo/camera_info" },
     "Plot!imuR": {
       "paths": [
         { "value": "/oak_chassis_rear/imu/data.angular_velocity.x", "enabled": true, "timestampMethod": "receiveTime" },
@@ -73,7 +73,7 @@
     "RawMessages!imuR": { "topicPath": "/oak_chassis_rear/imu/data" },
 
     "Image!rgbL": { "imageTopic": "/oak_chassis_left/rgb/image_raw/compressed", "calibrationTopic": "/oak_chassis_left/rgb/camera_info" },
-    "Image!depthL": { "imageTopic": "/oak_chassis_left/stereo/image_raw/compressedDepth", "calibrationTopic": "/oak_chassis_left/stereo/camera_info" },
+    "Image!depthL": { "imageTopic": "/oak_chassis_left/stereo/image_raw", "calibrationTopic": "/oak_chassis_left/stereo/camera_info" },
     "Plot!imuL": {
       "paths": [
         { "value": "/oak_chassis_left/imu/data.angular_velocity.x", "enabled": true, "timestampMethod": "receiveTime" },
@@ -88,7 +88,7 @@
     "RawMessages!imuL": { "topicPath": "/oak_chassis_left/imu/data" },
 
     "Image!rgbRt": { "imageTopic": "/oak_chassis_right/rgb/image_raw/compressed", "calibrationTopic": "/oak_chassis_right/rgb/camera_info" },
-    "Image!depthRt": { "imageTopic": "/oak_chassis_right/stereo/image_raw/compressedDepth", "calibrationTopic": "/oak_chassis_right/stereo/camera_info" },
+    "Image!depthRt": { "imageTopic": "/oak_chassis_right/stereo/image_raw", "calibrationTopic": "/oak_chassis_right/stereo/camera_info" },
     "Plot!imuRt": {
       "paths": [
         { "value": "/oak_chassis_right/imu/data.angular_velocity.x", "enabled": true, "timestampMethod": "receiveTime" },
