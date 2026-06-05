@@ -1,9 +1,16 @@
 # ODrive velocity-loop tuning — FORTIS X-drive
 
 **Why:** the four S1s run ODrive stock gains (`vel_gain=0.167`, `vel_integrator_gain=0.333`)
-that were never matched to the loaded robot (40 lb, omniwheels). At low commanded
+that were never matched to the loaded robot (~45 lb, omniwheels). At low commanded
 speed the integrator winds up too slowly to break wheel stiction, so the four
 wheels break away at random, staggered times. Tuning fixes the staggered start.
+
+**Scope:** velocity-loop P/I only (`vel_gain`, `vel_integrator_gain`) plus the
+protective limits below. We deliberately do **not** tune `current_control_bandwidth`
+(ultra-low-inductance M8325s → raising it risks `CURRENT_LIMIT_VIOLATION` / FET
+whine) and keep `inertia = 0` (an omni X-drive's reflected inertia swings between
+translate and rotate, so feed-forward injects torque chatter). Control mode is
+**velocity** (the official drive control-mode decision).
 
 **Key fact (from the velocity-loop math):**
 `current_integral += vel_error * vel_integrator_gain`; at low speed with a stalled
@@ -20,18 +27,20 @@ mode would *slow* the start).
 | 3 | 006274729F3E | RL |
 
 ## SAFETY (read first)
-- **Stop the ROS launch** so odrivetool owns the bus (leave `can1` up).
+- **Stop the ROS launch** so odrivetool owns the bus (leave `can0` up).
 - Phase A (find `vel_gain`): **wheels OFF the ground** — safe, no runaway.
 - Phase B (trim integrator under load): **on the ground but restrain the chassis**
   (against a wall / strapped / in a corner) so the driven wheel loads against
-  ground friction *without the robot escaping*. Omniwheels + 40 lb = it WILL move.
+  ground friction *without the robot escaping*. Omniwheels + ~45 lb = it WILL move.
   Low speeds only. **Hand on disarm** (`idle_all()`), clear the area.
 
 ## Connect
 ```bash
-# ROS launch stopped, can1 up:
-odrivetool --no-usb --can can1     # connects odrv0..3 over the chain
+# ROS launch stopped, can0 up:
+odrivetool --no-usb --can can0     # connects odrv0..3 over the chain
 ```
+If `can0` is down: `sudo ip link set can0 up type can bitrate 250000`, then
+`candump can0` should show heartbeats from node_ids 0/1/2/3 before you continue.
 
 ## Paste these helpers into the odrivetool shell
 ```python
@@ -53,18 +62,6 @@ def vi(o, x):    o.axis0.controller.config.vel_integrator_gain = x
 def bump(o, f=1.3):
     o.axis0.controller.config.vel_gain *= f
     print(f"vel_gain -> {o.axis0.controller.config.vel_gain:.4f}")
-
-def apply_all(g, gi):
-    for o in DRIVES:
-        o.axis0.controller.config.vel_gain = g
-        o.axis0.controller.config.vel_integrator_gain = gi
-    print(f"applied vel_gain={g} vel_integrator_gain={gi} to all 4")
-
-def save_all():
-    for o in DRIVES:
-        try: o.save_configuration()       # NOTE: reboots each ODrive
-        except Exception as e: print("save (reboot expected):", e)
-    print("saved all 4 — ODrives rebooted; reconnect odrivetool if needed")
 ```
 
 ## Procedure
@@ -93,19 +90,50 @@ vi(o, <overshoot_value> * 0.5)
 idle(o)
 stop_liveplotter()
 ```
-**Apply to all four + persist:**
+Repeat A+B per wheel (or tune odrv0 and reuse if the four match closely), and
+record each converged pair in the results block below.
+
+## Protective limits (set by tools/odrive_apply_gains.py)
+The apply-script re-asserts these on every node so one file fully defines the
+operational envelope:
+- `current_soft_max = 30 A` (raised from calibration's 20 A for breakaway torque)
+- `current_hard_max = 30 A` (protection trip, unchanged)
+- `vel_integrator_limit = 30 A` (so the integrator isn't clamped below soft max)
+- `vel_limit = 5.0 rev/s` (HW ceiling; the ROS layer clamps wheel speed to ~1.57)
+- `inertia = 0.0`
+
+## Apply + persist (versioned)
+Once converged, put the final per-node numbers into the `GAINS` table in
+`tools/odrive_apply_gains.py`, then from the odrivetool CAN shell:
 ```python
-apply_all(o.axis0.controller.config.vel_gain, o.axis0.controller.config.vel_integrator_gain)
-save_all()                # ODrives reboot
+exec(open('tools/odrive_apply_gains.py').read())
+check()        # dry-run: confirm the planned writes
+apply_all()    # validate -> write -> save (each ODrive reboots on fw 0.6.11)
+# reconnect odrivetool, then:
+exec(open('tools/odrive_apply_gains.py').read()); verify_all()
 ```
+The script is the source of truth: re-running it after any board swap / re-flash
+restores the tuned drive in one step. `apply_all()` refuses to run until the
+`GAINS` table is filled (no `None`).
 
 ## Verify
 Restart the ROS stack, command a **low-speed** strafe/rotate from Foxglove — all
 four wheels should now break away crisply and together.
 
+## Tuned values (measured)
+_Filled after the live session of 2026-06-__:_
+| node | wheel | vel_gain | vel_integrator_gain |
+|---|---|---|---|
+| 0 | FL | _TBD_ | _TBD_ |
+| 1 | FR | _TBD_ | _TBD_ |
+| 2 | RR | _TBD_ | _TBD_ |
+| 3 | RL | _TBD_ | _TBD_ |
+
+Before/after: _staggered start → ____ ._
+
 ## Optional polish (only if still soft)
-- `axis0.controller.config.inertia` (feed-forward): set ≈ wheel+rotor rotational
-  inertia → instant torque on a setpoint step, less reliance on integrator wind-up.
-- If you raised the integrator a lot, check `vel_integrator_limit` isn't clamping.
+- If you raised the integrator a lot, check `vel_integrator_limit` isn't clamping
+  (the apply-script sets it to 30 A = the soft current limit).
+- Do **not** add `inertia` feed-forward on this omni X-drive — see the scope note.
 - Residual tiny spread after tuning = 250 kbit/s CAN jitter → bump bus to 1 Mbit/s
   (ODrive auto-detects baud ≥ fw 0.6.11) and/or trim cyclic telemetry rates.
