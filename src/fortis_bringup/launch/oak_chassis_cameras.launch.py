@@ -1,7 +1,9 @@
 """
-Multi-camera bring-up: discover every connected OAK-D Lite and start each one as
-an independent depthai-ros v3 ``Driver`` (on-device MJPEG RGB + regular depth,
-no RGBD cloud). Each camera runs in its own ComposableNodeContainer.
+Multi-camera bring-up for all connected OAK-D Lite chassis cameras.
+
+Discovers every connected OAK and starts each one as an independent depthai-ros
+v3 ``Driver`` (on-device MJPEG RGB + regular depth, no RGBD cloud), each in its
+own ComposableNodeContainer.
 
 Naming: each camera is pinned by serial to its chassis position via CAMERA_ROSTER
 below (oak_chassis_front / _rear / _left / _right), so topics are stable across
@@ -59,8 +61,11 @@ def _load_camera_params():
 
 
 def _discover_device_ids():
-    """Serials of all connected OAK devices ([] if depthai/devices unavailable,
-    e.g. on the dev PC where the cameras aren't attached)."""
+    """Return the serials of all connected OAK devices.
+
+    Returns an empty list if depthai or the devices are unavailable (e.g. on the
+    dev PC where the cameras aren't attached).
+    """
     try:
         import depthai as dai
 
