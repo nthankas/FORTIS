@@ -30,12 +30,14 @@
 #include <Arduino.h>
 #include <Servo.h>
 
-static const int      kServoPin   = 28;     // J4 slot per firmware pin map
-// Conservative safe range determined by observation on this physical D845WP:
-// stalls (high current) below ~700 us and above ~2000 us. Held 100 us back from
-// each end as a safety margin. If we ever change physical servo, re-measure.
-static const uint16_t kMinUs      = 800;
-static const uint16_t kMaxUs      = 2000;
+static const int      kServoPin   = 29;     // gripper slot per firmware pin map
+// Conservative range for an unknown hobby gripper servo: 1000-2000 us is the
+// industry-standard "safe" PWM window almost every hobby servo accepts. If
+// the gripper takes this range cleanly, we'll widen it (500-2500 us) in a
+// follow-up pass to find its actual mechanical endstops. Watch the bench
+// supply current and stop the sweep if it spikes.
+static const uint16_t kMinUs      = 1200;
+static const uint16_t kMaxUs      = 2300;
 static const uint16_t kNeutralUs  = 1500;
 static const uint16_t kStepUs     = 50;     // travel per tick
 static const uint32_t kStepDelayMs = 100;   // delay between ticks (slow)
@@ -46,7 +48,7 @@ void setup() {
     Serial.begin(1000000);   // match main firmware so the same Serial Monitor session works
     // Brief grace period so the host can attach Serial Monitor first
     delay(500);
-    Serial.println(F("[servo_sweep] boot. Pin 28 (J4 D845WP), SAFE range 800-1900 us."));
+    Serial.println(F("[servo_sweep] boot. Pin 29 (gripper), conservative range 1000-2000 us."));
 
     g_servo.attach(kServoPin, kMinUs, kMaxUs);
     g_servo.writeMicroseconds(kNeutralUs);
