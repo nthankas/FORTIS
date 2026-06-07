@@ -17,9 +17,10 @@ gains, velocity/current limits. It does NOT touch motor or encoder *identity*
 (pole_pairs, phase R/L, thermistor, calibration); that is owned by
 tools/odrive_calibrate.md. Run this only against an already-calibrated board.
 
-HOW TO RUN (on the Jetson, ROS stack stopped, can0 up)
+HOW TO RUN (on the Jetson, ROS stack stopped, can1 up)
 ------------------------------------------------------
-    odrivetool --no-usb --can can0       # exposes odrv0..odrv3 over the chain
+    odrivetool --no-usb --can can1       # exposes odrv0..odrv3 over the chain
+    # can1 = gs_usb USB-CAN adapter (the ODrive bus); can0 is onboard mttcan.
     >>> exec(open('tools/odrive_apply_gains.py').read())
     >>> check()                          # dry-run: prints the planned writes
     >>> apply_all()                      # validate -> write -> save -> (reboot)
@@ -35,26 +36,29 @@ a fresh skeleton). Native ODrive units are rev/s (turn/s), NOT rad/s.
 # node_id -> wheel (CAN daisy-chain FL->FR->RR->RL = node 0->1->2->3).
 WHEEL_BY_NODE = {0: "FL", 1: "FR", 2: "RR", 3: "RL"}
 
-# vel_gain / vel_integrator_gain are MEASURED during the live tuning session
-# (tools/odrive_vel_tune.md). They are None here until filled after tuning.
+# vel_gain / vel_integrator_gain MEASURED in the live tuning session
+# (tools/odrive_vel_tune.md). Tuned on FL 2026-06-05 and applied to all four:
+# identical M8325s + omniwheels -> identical gains -> simultaneous breakaway.
 GAINS = {
-    0: {"vel_gain": None, "vel_integrator_gain": None},  # FL  MEASURED -- fill after tuning
-    1: {"vel_gain": None, "vel_integrator_gain": None},  # FR  MEASURED -- fill after tuning
-    2: {"vel_gain": None, "vel_integrator_gain": None},  # RR  MEASURED -- fill after tuning
-    3: {"vel_gain": None, "vel_integrator_gain": None},  # RL  MEASURED -- fill after tuning
+    0: {"vel_gain": 0.925, "vel_integrator_gain": 1.0},  # FL
+    1: {"vel_gain": 0.925, "vel_integrator_gain": 1.0},  # FR
+    2: {"vel_gain": 0.925, "vel_integrator_gain": 1.0},  # RR
+    3: {"vel_gain": 0.925, "vel_integrator_gain": 1.0},  # RL
 }
 
 # Limits + modes are identical for all four wheels and re-asserted on every
 # apply so this one file fully defines the operational envelope:
 #   current_soft_max 30 A: raised from the calibration-time 20 A for breakaway
-#                          torque (~2.5 Nm/wheel at Kt=0.083); within hard max.
-#   current_hard_max 30 A: protection trip, unchanged from calibration.
+#                          torque (~2.5 Nm/wheel at Kt=0.083).
+#   current_hard_max 40 A: protection trip. MUST stay above soft_max -- with no
+#                          margin the current loop trips CURRENT_LIMIT_VIOLATION
+#                          on any transient (datasheet: 40 A cont / 80 A 3 s peak).
 #   vel_integrator_limit 30 A: let the integrator drive up to soft max, not clamp.
 #   vel_limit 5.0 rev/s: HW ceiling; the ROS layer already clamps to ~1.57.
 #   inertia 0.0: NO feed-forward (omni reflected inertia swings -> chatter).
 LIMITS = {
     "current_soft_max": 30.0,
-    "current_hard_max": 30.0,
+    "current_hard_max": 40.0,
     "vel_integrator_limit": 30.0,
     "vel_limit": 5.0,
     "inertia": 0.0,
@@ -84,8 +88,11 @@ def validate_table(gains, limits, require_measured):
         for name, val in (("vel_gain", vg), ("vel_integrator_gain", vi)):
             if val is not None and (not isinstance(val, (int, float)) or val < 0):
                 problems.append(f"node {node}: {name}={val!r} must be a number >= 0")
-    if limits["current_soft_max"] > limits["current_hard_max"]:
-        problems.append("current_soft_max exceeds current_hard_max")
+    if limits["current_soft_max"] >= limits["current_hard_max"]:
+        problems.append(
+            "current_hard_max must be strictly above current_soft_max -- with no "
+            "margin the current loop trips CURRENT_LIMIT_VIOLATION on transients"
+        )
     if limits["vel_integrator_limit"] > limits["current_soft_max"]:
         problems.append(
             "vel_integrator_limit exceeds current_soft_max "
@@ -99,7 +106,7 @@ def validate_table(gains, limits, require_measured):
 def _shell_globals():
     """Return the interpreter namespace this script was exec()'d into.
 
-    Inside `odrivetool --can can0` that namespace holds the per-node handles
+    Inside `odrivetool --can can1` that namespace holds the per-node handles
     odrv0..odrv3 and the ControlMode / InputMode / AxisState enums. Reading them
     from here (rather than as bare names) keeps this file importable and
     lint-clean off-hardware.
@@ -114,7 +121,7 @@ def _drives(ns):
     except KeyError as missing:
         raise RuntimeError(
             f"{missing} not found -- run this inside "
-            "`odrivetool --no-usb --can can0` so odrv0..odrv3 exist."
+            "`odrivetool --no-usb --can can1` so odrv0..odrv3 exist."
         )
 
 
