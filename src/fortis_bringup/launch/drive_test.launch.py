@@ -33,7 +33,7 @@ energised by launching this file). Arming and opening the motion gate
 are deliberate, separate manual steps:
 
     # 0. SocketCAN already up + 4 heartbeats seen (see tools/xdrive_bringup.md)
-    ros2 launch fortis_bringup drive_test.launch.py can_interface:=can0
+    ros2 launch fortis_bringup drive_test.launch.py        # default can_interface:=can1
 
     # 1. arm the wheels (sends CLOSED_LOOP_CONTROL to all four S1s):
     ros2 control switch_controllers --activate wheel_velocity_controller
@@ -46,7 +46,7 @@ are deliberate, separate manual steps:
 
 Args
 ----
-    can_interface:=can0        SocketCAN interface for the ODrive bus
+    can_interface:=can1        SocketCAN interface for the ODrive bus (gs_usb adapter)
     use_mock_hardware:=false   swap the ODrive plugin for a mock (no CAN)
     port:=8765                 foxglove_bridge WebSocket port
 """
@@ -108,8 +108,12 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument(
             "can_interface",
-            default_value="can0",
-            description="SocketCAN interface for the ODrive bus.",
+            default_value="can1",
+            description=(
+                "SocketCAN interface for the ODrive bus. Default can1 is the "
+                "gs_usb USB-CAN adapter on the Jetson; can0 is the onboard "
+                "Tegra mttcan and is NOT wired to the ODrive chain."
+            ),
         ),
         DeclareLaunchArgument(
             "use_mock_hardware",
