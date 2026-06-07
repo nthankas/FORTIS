@@ -18,12 +18,13 @@ Pre-requisites
   2. CAN harness wired FL->FR->RR->RL (chain position = node_id), USB-CAN
      adapter at the FL end with built-in 120 Ohm termination, RL's on-board
      termination jumper closed at the other end.
-  3. SocketCAN brought up:
+  3. SocketCAN brought up (can1 = gs_usb USB-CAN adapter on the Jetson;
+     can0 is the onboard Tegra mttcan and is NOT wired to the ODrives):
 
-         sudo ip link set can0 up type can bitrate 250000
-         sudo ip link set can0 txqueuelen 1000
+         sudo ip link set can1 up type can bitrate 250000
+         sudo ip link set can1 txqueuelen 1000
 
-     `candump can0` should show heartbeats from all four node_ids.
+     `candump can1` should show heartbeats from all four node_ids.
 
 Composition with fortis_drive / fortis_safety
 ---------------------------------------------
@@ -52,10 +53,12 @@ def generate_launch_description():
     declared_arguments = [
         DeclareLaunchArgument(
             "can_interface",
-            default_value="can0",
+            default_value="can1",
             description=(
                 "SocketCAN interface name passed to "
-                "odrive_ros2_control_plugin/ODriveHardwareInterface."
+                "odrive_ros2_control_plugin/ODriveHardwareInterface. Default "
+                "can1 is the gs_usb USB-CAN adapter on the Jetson; can0 is the "
+                "onboard Tegra mttcan and is NOT wired to the ODrive chain."
             ),
         ),
         DeclareLaunchArgument(
