@@ -14,17 +14,27 @@
 # IMU's noisy accelerometer-derived pitch/roll and any z drift from leaking
 # into the planar estimate.
 #
+# Yaw trust: IMU OWNS yaw. The RR/RL wheels slip under load (chassis/weld
+# tolerances), so the wheel-derived yaw RATE is the least trustworthy channel
+# on the robot -- a slipping rear wheel injects a phantom yaw rate the IMU
+# gyro never sees. So we do NOT fuse the wheel-odometry vyaw at all (odom0
+# yaw-rate entry is false) and fuse the IMU gyro yaw rate TIGHTLY (small
+# imu0 vyaw measurement covariance + high process noise on yaw/vyaw so the
+# filter follows it fast). The wheels are kept ONLY as a loose translation
+# hint (vx, vy with large covariance) -- they are the sole translation source
+# but they slip, so they are followed weakly, never trusted for heading.
+#
 # What we fuse, and why these specific fields:
-#   /odom (wheel odometry): vx, vy, vyaw (the body twist). We fuse VELOCITIES,
-#     not the pose -- the wheel pose is open-loop dead reckoning with no
-#     absolute reference, so feeding its absolute x/y/yaw would just inject
-#     unbounded drift as if it were a measurement. The EKF does its own
-#     integration of the fused velocity instead.
+#   /odom (wheel odometry): vx, vy ONLY. We fuse VELOCITIES, not the pose --
+#     the wheel pose is open-loop dead reckoning with no absolute reference,
+#     so feeding its absolute x/y/yaw would just inject unbounded drift as if
+#     it were a measurement. vyaw is deliberately OFF (see the yaw-trust note
+#     above): rear-wheel slip makes it actively misleading, not merely noisy.
 #   /imu: vyaw (gyro yaw rate). The OAK-D Lite IMU (BMI270, gyro+accel, NO
 #     magnetometer) cannot observe absolute heading, so absolute yaw is left
 #     OFF -- there is no drift-free yaw reference to fuse. The gyro yaw rate
-#     is the fast, low-latency signal the wheel odometry's loose vyaw defers
-#     to. Linear acceleration is left OFF: double-integrating a consumer-grade
+#     is the fast, low-latency signal that is now the SOLE yaw input.
+#     Linear acceleration is left OFF: double-integrating a consumer-grade
 #     accelerometer adds more drift than signal for a wheeled ground robot.
 
 ekf_filter_node:
@@ -50,12 +60,16 @@ ekf_filter_node:
     #   vx,    vy,    vz,
     #   vroll, vpitch, vyaw,
     #   ax,    ay,    az
-    # Fuse vx, vy, vyaw only (the body twist); everything else false.
+    # Fuse vx, vy ONLY (loose translation hint). vyaw is FALSE on purpose:
+    # the slipping rear wheels make wheel yaw rate actively misleading, and
+    # the IMU gyro (imu0 below) is the sole yaw input. See the yaw-trust note
+    # in the header. Flip the vyaw entry back to true only if the wheels are
+    # ever re-trusted for heading (they should not be while RR/RL slip).
     odom0: /odom
     odom0_config: [false, false, false,
                    false, false, false,
                    true,  true,  false,
-                   false, false, true,
+                   false, false, false,
                    false, false, false]
     odom0_queue_size: 10
     # The twist is already in base_link (child_frame_id), so no differential
@@ -65,8 +79,17 @@ ekf_filter_node:
     odom0_relative: false
 
     # --- /imu: gyro yaw rate ----------------------------------------------
-    # Fuse vyaw only. Absolute yaw is OFF (no magnetometer -> no absolute
-    # heading); linear acceleration is OFF (accel double-integration drift).
+    # Fuse vyaw only -- and this is now the SOLE yaw input (wheel vyaw is off).
+    # Absolute yaw is OFF (no magnetometer -> no absolute heading); linear
+    # acceleration is OFF (accel double-integration drift). How tightly the
+    # gyro yaw rate is fused is set by the angular_velocity_covariance the OAK
+    # depthai driver stamps on each /imu message: ekf_node has no per-sensor
+    # covariance-override parameter, so it reads that value directly. The IMU
+    # is trusted tightly *because* that covariance is small relative to the
+    # wheel twist covariance (loose, set in wheel_odometry_node) -- the trust
+    # ratio is what makes the gyro own yaw. If a future driver stamps a junk
+    # (huge) angular_velocity_covariance, yaw trust collapses; verify it with
+    # `ros2 topic echo /imu --field angular_velocity_covariance`.
     imu0: /imu
     imu0_config: [false, false, false,
                   false, false, false,
@@ -83,11 +106,15 @@ ekf_filter_node:
 
     # --- Process noise --------------------------------------------------------
     # Diagonal only. Larger entries = the filter trusts the model less and the
-    # measurements more. Yaw and vyaw are bumped up relative to translation so
-    # the IMU gyro can pull the heading quickly; x/y/vx/vy are left at modest
-    # values so the wheel translation is smoothed but still followed. Rows for
+    # measurements more. Yaw (idx 5) and vyaw (idx 11) are the largest entries
+    # so the filter follows the IMU gyro quickly -- consistent with IMU-owns-yaw:
+    # with no wheel vyaw fused, fast yaw tracking has to come from a responsive
+    # process model on the yaw states. x/y/vx/vy are left at modest values so
+    # the wheel translation is smoothed but still followed. Rows for
     # z/roll/pitch and their rates are kept small (two_d_mode pins them to
-    # zero, but a nonzero entry avoids a singular covariance).
+    # zero, but a nonzero entry avoids a singular covariance). All entries are
+    # tunable: raise yaw/vyaw to track the gyro harder, lower vx/vy to smooth
+    # the slipping wheels more.
     process_noise_covariance: [0.05, 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
                                0.0,  0.05, 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
                                0.0,  0.0,  0.02, 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
