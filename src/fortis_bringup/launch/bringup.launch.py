@@ -4,15 +4,22 @@ Top-level FORTIS bringup launch file.
 Composes mission_state_node (FSM), drive_node (X-drive ROS interface),
 drive_enable_node (UI arm/disarm of the wheel controller), and the
 odrive health monitor into a single launch entry point. Arm controller,
-perception, localization, and diagnostics will be added as those
-packages come online.
+perception, and diagnostics will be added as those packages come online.
+
+Localization (wheel odometry + robot_localization EKF) is available as an
+OPT-IN include, gated by the `localization` launch arg (default false). It
+is off by default so this entry point's behaviour is unchanged until the
+estimation layer is bench-verified; bring it up with `localization:=true`.
 
 Loads config/bringup_params.yaml so any future declare_parameter() the
 nodes adopt picks up the documented defaults automatically. See that
 file's header for why most values there are inert today.
 """
 from launch import LaunchDescription
-from launch.substitutions import PathJoinSubstitution
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.conditions import IfCondition
+from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
@@ -22,6 +29,16 @@ def generate_launch_description():
         FindPackageShare("fortis_bringup"),
         "config",
         "bringup_params.yaml",
+    ])
+
+    # Opt-in estimation layer. Off by default so existing bring-up is
+    # byte-for-byte unchanged; set localization:=true to add wheel odometry
+    # + the robot_localization EKF (and the odom->base_link TF it owns).
+    localization = LaunchConfiguration("localization")
+    localization_launch = PathJoinSubstitution([
+        FindPackageShare("fortis_localization"),
+        "launch",
+        "localization.launch.py",
     ])
 
     mission_state_node = Node(
@@ -66,9 +83,24 @@ def generate_launch_description():
         parameters=[bringup_params],
     )
 
+    localization_include = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([localization_launch]),
+        condition=IfCondition(localization),
+    )
+
     return LaunchDescription([
+        DeclareLaunchArgument(
+            "localization",
+            default_value="false",
+            description=(
+                "Bring up wheel odometry + the robot_localization EKF "
+                "(fortis_localization). Off by default; the existing node "
+                "graph is unchanged unless this is true."
+            ),
+        ),
         mission_state_node,
         drive_node,
         drive_enable_node,
         odrive_health_monitor_node,
+        localization_include,
     ])
