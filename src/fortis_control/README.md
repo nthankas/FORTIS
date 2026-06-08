@@ -25,7 +25,7 @@ the rest of the stack publishes into.
    close the loop on an uncalibrated motor.**
 2. `ros_odrive` has been vcs-imported into `src/`:
    ```bash
-   vcs import src < tools/vendor_repos.yaml
+   ./tools/vendor_import.sh
    ```
 3. The dev container has `can-utils` (already added to both
    `docker/Dockerfile.dev` and `docker/Dockerfile.dev-gpu`).

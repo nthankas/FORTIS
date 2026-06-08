@@ -8,6 +8,31 @@ The script itself lives at the **repository root** as `./stack`. This
 directory holds tests and documentation for it; the script is at the root
 so the operator workflow is `./stack <cmd>` instead of nested path typing.
 
+## Running `stack` without `./`
+
+All examples below use `./stack`, which works from the repo root. To run
+`stack <cmd>` from anywhere, do one of the following **once per machine**
+(works on any machine - PC WSL, Jetson, etc.):
+
+- **Symlink it onto your PATH** (assuming `~/.local/bin` is on your `PATH`):
+
+  ```bash
+  ln -s "$(pwd)/stack" ~/.local/bin/stack   # run from the repo root
+  stack help                                # now works from anywhere
+  ```
+
+  This works because the script resolves symlinks to find the real repo
+  root, so `.env` and the compose files still load correctly even when
+  `stack` is invoked through the symlink.
+
+- **Or add the repo to your PATH** by appending this to `~/.bashrc`:
+
+  ```bash
+  export PATH="$PATH:/path/to/FORTIS"       # replace with your repo path
+  ```
+
+  Then `source ~/.bashrc` (or open a new shell) and run `stack <cmd>`.
+
 ## Quickstart
 
 ```bash
