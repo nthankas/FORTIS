@@ -34,6 +34,8 @@ setup(
         'console_scripts': [
             'wheel_odometry_node = '
             'fortis_localization.wheel_odometry_node:main',
+            'imu_gyro_debias_node = '
+            'fortis_localization.imu_gyro_debias_node:main',
         ],
     },
 )
