@@ -135,7 +135,7 @@ changes), pull in vendored upstream packages:
 
 ```bash
 cd /workspace
-vcs import src < tools/vendor_repos.yaml
+./tools/vendor_import.sh
 ```
 
 Then:
