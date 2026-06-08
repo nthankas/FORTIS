@@ -11,15 +11,28 @@ OPT-IN include, gated by the `localization` launch arg (default false). It
 is off by default so this entry point's behaviour is unchanged until the
 estimation layer is bench-verified; bring it up with `localization:=true`.
 
+Heading hold (closed-loop yaw on the EKF estimate) is a second OPT-IN, gated
+by the `heading_hold` arg (default false). When true it launches
+heading_hold_node AND remaps drive_node's /cmd_vel input to the controller's
+/cmd_vel_heading output, so operator turns are arbitrated against the
+IMU-dominated EKF yaw. When false drive_node reads /cmd_vel directly and the
+node graph is byte-for-byte the existing one. heading_hold needs the EKF
+running, so it implies localization:=true in practice (enable both).
+
 Loads config/bringup_params.yaml so any future declare_parameter() the
-nodes adopt picks up the documented defaults automatically. See that
-file's header for why most values there are inert today.
+nodes adopt picks up the documented defaults automatically (heading_hold_node
+already reads its gains from there). See that file's header for which values
+are live vs. documentation-only.
 """
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+from launch.substitutions import (
+    LaunchConfiguration,
+    PathJoinSubstitution,
+    PythonExpression,
+)
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
@@ -41,6 +54,16 @@ def generate_launch_description():
         "localization.launch.py",
     ])
 
+    # Opt-in heading hold. Off by default. When true, drive_node's /cmd_vel
+    # subscription is remapped to /cmd_vel_heading (the controller output) so
+    # heading_hold_node sits in front of the drive. When false the remap
+    # target is /cmd_vel itself -- an identity remap, so drive_node reads
+    # /cmd_vel exactly as before and the existing behaviour is unchanged.
+    heading_hold = LaunchConfiguration("heading_hold")
+    drive_cmd_vel_topic = PythonExpression([
+        "'/cmd_vel_heading' if '", heading_hold, "' == 'true' else '/cmd_vel'",
+    ])
+
     mission_state_node = Node(
         package='fortis_safety',
         executable='mission_state_node',
@@ -55,6 +78,22 @@ def generate_launch_description():
         name='drive_node',
         output='screen',
         parameters=[bringup_params],
+        # Identity remap when heading_hold is false (reads /cmd_vel); points at
+        # /cmd_vel_heading when true so the heading controller is in the loop.
+        remappings=[('/cmd_vel', drive_cmd_vel_topic)],
+    )
+
+    # Closed-loop heading hold. Only launched when heading_hold:=true. Reads
+    # the operator /cmd_vel and the EKF /odometry/filtered, republishes the
+    # corrected command on /cmd_vel_heading (which drive_node consumes via the
+    # remap above). Gains come from bringup_params.yaml (heading_hold_node).
+    heading_hold_node = Node(
+        package='fortis_drive',
+        executable='heading_hold_node',
+        name='heading_hold_node',
+        output='screen',
+        parameters=[bringup_params],
+        condition=IfCondition(heading_hold),
     )
 
     # Wraps the controller_manager switch_controller service behind a
@@ -98,9 +137,21 @@ def generate_launch_description():
                 "graph is unchanged unless this is true."
             ),
         ),
+        DeclareLaunchArgument(
+            "heading_hold",
+            default_value="false",
+            description=(
+                "Run heading_hold_node and feed drive_node from its "
+                "/cmd_vel_heading output (closed-loop yaw on the EKF "
+                "estimate). Off by default; needs the EKF, so enable "
+                "alongside localization:=true. When false, drive_node reads "
+                "/cmd_vel directly and behaviour is unchanged."
+            ),
+        ),
         mission_state_node,
         drive_node,
         drive_enable_node,
         odrive_health_monitor_node,
+        heading_hold_node,
         localization_include,
     ])
