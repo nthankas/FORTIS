@@ -83,6 +83,34 @@ heading_hold_node:
     # feedback to the max_omega clamp).
     yaw_sign: 1.0
 
+imu_gyro_debias_node:
+  ros__parameters:
+    # Automatic gyro zero-rate bias remover, upstream of the EKF. LIKE
+    # heading_hold_node and UNLIKE most of this file, this node DOES call
+    # declare_parameter() for each of these, so the values here are LIVE
+    # defaults the node reads at startup (not documentation). The node runs
+    # when localization is launched with debias_imu:=true (the default);
+    # localization.launch.py supplies raw_imu_topic / debiased_imu_topic
+    # inline, so the keys that matter to override here are the tuning ones.
+    #
+    # Source (raw) and output (debiased) IMU topics. The launch file passes
+    # these in from its imu_topic arg / internal plumbing, so these entries
+    # mainly document the wiring: raw OAK IMU in, /imu/debiased out.
+    raw_imu_topic: "/oak_chassis_front/imu/data"
+    debiased_imu_topic: "/imu/debiased"
+    # EMA weight for folding each stationary (disarmed) sample into the bias
+    # estimate. SLOW on purpose: the bias is quasi-static, so a small alpha
+    # averages out per-sample gyro noise and tracks only slow thermal drift.
+    ema_alpha: 0.02
+    # Angular-velocity axes to debias. Default z only: the gyro yaw rate is
+    # the EKF's sole yaw input and two_d_mode discards x/y rates anyway.
+    debias_axes: ["z"]
+    # Ignore this many seconds of IMU samples after each arm->disarm edge
+    # before trusting the gyro as "stationary". Skips the mechanical settle
+    # transient (chassis rocking as the motors release) so it cannot poison
+    # the bias EMA.
+    settle_skip_s: 0.5
+
 arm_controller:
   ros__parameters:
     # Reject-warning throttle interval, seconds. Same role as
