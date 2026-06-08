@@ -41,4 +41,6 @@ services:
       - ROS_LOCALHOST_ONLY=1
     stdin_open: true
     tty: true
+    # Bring the ODrive CAN bus up before nodes start. See docker/can-up.sh.
+    entrypoint: ["bash", "/workspace/docker/can-up.sh"]
     command: /bin/bash
