@@ -15,8 +15,9 @@ Brings up
 
 IMU topic remap
 ---------------
-The front OAK-D Lite publishes its IMU on /oak_chassis_front/imu; the EKF
-config subscribes to /imu. The `imu_topic` arg drives a remap so the source
+The front OAK-D Lite publishes its IMU on /oak_chassis_front/imu/data (depthai
+v3 nests it under /imu/data); the EKF config subscribes to /imu. The
+`imu_topic` arg drives a remap so the source
 topic can change (e.g. a different camera) without editing ekf.yaml.
 
 Why the static IMU TF is conditional
@@ -54,10 +55,10 @@ def generate_launch_description():
 
     declare_imu_topic = DeclareLaunchArgument(
         "imu_topic",
-        default_value="/oak_chassis_front/imu",
+        default_value="/oak_chassis_front/imu/data",
         description=(
             "Source IMU topic, remapped to /imu for the EKF. Defaults to the "
-            "front OAK-D Lite."
+            "front OAK-D Lite (depthai v3 nests it at .../imu/data)."
         ),
     )
     declare_imu_frame = DeclareLaunchArgument(

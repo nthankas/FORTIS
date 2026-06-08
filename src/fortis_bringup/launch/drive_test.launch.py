@@ -49,6 +49,8 @@ Args
     can_interface:=can1        SocketCAN interface for the ODrive bus (gs_usb adapter)
     use_mock_hardware:=false   swap the ODrive plugin for a mock (no CAN)
     port:=8765                 foxglove_bridge WebSocket port
+    localization:=false        forward to bringup: wheel odometry + EKF
+    heading_hold:=false        forward to bringup: closed-loop heading hold
 """
 
 from launch import LaunchDescription
@@ -63,6 +65,8 @@ def generate_launch_description():
     can_interface = LaunchConfiguration("can_interface")
     use_mock_hardware = LaunchConfiguration("use_mock_hardware")
     port = LaunchConfiguration("port")
+    localization = LaunchConfiguration("localization")
+    heading_hold = LaunchConfiguration("heading_hold")
 
     drive_hw = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(PathJoinSubstitution([
@@ -82,6 +86,10 @@ def generate_launch_description():
             "launch",
             "bringup.launch.py",
         ])),
+        launch_arguments={
+            "localization": localization,
+            "heading_hold": heading_hold,
+        }.items(),
     )
 
     foxglove_bridge = Node(
@@ -124,6 +132,16 @@ def generate_launch_description():
             "port",
             default_value="8765",
             description="WebSocket port for foxglove_bridge.",
+        ),
+        DeclareLaunchArgument(
+            "localization",
+            default_value="false",
+            description="Forward to bringup: wheel odometry + EKF.",
+        ),
+        DeclareLaunchArgument(
+            "heading_hold",
+            default_value="false",
+            description="Forward to bringup: closed-loop heading hold (needs localization:=true).",
         ),
         drive_hw,
         bringup,
