@@ -5,14 +5,17 @@
 # fully-qualified node name; values under "ros__parameters:" are the
 # defaults that node will see at startup unless a launch arg overrides.
 #
-# Today no fortis_* node calls declare_parameter() (see
+# Most fortis_* nodes do NOT call declare_parameter() (see
 # src/fortis_drive/README.md "Parameters" section for the rationale:
 # the module-level constants were left in code to make accidental
-# override impossible). Loading this YAML against undeclared parameters
-# is a no-op in ROS 2 Humble: the parameter is registered but no code
-# reads it. The file is forward-looking documentation of the values
-# that would become overridable once the corresponding nodes adopt
-# declare_parameter() in a deliberate, per-node change.
+# override impossible). For those, loading this YAML is a no-op in ROS 2
+# Humble: the parameter is registered but no code reads it, so their
+# entries here are forward-looking documentation of the values that would
+# become overridable once those nodes adopt declare_parameter().
+#
+# The EXCEPTION is heading_hold_node (below), which DOES declare each of
+# its parameters -- so its block is a LIVE override, not documentation.
+# Each block notes whether it is live or documentation-only.
 #
 # What CANNOT be set here:
 #   - ROS_DOMAIN_ID. This is an environment variable, not a ROS
@@ -51,6 +54,34 @@ drive_node:
     # per-run override, wire declare_parameter("cmd_vel_timeout_s") into
     # drive_node (the value is already constructor-injectable).
     cmd_vel_timeout_s: 0.5
+
+heading_hold_node:
+  ros__parameters:
+    # Heading-hold PID. UNLIKE the rest of this file, heading_hold_node DOES
+    # call declare_parameter() for each of these, so these values are LIVE
+    # overrides, not documentation -- editing them here actually retunes the
+    # controller at launch. The node only runs when bringup is started with
+    # heading_hold:=true (default false).
+    #
+    # PID gains on the wrapped heading error (rad). Start P-only (ki 0); add
+    # ki/kd on-ground if the hold sags or oscillates. Defaults mirror the
+    # DEFAULT_* constants in heading_hold_node.py.
+    kp: 2.0
+    ki: 0.0
+    kd: 0.1
+    # Output angular-velocity clamp (rad/s) and the integral-term anti-windup
+    # clamp (rad/s).
+    max_omega: 1.5
+    i_clamp: 0.5
+    # |omega_cmd| above this (rad/s) means the operator is actively turning:
+    # pass their omega through and re-arm the hold target to the current yaw.
+    turn_deadband: 0.05
+    # Gyro-direction correction: +1.0 assumes EKF yaw increases CCW (REP-103).
+    # BENCH-VERIFY before trusting on hardware: rotate the robot CCW by hand
+    # and confirm /odometry/filtered yaw INCREASES; set to -1.0 only if it
+    # decreases. A wrong sign makes heading-hold push the WRONG way (positive
+    # feedback to the max_omega clamp).
+    yaw_sign: 1.0
 
 arm_controller:
   ros__parameters:
