@@ -4,7 +4,7 @@ Geometry source of truth: src/fortis_description/urdf/fortis_constants.xacro,
 specifically wheel_x_offset, wheel_y_offset, and wheel_radius. The
 omni_wheel macro in fortis_chassis.urdf.xacro applies these at the four
 sign combinations (+/-, +/-) about base_link. Values below mirror that
-URDF, locked 2026-05-01 from the ROS_Expanded_Chassis CAD.
+URDF; offsets measured 2026-06-07, radius still from CAD.
 
 A drift regression in test/test_kinematics_urdf_sync.py enforces that
 LEN_X, LEN_Y, and WHEEL_RADIUS continue to match the URDF; that test
@@ -20,11 +20,11 @@ README.md "Drift invariants" for the open question on convention.
 import numpy as np
 
 # Wheel center positions in base_link frame, in meters. Mirror of:
-#   wheel_x_offset = 0.176 m (6.93 in)   -- half longitudinal spread
-#   wheel_y_offset = 0.125 m (4.92 in)   -- half lateral spread
+#   wheel_x_offset = 0.174625 m  -- half of 13.75 in front-back contact span
+#   wheel_y_offset = 0.12065 m   -- half of 9.5 in left-right contact span
 # from fortis_description/urdf/fortis_constants.xacro.
-LEN_X = 0.176
-LEN_Y = 0.125
+LEN_X = 0.174625
+LEN_Y = 0.12065
 
 # AndyMark 8 in Dualie Omni (am-0463); mirror of wheel_radius in the URDF.
 WHEEL_RADIUS = 0.1016  # 4.000 in

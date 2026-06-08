@@ -22,9 +22,9 @@
   <xacro:property name="wheel_width"     value="0.051"/>  <!-- 2.000 in -->
   <xacro:property name="wheel_mass"      value="1.0"/>    <!-- ~1 kg per wheel -->
 
-  <!-- Wheel center positions from chassis center (extracted from CAD) -->
-  <xacro:property name="wheel_x_offset"  value="0.176"/>  <!-- 6.93 in, half longitudinal spread -->
-  <xacro:property name="wheel_y_offset"  value="0.125"/>  <!-- 4.92 in, half lateral spread -->
+  <!-- Wheel center positions from chassis center (measured contact spans 2026-06-07) -->
+  <xacro:property name="wheel_x_offset"  value="0.174625"/>  <!-- half of 13.75 in front-back span -->
+  <xacro:property name="wheel_y_offset"  value="0.12065"/>  <!-- half of 9.5 in left-right span -->
   <xacro:property name="wheel_z"         value="${wheel_radius}"/>  <!-- wheel center at axle height -->
 
   <!-- X-config: each wheel rotated 45 deg about Z so its rolling axis is diagonal -->
