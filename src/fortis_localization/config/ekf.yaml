@@ -1,0 +1,124 @@
+# robot_localization EKF for the FORTIS X-drive base.
+#
+# Fuses the wheel-odometry body twist (/odom, from wheel_odometry_node) with
+# the front OAK-D Lite IMU (/imu, remapped from /oak_chassis_front/imu by the
+# launch file). Output: /odometry/filtered and the odom->base_link TF.
+#
+# Scope: wheel odometry + IMU ONLY. No GPS, no VIO, no map frame -- so there
+# is a single EKF instance in the odom world frame and no second
+# (map) instance / navsat_transform. This matches the FORTIS localization
+# scope: a smooth, continuous odom->base_link estimate, not a global fix.
+#
+# Why two_d_mode: the base is planar (4-wheel holonomic X-drive on a flat
+# floor). two_d_mode zeroes z, roll, pitch and their rates, which stops the
+# IMU's noisy accelerometer-derived pitch/roll and any z drift from leaking
+# into the planar estimate.
+#
+# What we fuse, and why these specific fields:
+#   /odom (wheel odometry): vx, vy, vyaw (the body twist). We fuse VELOCITIES,
+#     not the pose -- the wheel pose is open-loop dead reckoning with no
+#     absolute reference, so feeding its absolute x/y/yaw would just inject
+#     unbounded drift as if it were a measurement. The EKF does its own
+#     integration of the fused velocity instead.
+#   /imu: vyaw (gyro yaw rate). The OAK-D Lite IMU (BMI270, gyro+accel, NO
+#     magnetometer) cannot observe absolute heading, so absolute yaw is left
+#     OFF -- there is no drift-free yaw reference to fuse. The gyro yaw rate
+#     is the fast, low-latency signal the wheel odometry's loose vyaw defers
+#     to. Linear acceleration is left OFF: double-integrating a consumer-grade
+#     accelerometer adds more drift than signal for a wheeled ground robot.
+
+ekf_filter_node:
+  ros__parameters:
+    frequency: 30.0
+    sensor_timeout: 0.2
+    two_d_mode: true
+
+    # publish_tf: this EKF is the SOLE owner of odom->base_link. The wheel
+    # odometry node deliberately does not broadcast TF so the two never fight.
+    publish_tf: true
+    publish_acceleration: false
+
+    map_frame: map            # unused (no map instance); declared for completeness
+    odom_frame: odom
+    base_link_frame: base_link
+    world_frame: odom
+
+    # --- /odom: wheel-odometry body twist ---------------------------------
+    # Matrix order is:
+    #   x,     y,     z,
+    #   roll,  pitch, yaw,
+    #   vx,    vy,    vz,
+    #   vroll, vpitch, vyaw,
+    #   ax,    ay,    az
+    # Fuse vx, vy, vyaw only (the body twist); everything else false.
+    odom0: /odom
+    odom0_config: [false, false, false,
+                   false, false, false,
+                   true,  true,  false,
+                   false, false, true,
+                   false, false, false]
+    odom0_queue_size: 10
+    # The twist is already in base_link (child_frame_id), so no differential
+    # or relative mode -- those are for fusing an absolute pose, which we
+    # explicitly do not do here.
+    odom0_differential: false
+    odom0_relative: false
+
+    # --- /imu: gyro yaw rate ----------------------------------------------
+    # Fuse vyaw only. Absolute yaw is OFF (no magnetometer -> no absolute
+    # heading); linear acceleration is OFF (accel double-integration drift).
+    imu0: /imu
+    imu0_config: [false, false, false,
+                  false, false, false,
+                  false, false, false,
+                  false, false, true,
+                  false, false, false]
+    imu0_queue_size: 10
+    imu0_differential: false
+    imu0_relative: false
+    # The OAK IMU reports the gravity vector in linear_acceleration; with both
+    # accel fusion and two_d_mode off for accel this is moot, but keep gravity
+    # removal off so nothing tries to subtract it on a field we do not fuse.
+    imu0_remove_gravitational_acceleration: false
+
+    # --- Process noise --------------------------------------------------------
+    # Diagonal only. Larger entries = the filter trusts the model less and the
+    # measurements more. Yaw and vyaw are bumped up relative to translation so
+    # the IMU gyro can pull the heading quickly; x/y/vx/vy are left at modest
+    # values so the wheel translation is smoothed but still followed. Rows for
+    # z/roll/pitch and their rates are kept small (two_d_mode pins them to
+    # zero, but a nonzero entry avoids a singular covariance).
+    process_noise_covariance: [0.05, 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+                               0.0,  0.05, 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+                               0.0,  0.0,  0.02, 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+                               0.0,  0.0,  0.0,  0.02, 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+                               0.0,  0.0,  0.0,  0.0,  0.02, 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+                               0.0,  0.0,  0.0,  0.0,  0.0,  0.1,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+                               0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.05, 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+                               0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.05, 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+                               0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.02, 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+                               0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.02, 0.0,  0.0,  0.0,  0.0,  0.0,
+                               0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.02, 0.0,  0.0,  0.0,  0.0,
+                               0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.1,  0.0,  0.0,  0.0,
+                               0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.02, 0.0,  0.0,
+                               0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.02, 0.0,
+                               0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.02]
+
+    # --- Initial estimate covariance -----------------------------------------
+    # Diagonal. Start moderately uncertain; the filter tightens as measurements
+    # arrive. Kept consistent with the process noise scale above.
+    initial_estimate_covariance: [1e-3, 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+                                  0.0,  1e-3, 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+                                  0.0,  0.0,  1e-3, 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+                                  0.0,  0.0,  0.0,  1e-3, 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+                                  0.0,  0.0,  0.0,  0.0,  1e-3, 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+                                  0.0,  0.0,  0.0,  0.0,  0.0,  1e-3, 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+                                  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  1e-3, 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+                                  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  1e-3, 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+                                  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  1e-3, 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+                                  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  1e-3, 0.0,  0.0,  0.0,  0.0,  0.0,
+                                  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  1e-3, 0.0,  0.0,  0.0,  0.0,
+                                  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  1e-3, 0.0,  0.0,  0.0,
+                                  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  1e-3, 0.0,  0.0,
+                                  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  1e-3, 0.0,
+                                  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  1e-3]
