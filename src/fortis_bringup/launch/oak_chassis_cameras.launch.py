@@ -11,53 +11,21 @@ runs regardless of USB enumeration order. Discovery only spawns the cameras that
 are actually plugged in. TF attach to the robot URDF is deferred (the independent
 RGB + depth image panels don't need it).
 
-Params come from config/oak_chassis_front.yaml (the tested capture config), read
-once and re-applied to every node as a node-scoped dict so the values are a single
-source of truth across the single-cam and multi-cam launches.
+Params come from config/oak_chassis_cameras.yaml (the tested capture config),
+loaded once via fortis_bringup.camera_params.load_camera_params() and re-applied
+to every node as a node-scoped dict so the values are a single source of truth
+across the single-cam and multi-cam launches.
 
 Pairs with foxglove_bridge; load foxglove/fortis_chassis_cams.json (4-tab toggle,
 one camera per tab -> only the active camera streams).
 """
 
-import os
-
-import yaml
-from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import LogInfo, OpaqueFunction
 from launch_ros.actions import ComposableNodeContainer
 from launch_ros.descriptions import ComposableNode
 
-
-def _deep_merge(base, extra):
-    """Recursively merge ``extra`` into ``base`` (nested dicts merged, not replaced)."""
-    for key, value in extra.items():
-        if isinstance(value, dict) and isinstance(base.get(key), dict):
-            _deep_merge(base[key], value)
-        else:
-            base[key] = value
-
-
-def _load_camera_params():
-    """Return the tested front config as a NODE-SCOPED param dict.
-
-    The yaml is keyed to one node name (``/oak_chassis_front``) and nests its
-    image_transport block under that same node name. We strip both so the dict
-    applies under any node name -- which is how launch_ros applies a plain dict
-    passed in ``parameters=[...]``.
-    """
-    params_file = os.path.join(
-        get_package_share_directory("fortis_bringup"),
-        "config",
-        "oak_chassis_front.yaml",
-    )
-    with open(params_file) as handle:
-        raw = yaml.safe_load(handle)
-    cfg = next(iter(raw.values()))["ros__parameters"]
-    # The transport block is keyed by the node name; re-scope it node-agnostically.
-    transport = cfg.pop("oak_chassis_front", {})
-    _deep_merge(cfg, transport)
-    return cfg
+from fortis_bringup.camera_params import load_camera_params
 
 
 def _discover_device_ids():
@@ -120,7 +88,7 @@ CAMERA_ROSTER = {
 
 
 def _spawn_cameras(context):
-    camera_params = _load_camera_params()
+    camera_params = load_camera_params()
     device_ids = _discover_device_ids()
     if not device_ids:
         return [LogInfo(msg="[oak_chassis_cameras] no OAK devices found -- nothing to start.")]
