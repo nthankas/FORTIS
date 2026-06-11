@@ -16,6 +16,14 @@
       "leftButton": { "field": "angular-z", "value": 0.4 },
       "rightButton": { "field": "angular-z", "value": -0.4 }
     },
+    "Teleop!orbit": {
+      "topic": "/fortis/commands/orbit_dir",
+      "publishRate": 10,
+      "upButton": { "field": "angular-z", "value": 0 },
+      "downButton": { "field": "angular-z", "value": 0 },
+      "leftButton": { "field": "angular-z", "value": 1 },
+      "rightButton": { "field": "angular-z", "value": -1 }
+    },
     "Publish!arm": {
       "buttonText": "ENABLE DRIVE",
       "buttonTooltip": "Publishes std_msgs/Bool true on /fortis/commands/drive_enable. drive_enable_node activates wheel_velocity_controller (ODrives -> CLOSED_LOOP_CONTROL).",
@@ -115,19 +123,24 @@
         "first": "Teleop!rotate",
         "second": {
           "direction": "column",
-          "first": {
-            "direction": "row",
-            "first": "Publish!arm",
-            "second": "Publish!startorbit",
-            "splitPercentage": 50
-          },
+          "first": "Teleop!orbit",
           "second": {
-            "direction": "row",
-            "first": "Publish!disarm",
-            "second": "Publish!stop",
+            "direction": "column",
+            "first": {
+              "direction": "row",
+              "first": "Publish!arm",
+              "second": "Publish!startorbit",
+              "splitPercentage": 50
+            },
+            "second": {
+              "direction": "row",
+              "first": "Publish!disarm",
+              "second": "Publish!stop",
+              "splitPercentage": 50
+            },
             "splitPercentage": 50
           },
-          "splitPercentage": 50
+          "splitPercentage": 40
         },
         "splitPercentage": 42
       },

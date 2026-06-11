@@ -51,6 +51,7 @@ Args
     port:=8765                 foxglove_bridge WebSocket port
     localization:=false        forward to bringup: wheel odometry + EKF
     heading_hold:=false        forward to bringup: closed-loop heading hold
+    orbit:=false               forward to bringup: held ORBIT button -> face-center orbit
 """
 
 from launch import LaunchDescription
@@ -67,6 +68,7 @@ def generate_launch_description():
     port = LaunchConfiguration("port")
     localization = LaunchConfiguration("localization")
     heading_hold = LaunchConfiguration("heading_hold")
+    orbit = LaunchConfiguration("orbit")
 
     drive_hw = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(PathJoinSubstitution([
@@ -89,6 +91,7 @@ def generate_launch_description():
         launch_arguments={
             "localization": localization,
             "heading_hold": heading_hold,
+            "orbit": orbit,
         }.items(),
     )
 
@@ -142,6 +145,11 @@ def generate_launch_description():
             "heading_hold",
             default_value="false",
             description="Forward to bringup: closed-loop heading hold (needs localization:=true).",
+        ),
+        DeclareLaunchArgument(
+            "orbit",
+            default_value="false",
+            description="Forward to bringup: run orbit_node (held ORBIT button -> face-center orbit).",
         ),
         drive_hw,
         bringup,

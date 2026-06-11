@@ -64,6 +64,12 @@ def generate_launch_description():
         "'/cmd_vel_heading' if '", heading_hold, "' == 'true' else '/cmd_vel'",
     ])
 
+    # Opt-in orbit generator. Off by default. When true, orbit_node runs and a
+    # held Foxglove ORBIT button streams a face-the-center orbit on /cmd_vel --
+    # which flows through heading_hold (if enabled) then drive_node, exactly
+    # like a teleop command.
+    orbit = LaunchConfiguration("orbit")
+
     mission_state_node = Node(
         package='fortis_safety',
         executable='mission_state_node',
@@ -94,6 +100,20 @@ def generate_launch_description():
         output='screen',
         parameters=[bringup_params],
         condition=IfCondition(heading_hold),
+    )
+
+    # Hold-to-run, face-the-center orbit generator. Only launched when
+    # orbit:=true. A held Foxglove ORBIT button streams /fortis/commands/orbit_dir,
+    # which orbit_node converts into a continuous face-center /cmd_vel (strafe +
+    # yaw=v/R). drive_node gates and sign-corrects it like any teleop command.
+    # Speed / radius / omega_sign come from bringup_params.yaml (orbit_node).
+    orbit_node = Node(
+        package='fortis_drive',
+        executable='orbit_node',
+        name='orbit_node',
+        output='screen',
+        parameters=[bringup_params],
+        condition=IfCondition(orbit),
     )
 
     # Wraps the controller_manager switch_controller service behind a
@@ -148,10 +168,21 @@ def generate_launch_description():
                 "/cmd_vel directly and behaviour is unchanged."
             ),
         ),
+        DeclareLaunchArgument(
+            "orbit",
+            default_value="false",
+            description=(
+                "Run orbit_node: a held Foxglove ORBIT button streams a "
+                "face-the-center orbit /cmd_vel (open-loop; radius/speed from "
+                "bringup_params.yaml). Off by default; the chassis_orbit "
+                "launch sets it true."
+            ),
+        ),
         mission_state_node,
         drive_node,
         drive_enable_node,
         odrive_health_monitor_node,
         heading_hold_node,
+        orbit_node,
         localization_include,
     ])
