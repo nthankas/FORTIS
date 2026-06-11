@@ -94,10 +94,10 @@ orbit_node:
     orbit_speed: 0.1
     # Orbit radius (m). Arbitrary for now; smaller R => faster yaw (omega = v/R).
     orbit_radius: 1.0
-    # Yaw-direction boundary correction. +1.0 is the starting guess; flip to
-    # -1.0 on the bench if the robot orbits facing OUTWARD instead of toward the
-    # center (or just swap the two ORBIT buttons in Foxglove).
-    omega_sign: 1.0
+    # Yaw-direction boundary correction. Bench-verified 2026-06-11: -1.0 makes
+    # the FRONT (cameras) face the orbit center; +1.0 orbited facing OUTWARD
+    # (back toward the center post). Flip only if the mounting/convention changes.
+    omega_sign: -1.0
     # Held-command dead-man (s): no orbit_dir within this window => button
     # released => stop. Shorter than drive_node's 0.5 s watchdog for a crisp
     # release-to-stop.
