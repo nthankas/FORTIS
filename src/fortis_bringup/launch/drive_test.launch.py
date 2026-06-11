@@ -149,7 +149,7 @@ def generate_launch_description():
         DeclareLaunchArgument(
             "orbit",
             default_value="false",
-            description="Forward to bringup: run orbit_node (held ORBIT button -> face-center orbit).",
+            description="Forward to bringup: run orbit_node (held ORBIT button -> orbit).",
         ),
         drive_hw,
         bringup,
