@@ -83,6 +83,28 @@ heading_hold_node:
     # feedback to the max_omega clamp).
     yaw_sign: 1.0
 
+orbit_node:
+  ros__parameters:
+    # orbit_node DOES declare_parameter() for each of these, so this block is a
+    # LIVE override (like heading_hold_node), not documentation. orbit_node runs
+    # only when bringup is started with orbit:=true (the chassis_orbit launch).
+    #
+    # Tangential orbit speed (m/s at the contact patch). 0.1 is deliberately
+    # slow: open-loop omni motion drifts, so the first bring-up crawls.
+    orbit_speed: 0.1
+    # Orbit radius (m). Arbitrary for now; smaller R => faster yaw (omega = v/R).
+    orbit_radius: 1.0
+    # Yaw-direction boundary correction. +1.0 is the starting guess; flip to
+    # -1.0 on the bench if the robot orbits facing OUTWARD instead of toward the
+    # center (or just swap the two ORBIT buttons in Foxglove).
+    omega_sign: 1.0
+    # Held-command dead-man (s): no orbit_dir within this window => button
+    # released => stop. Shorter than drive_node's 0.5 s watchdog for a crisp
+    # release-to-stop.
+    cmd_timeout_s: 0.3
+    # /cmd_vel publish rate (Hz) while orbiting.
+    publish_rate_hz: 20.0
+
 arm_controller:
   ros__parameters:
     # Reject-warning throttle interval, seconds. Same role as

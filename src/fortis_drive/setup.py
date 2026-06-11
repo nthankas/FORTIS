@@ -27,6 +27,7 @@ setup(
             'drive_node = fortis_drive.drive_node:main',
             'drive_enable_node = fortis_drive.drive_enable_node:main',
             'heading_hold_node = fortis_drive.heading_hold_node:main',
+            'orbit_node = fortis_drive.orbit_node:main',
         ],
     },
 )
