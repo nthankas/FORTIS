@@ -28,16 +28,16 @@ use oak_chassis_cameras.launch.py. VIO / localization are out of scope.
 Pairs with robot_state_publisher (FORTIS URDF) + foxglove_bridge.
 """
 
-import os
-
-from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch_ros.actions import ComposableNodeContainer, Node
 from launch_ros.descriptions import ComposableNode
 
+from fortis_bringup.camera_params import load_camera_params
 
-# Must match the top-level key in config/oak_chassis_front.yaml, or the driver
-# silently ignores the params file and runs on its own defaults.
+
+# The node name for this single (front) camera. The shared capture config is
+# loaded as a node-agnostic dict via load_camera_params(), so it no longer has
+# to match a key in the yaml -- see fortis_bringup.camera_params.
 CAMERA_NAME = "oak_chassis_front"
 
 # The URDF link this camera is mounted on (fortis_description chassis xacro).
@@ -46,11 +46,7 @@ PARENT_FRAME = "front_camera_link"
 
 
 def generate_launch_description():
-    params_file = os.path.join(
-        get_package_share_directory("fortis_bringup"),
-        "config",
-        "oak_chassis_front.yaml",
-    )
+    camera_params = load_camera_params()
 
     # TF params. i_publish_tf_from_calibration makes the Driver publish the
     # camera-internal optical frames, rooted at i_tf_base_frame (CAMERA_NAME).
@@ -75,7 +71,7 @@ def generate_launch_description():
                 package="depthai_ros_driver_v3",
                 plugin="depthai_ros_driver::Driver",
                 name=CAMERA_NAME,
-                parameters=[params_file, driver_params],
+                parameters=[camera_params, driver_params],
             ),
         ],
         output="both",

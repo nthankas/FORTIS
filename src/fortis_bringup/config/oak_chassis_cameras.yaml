@@ -1,16 +1,23 @@
-# depthai_ros_driver_v3 parameters for a FORTIS chassis OAK-D Lite.
+# Shared depthai_ros_driver_v3 capture config for the FORTIS chassis OAK-D Lites.
+#
+# ONE config for all four identical units. The primary bring-up
+# (oak_chassis_cameras.launch.py) starts every connected OAK with these values;
+# the single-camera front debug launch (oak_chassis_front.launch.py) uses the
+# same config. Both read it through fortis_bringup.camera_params.load_camera_params(),
+# which returns a NODE-AGNOSTIC param dict -- so this file is never tied to one
+# camera. The top-level key below is a POSITIONAL placeholder (the loader reads
+# the single ros__parameters block by position; the key name is ignored), which
+# is why it is "/**" and not a node name.
 #
 # Driver: depthai-ros v3 (ros-humble-depthai-ros-v3, ROS 2 *testing* apt repo).
-# v3 dialect: i_nn_type under pipeline_gen; device serial is driver.i_device_id;
-# depth align is stereo.i_aligned; resolution is i_width/i_height; depth tuning
-# via stereo.i_depth_preset. The top-level key MUST equal the node name or the
-# driver silently runs on defaults (verify with `ros2 param get`). The multi-cam
-# launch (oak_chassis_cameras.launch.py) re-applies these same values per device
-# as a node-scoped dict, so they work under any node name there.
+# v3 dialect: i_nn_type under pipeline_gen; device serial is driver.i_device_id
+# (pinned per camera by the multi-cam launch's roster); depth align is
+# stereo.i_aligned; resolution is i_width/i_height; depth tuning via
+# stereo.i_depth_preset.
 #
 # Mode: two INDEPENDENT streams -- on-device MJPEG-encoded RGB + regular (aligned
 # 16UC1) depth. No RGBD cloud (i_enable_rgbd false); fusion is a later task.
-# IMU on. Scope: one OAK-D Lite; no VIO, no localization.
+# IMU on. Scope: chassis OAK-D Lites; no VIO, no localization.
 #
 # Capture/timing is frozen-as-tested -- only the cloud and the RGB transport
 # changed. The fps/resolution/sync below must not drift or the depth<->color
@@ -22,11 +29,11 @@
 # Lite doesn't wire color/stereo FSIN; OV7251 FSYNC unimplemented in FW), so
 # i_fsync_* is a no-op -- matched i_fps below IS the per-camera sync. Across the
 # 4 cameras we rely on the shared ROS clock (approx), not hardware sync.
-/oak_chassis_front:
+/**:
   ros__parameters:
     # No driver.i_device_id here: the single-camera launch grabs the only OAK on
-    # the bus. The multi-cam launch pins each node by serial. TF base/parent come
-    # from the launch file.
+    # the bus; the multi-cam launch pins each node by serial. TF base/parent come
+    # from the launch files.
     pipeline_gen:
       i_pipeline_type: rgbd     # "RGBD" = publish RGB + Depth streams (NOT the cloud)
       i_enable_rgbd: false      # no fused/registered cloud -- streams stay independent
@@ -67,10 +74,11 @@
     # (RGB needs no entry here: i_publish_compressed already makes it a single
     # CompressedImage(jpeg) topic, not a raw image with transport plugins.)
     #
-    # NOTE: this block is keyed by the NODE NAME. For the single-cam front launch
-    # that is oak_chassis_front. The multi-cam launch strips this key and applies
-    # it node-scoped, so it follows whatever the per-device node is named.
-    oak_chassis_front:
+    # NOTE: this block is NOT a node name. load_camera_params() strips the
+    # "image_transport" key and folds its contents (stereo.image_raw.*) up into
+    # the node params, so the plugin list applies under whatever camera node name
+    # the launch assigns -- front, rear, left, or right.
+    image_transport:
       stereo:
         image_raw:
           enable_pub_plugins:
