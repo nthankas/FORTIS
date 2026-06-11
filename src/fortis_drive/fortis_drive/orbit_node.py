@@ -73,10 +73,10 @@ DEFAULT_ORBIT_SPEED: float = 0.1
 #: Smaller R => the robot must yaw faster (omega = v / R) to keep facing center.
 DEFAULT_ORBIT_RADIUS: float = 1.0
 
-#: Boundary sign correction for the yaw direction (see module docstring). +1.0
-#: is the starting guess; flip to -1.0 on the bench if the robot orbits facing
-#: outward instead of toward the center.
-DEFAULT_OMEGA_SIGN: float = 1.0
+#: Boundary sign correction for the yaw direction (see module docstring).
+#: Bench-verified 2026-06-11: -1.0 makes the FRONT (cameras) face the orbit
+#: center; +1.0 orbited facing outward (back toward the center post).
+DEFAULT_OMEGA_SIGN: float = -1.0
 
 #: Held-command dead-man timeout (s). No orbit_dir within this window => the
 #: button was released => stop. Shorter than drive_node's 0.5 s watchdog so
