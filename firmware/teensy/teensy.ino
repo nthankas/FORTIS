@@ -4,7 +4,8 @@
 //
 // Drives:
 //   - J1, J2, J3: NEMA-23 closed-loop steppers via CL57T-V41 drivers
-//                 (3.3V Teensy outputs are level-shifted to 5V by SN74HCT245N)
+//                 (3.3V Teensy outputs are level-shifted to 5V by a TXS0108E
+//                  auto-direction translator on the level-shifter board)
 //   - J4:        Hitec D845WP servo on hardware PWM
 //   - Gripper:   generic hobby servo on hardware PWM
 //
@@ -34,7 +35,7 @@ using TS4::StepperGroup;
 // Pin map (must match PROTOCOL.md section 1)
 // ---------------------------------------------------------------------------
 
-// Stepper STEP/DIR (3V3 outputs, level-shifted to 5V via SN74HCT245N #1)
+// Stepper STEP/DIR (3V3 outputs, level-shifted to 5V via TXS0108E shifter)
 #define PIN_J1_STEP         2
 #define PIN_J1_DIR          3
 #define PIN_J2_STEP         4
@@ -49,11 +50,16 @@ using TS4::StepperGroup;
 #define PIN_J4_SERVO        28
 #define PIN_GRIPPER_SERVO   29
 
-// SN74HCT245N #1 control (forward path, A->B, 3V3->5V)
-#define PIN_HCT245_OE_N     14   // active-low; high = outputs Hi-Z
-#define PIN_HCT245_DIR      15   // tied high in firmware = A->B
+// Level-shifter control (TXS0108E auto-direction translator).
+// OE is ACTIVE-HIGH on TXS0108E: drive HIGH to enable, LOW for Hi-Z.
+// (TI datasheet SCES642H: "Pull OE low to place all outputs in 3-state mode".)
+// There is no DIR pin -- each channel auto-senses direction -- so the
+// pin formerly used for DIR (15) is now unused and intentionally left as an
+// input on this board. Do not drive it; it may be repurposed later.
+#define PIN_LS_OE           14   // active-HIGH on TXS0108E; HIGH = enabled
+// #define PIN_LS_DIR       15   // RESERVED: was DIR on SN74HCT245N, unused on TXS0108E
 
-// Driver alarm inputs (5V open-collector; arrives via SN74HCT245N #2 B->A)
+// Driver alarm inputs (5V open-collector; arrives via a second TXS0108E shifter)
 #define PIN_J1_ALM          22
 #define PIN_J2_ALM          23
 #define PIN_J3_ALM          20
@@ -520,9 +526,10 @@ static void applyDriverEnable(bool enable) {
 #if MOCK_MODE
     Serial.print(F("[MOCK] driver_enable=")); Serial.println(enable ? 1 : 0);
 #else
-    // CL57T-V41 ENA- is active-low. The HCT245 inverts logic? No — the '245
-    // is a buffer, not an inverter. So drive PIN_DRV_ENABLE *low* to assert
-    // ENA-. The driver datasheet inverts this depending on common-anode vs
+    // CL57T-V41 ENA- is active-low. The TXS0108E shifter is a
+    // bidirectional translator, not an inverter -- it passes logic levels
+    // through unchanged. So drive PIN_DRV_ENABLE *low* to assert ENA-.
+    // The driver datasheet inverts this depending on common-anode vs
     // common-cathode wiring of the optocoupler; verify on bench.
     digitalWriteFast(PIN_DRV_ENABLE, enable ? LOW : HIGH);
 #endif
@@ -770,12 +777,20 @@ static void handleFrame(uint8_t seq, uint8_t type,
 // Periodic services
 // ---------------------------------------------------------------------------
 
-// Teensy 4.1 has an internal temperature sensor available via tempmonGetTemp()
-// in newer cores. Returned in 0.1 C units. TODO: replace stub with real call
-// once the target Arduino core is pinned.
+// Teensy 4.1 has an internal MCU temperature sensor. tempmonGetTemp() is
+// provided by the Teensyduino 1.5x+ core for IMXRT1062 and returns degrees
+// Celsius as a float. We convert to int16_t in 0.1 C units for the
+// RSP_STATUS payload (see PROTOCOL.md S3.10). The sensor reports NaN very
+// briefly at boot before the on-die temp monitor stabilises -- treat that
+// as "unknown / cold" so it can't accidentally trip FAULT_OVER_TEMP.
 static int16_t readMcuTempC10() {
-    // TODO: return (int16_t)(tempmonGetTemp() * 10.0f);
+#if MOCK_MODE
     return 0;
+#else
+    float t = tempmonGetTemp();
+    if (isnan(t)) return 0;
+    return (int16_t)(t * 10.0f);
+#endif
 }
 
 static void scanFaults() {
@@ -861,11 +876,11 @@ void setup() {
     pinMode(PIN_DRV_ENABLE, OUTPUT);
     digitalWriteFast(PIN_DRV_ENABLE, HIGH);  // disabled at boot
 
-    // Level shifter: DIR=high (A->B), OE held high (Hi-Z) until pins are set
-    pinMode(PIN_HCT245_OE_N, OUTPUT);
-    pinMode(PIN_HCT245_DIR, OUTPUT);
-    digitalWriteFast(PIN_HCT245_OE_N, HIGH);
-    digitalWriteFast(PIN_HCT245_DIR, HIGH);
+    // Level shifter: OE is active-HIGH on TXS0108E. Hold LOW (Hi-Z) until
+    // STEP/DIR/ENA pins are at known states, then raise HIGH to enable.
+    // No DIR pin on this shifter; pin 15 is reserved/unused.
+    pinMode(PIN_LS_OE, OUTPUT);
+    digitalWriteFast(PIN_LS_OE, LOW);   // Hi-Z (disabled) at boot
 
     pinMode(PIN_J1_ALM, INPUT_PULLUP);
     pinMode(PIN_J2_ALM, INPUT_PULLUP);
@@ -892,7 +907,8 @@ void setup() {
 
 #if !MOCK_MODE
     // Now that step/dir lines are at known states, enable the level shifter.
-    digitalWriteFast(PIN_HCT245_OE_N, LOW);
+    // TXS0108E OE is active-HIGH: HIGH = enabled, LOW = Hi-Z.
+    digitalWriteFast(PIN_LS_OE, HIGH);
 
     // Push servo defaults out immediately so they don't twitch on first move.
     g_j4_servo.writeMicroseconds(g_state.j4_us);
