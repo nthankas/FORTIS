@@ -11,7 +11,8 @@ prints the slave-side path on startup, and then runs a tiny event loop that:
 * ACKs other commands (NAKs malformed ones)
 * integrates joint motion at constant velocity between status polls so that
   ``RSP_STATUS`` reflects "moving" steppers
-* tracks the heartbeat watchdog and emits ``EVT_FAULT`` after a 250 ms timeout
+* tracks the heartbeat watchdog (armed by the first inbound CMD) and emits
+  ``EVT_FAULT`` after a 250 ms timeout
 * can inject a synthetic fault on demand for host-side test coverage
 
 How to use
@@ -239,7 +240,10 @@ class MockState:
         int(StateBit.ENABLED) | int(StateBit.HOMED_J1) | int(StateBit.HOMED_J2)
         | int(StateBit.HOMED_J3)
     )
-    last_heartbeat: float = field(default_factory=time.monotonic)
+    # None until the first inbound CMD arms the watchdog. HANDOFF S8.2:
+    # arming at MockState.__init__ caused spurious EVT_FAULT(HEARTBEAT_TIMEOUT)
+    # on the host's first connect if it took >250 ms to attach.
+    last_heartbeat: float | None = None
     last_motion_update: float = field(default_factory=time.monotonic)
     boot_time: float = field(default_factory=time.monotonic)
 
@@ -443,7 +447,11 @@ class MockTeensy:
     def tick(self, now: float) -> None:
         self._state.integrate(now)
 
-        if (now - self._state.last_heartbeat) > HEARTBEAT_TIMEOUT_S:
+        # Watchdog is disarmed until the host sends its first CMD (see
+        # MockState.last_heartbeat). Skip the timeout check while disarmed
+        # so attaching to the pty doesn't race a spurious fault.
+        if self._state.last_heartbeat is not None and \
+           (now - self._state.last_heartbeat) > HEARTBEAT_TIMEOUT_S:
             if not (self._state.fault_flags & int(Fault.HEARTBEAT_TIMEOUT)):
                 self._log("heartbeat timeout -> EVT_FAULT")
                 self._emit_fault(int(Fault.HEARTBEAT_TIMEOUT))

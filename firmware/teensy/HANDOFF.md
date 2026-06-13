@@ -22,7 +22,7 @@ URDF). You own the firmware, the protocol document, and the mock.
 
 - `src/**` — ROS 2 packages (Nikhil + Claude)
 - `sim/**` — Gazebo / Mujoco models
-- `urdf/**` — robot description
+- `src/fortis_description/**` — robot description (URDF lives here now, was top-level `urdf/` before)
 - The future Jetson-side serial bridge node (will live under `src/`) — not yet written
 
 If you find a bug that crosses the boundary (e.g., the host driver sends a
@@ -32,7 +32,7 @@ malformed frame), flag it; don't fix it yourself.
 
 - **MCU:** Teensy 4.1 (iMXRT1062, 600 MHz, 3.3 V logic)
 - **J1, J2, J3:** NEMA-23 closed-loop steppers via **CL57T-V41** drivers (step/dir/ena, optoisolated 5 V inputs)
-- **Level shifters:** **SN74HCT245N** — one for outbound STEP/DIR/ENA (A→B, 3.3 V→5 V), one for inbound ALM (B→A, 5 V→3.3 V)
+- **Level shifters:** **TI TXS0108E** 8-bit bidirectional auto-direction translator (marking `YF08E`) — one outbound for STEP/DIR/ENA (3.3 V→5 V), one inbound for ALM (5 V→3.3 V). OE is active-HIGH; no DIR pin. B-side outputs are open-drain (1.2 Mbps cap per TI SCES642H); STEP at ~64 kHz is well within spec. The push-pull TXB0108 is a drop-in firmware-compatible alternative if open-drain edges turn out to be too soft.
 - **J4:** Hitec D845WP servo, hardware PWM @ 50 Hz, 500–2500 µs
 - **Gripper:** generic hobby servo, hardware PWM @ 50 Hz, 1000–2000 µs
 - **Host link:** USB CDC serial, 1 000 000 baud
@@ -51,7 +51,8 @@ update PROTOCOL.md §1 and the `#define` block at the top of `teensy.ino` togeth
 | Shared driver ENABLE (active-low) | 9 |
 | J4 servo (FlexPWM3.1.B) | 28 |
 | Gripper servo (FlexPWM3.1.A) | 29 |
-| SN74HCT245N /OE / DIR | 14 / 15 |
+| Level-shifter OE (active-HIGH) | 14 |
+| (reserved; was SN74HCT245N DIR) | 15 |
 | External E-STOP (active-low, pull-up) | 21 |
 | Status LED | 13 (built-in) |
 
@@ -100,54 +101,45 @@ ID. Send me a Slack msg or open a PR comment so I can mirror it on the host side
 
 ## 8. Known blockers
 
-### 8.1 TeensyStep doesn't compile against the current Teensy core — **RESOLVED 2026-05-26**
+### 8.1 [RESOLVED 2026-05-20] TeensyStep didn't compile against the modern Teensy core
 
-Resolved via Option 1 below: TeensyStep4 (luni64 @ 42e1f69) vendored at `firmware/teensy/lib/TeensyStep4/` (commit `18d3df7`), `teensy.ino` adapted to the TeensyStep4 API (commit `f6d4dd4`), and a bench flash verified the resolution (commit `dd098cf`). The notes below are preserved for historical context.
+**Status:** Resolved by swapping to TeensyStep4 (see commits on
+`feat/teensy-protocol`). Kept here as a historical note so the next person
+who hits a similar pattern has the context.
 
-This was upstream library breakage, not anything wrong with `teensy.ino`.
+**Original problem:** TeensyStep 2.3.4 (the only version in the Arduino
+library registry) gated its Teensy 4 implementation on `__IMXRT1052__`,
+but Teensy core 1.60.0 defines `__IMXRT1062__` (the actual MIMXRT1062
+chip). It also called `dwt_getCycles()`, which the new core no longer
+provides. Result: `#include <TeensyStep.h>` failed to compile at all.
 
-- **TeensyStep 2.3.4** (the only version in the Arduino library registry) gates
-  its Teensy 4 implementation on `__IMXRT1052__`
-- **Teensy core 1.60.0** defines `__IMXRT1062__` (the actual MIMXRT1062 chip)
-- TeensyStep also calls `dwt_getCycles()`, which the new core no longer provides
+**What we did:** Vendored `luni64/TeensyStep4` (the same author's
+Teensy-4-specific successor library) into `firmware/teensy/lib/TeensyStep4/`
+at upstream commit `42e1f69`. Adapted the firmware to its API:
+`using TS4::Stepper`, `StepperGroup g_motion{g_j1,g_j2,g_j3}`,
+`TS4::begin()` in `setup()`, `motionRunning()` helper in place of
+`StepControl::isRunning()`. Wrapped `#include <teensystep4.h>` and the
+Stepper declarations in `#if !MOCK_MODE` so desktop mock builds don't
+need the library.
 
-Result: `#include <TeensyStep.h>` itself fails to compile. Setting `MOCK_MODE=1`
-does NOT help — the include is unconditional in the current `teensy.ino`.
+### 8.2 [RESOLVED 2026-05-20] Mock watchdog used to arm at startup
 
-**Three options, in order of recommendation:**
-
-1. **Vendor a patched TeensyStep into `firmware/teensy/lib/TeensyStep/`.**
-   The fix on the upstream `next` branch (or community forks like `tni/TeensyStep`)
-   has the iMXRT1062 + cycle-counter fixes. Pin a known-good commit. Lowest risk
-   to the rest of the codebase.
-2. **Pin the Teensy core to ≤1.57.x.** Quick, but blocks any other Teensy 4.1
-   work that benefits from newer core features. Not a long-term fix.
-3. **Switch to AccelStepper or TMCStepper.** Lots of churn — would mean rewriting
-   the J1/J2/J3 motion code in `teensy.ino`. Only do this if option 1 turns out
-   to be a maintenance burden.
-
-Whichever path you pick: also wrap `#include <TeensyStep.h>` and the
-`Stepper`/`StepControl` declarations in `#if !MOCK_MODE` so we can at least exercise
-the protocol/serial path with `MOCK_MODE=1` from a desktop without the library.
-
-### 8.2 Mock watchdog arms at startup
-
-`tools/mock_teensy.py` starts its 250 ms heartbeat watchdog inside
-`MockState.__init__`. A host that takes >250 ms to attach sees a spurious
-`EVT_FAULT(FAULT_HEARTBEAT_TIMEOUT)` arrive before its first command. Cosmetic
-in normal operation, annoying for tests.
-
-**Fix:** defer arming the watchdog until the first inbound CMD is received.
-Trivial change; do this when you're in the file for something else.
+**Status:** Fixed on `fix/teensy-level-shifter`. `MockState.last_heartbeat`
+is now `Optional[float]`, initialized to `None`. The first inbound CMD
+arms the watchdog via the existing setter in `_handle()` (no behavior
+change once armed); `tick()` skips the timeout check while `None`. Hosts
+that take longer than 250 ms to attach no longer see a spurious
+`EVT_FAULT(HEARTBEAT_TIMEOUT)` before their first command.
 
 ## 9. TODOs flagged in teensy.ino (search `// TODO`)
 
-| Symbol / location | What's missing |
+| Symbol / location | Status / what's missing |
 |---|---|
-| `handleHomeRequest` | Stubbed, NAKs with `ERR_NOT_IMPLEMENTED`. Needs per-joint move-until-ALM-or-limit-switch + back-off + `setPosition(0)`. |
-| `readMcuTempC10` | Returns 0. Wire to `tempmonGetTemp() * 10.0f` once Teensyduino core version is pinned. |
-| `CMD_SET_JOINT_VELOCITIES` | Currently uses `abs()` for `setMaxSpeed`. Pure-velocity (continuous run) mode is not implemented — TeensyStep's `RotateControl` is the right primitive. |
-| `clamp_to_limits` flag in `CMD_SET_JOINT_TARGETS` | Parsed but ignored. Joint software limits aren't defined yet. Define limits per joint (likely matches whatever Nikhil documents in URDF — ask before guessing). |
+| `handleHomeRequest` (J1/J2/J3 steppers) | Stepper homing still NAKs `ERR_NOT_IMPLEMENTED`. Needs per-joint move-until-ALM + back-off + `setPosition(0)` using TeensyStep4's `rotateAsync()` primitive. |
+| `handleHomeRequest` (J4 servo) | ✅ Done as of `feat(teensy): CMD_HOME_REQUEST now handles J4 servo`. Mask bit 3 → write `kJ4HomeUs` to the servo. Gripper (mask bit 4) still NAKs until the gripper's safe range is characterized in `tests/servo_sweep/`. |
+| `readMcuTempC10` | ✅ Done. Now wraps `tempmonGetTemp()` (with NaN guard for the brief boot-time window). MOCK_MODE still returns 0. |
+| `CMD_SET_JOINT_VELOCITIES` | Currently uses `abs()` for `setMaxSpeed`. True velocity-mode (continuous run) is not implemented; in TeensyStep4 the right primitive is `stepper.rotateAsync(v)` rather than the old `RotateControl`. |
+| `clamp_to_limits` flag in `CMD_SET_JOINT_TARGETS` | Parsed but ignored. Per-joint software limits aren't defined yet. The URDF in `src/fortis_description/` now exists upstream — ask Nikhil for the canonical joint limits before hard-coding values here. |
 | `PIN_DRV_ENABLE` polarity | Whether the CL57T-V41 ENA optocoupler is common-anode or common-cathode determines the polarity. **Verify on the bench with a multimeter before powering motors.** |
 
 ## 10. What's left to test / integrate
@@ -155,9 +147,9 @@ Trivial change; do this when you're in the file for something else.
 In rough order — don't start later items before earlier ones unless you have a
 reason.
 
-1. **Resolve §8.1** so `arduino-cli compile` succeeds.
+1. ✅ **Resolve §8.1** (done — see §8.1 history). `arduino-cli compile` has not been re-attempted yet; Arduino IDE 2.3.8 compile path verified instead.
 2. **Compile + upload to a real Teensy 4.1.** Confirm the LED blinks (heartbeat indicator) and that USB serial enumerates at 1 Mbaud.
-3. **Scope STEP/DIR signals at the SN74HCT245N B-side outputs** before connecting drivers. Verify clean 5 V edges at the expected pin map. Catches level-shifter wiring bugs without smoking a driver.
+3. **Scope STEP/DIR signals at the TXS0108E B-side outputs** before connecting drivers. Verify clean 5 V edges at the expected pin map. Catches level-shifter wiring bugs without smoking a driver. TXS0108E B-side is open-drain — if edges look soft under capacitive load, add ~10 k pull-ups on the 5 V side per TI's datasheet.
 4. **Wire one driver (J1).** Verify ENA polarity with a multimeter (see §9). Move the joint slowly with a `CMD_SET_JOINT_TARGETS` from the host (use the mock's host-side test client as a starting point).
 5. **Force a driver fault** (e.g., disconnect a motor phase) and verify `FAULT_DRIVER_ALARM_J1` is raised in `RSP_STATUS` and an `EVT_FAULT` is emitted.
 6. **Repeat for J2, J3.**
@@ -169,7 +161,7 @@ reason.
 
 ## 11. Working locally
 
-- **Edit / build:** Arduino IDE 2.x with Teensyduino, OR `arduino-cli` once §8.1 is unblocked. Everything should compile from `firmware/teensy/teensy.ino` standalone.
+- **Edit / build:** Arduino IDE 2.x with Teensyduino (verified path). `arduino-cli` should also work now that §8.1 is resolved, but hasn't been re-attempted. Everything compiles from `firmware/teensy/teensy.ino` standalone; the vendored TeensyStep4 lives under `firmware/teensy/lib/TeensyStep4/` and is symlinked into the user's Arduino library folder for the IDE to pick up.
 - **Protocol-only work without a Teensy:** run `python tools/mock_teensy.py --verbose`, point a host script at the slave pty path it prints. The mock supports `--inject-fault` for testing host-side fault handling.
 - **Branch:** all of this lives on `feat/teensy-protocol`. Make commits there or branch off it. **Don't merge to main until §10 steps 1–3 at minimum are green.**
 
