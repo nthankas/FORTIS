@@ -127,7 +127,7 @@ class RgbdVo:
 
     @property
     def pose(self) -> np.ndarray:
-        """Return the integrated camera pose (4x4) in the first-camera frame."""
+        """Return the integrated 4x4 camera pose in the first-camera frame."""
         return self._pose.copy()
 
     def reset(self) -> None:
