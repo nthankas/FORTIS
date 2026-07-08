@@ -7,7 +7,8 @@ Brings up
                         dead-reckoned pose). Does NOT broadcast TF.
 - ekf_filter_node       robot_localization EKF; fuses /odom + /imu into
                         /odometry/filtered and OWNS the odom->base_link TF
-                        (config/ekf.yaml, publish_tf: true).
+                        (config/ekf.yaml -- or config/ekf_vio.yaml when
+                        vio:=true; both set publish_tf: true).
 - imu_to_base_tf        OPTIONAL static transform attaching the IMU frame to
                         base_link, so the EKF can transform the IMU yaw rate
                         into the base frame. See the imu_frame / publish_imu_tf
@@ -31,6 +32,15 @@ subtracts it from every sample, publishing /imu/debiased. The EKF then reads
 at rest. Set `debias_imu:=false` to bypass the node entirely -- the EKF reads
 `imu_topic` directly, byte-for-byte the pre-debias behaviour.
 
+VIO variant (vio:=true, default off)
+------------------------------------
+`vio:=true` swaps the EKF params file to config/ekf_vio.yaml, which
+additionally fuses the RGBD visual-odometry body twist /fortis/vo (vx, vy
+only; yaw stays IMU-owned) published by fortis_perception's rgbd_vo_node --
+start that node separately when enabling this. The default keeps
+config/ekf.yaml, byte-for-byte the wheel+IMU-only behaviour. Only the params
+file changes, so the debias plumbing below works identically in both modes.
+
 Why the static IMU TF is conditional
 -------------------------------------
 The EKF needs a TF path from the IMU message's frame_id to base_link. The
@@ -48,7 +58,11 @@ base_link -> ... -> imu_frame chain, to avoid a duplicate transform.
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.conditions import IfCondition, UnlessCondition
-from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+from launch.substitutions import (
+    LaunchConfiguration,
+    PathJoinSubstitution,
+    PythonExpression,
+)
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
@@ -59,16 +73,23 @@ DEBIASED_IMU_TOPIC = "/imu/debiased"
 
 
 def generate_launch_description():
-    ekf_params = PathJoinSubstitution([
-        FindPackageShare("fortis_localization"),
-        "config",
-        "ekf.yaml",
-    ])
-
     imu_topic = LaunchConfiguration("imu_topic")
     imu_frame = LaunchConfiguration("imu_frame")
     publish_imu_tf = LaunchConfiguration("publish_imu_tf")
     debias_imu = LaunchConfiguration("debias_imu")
+    vio = LaunchConfiguration("vio")
+
+    # vio switches WHICH params file the EKF loads, not which EKF runs: both
+    # debias-conditioned EKF nodes below read ekf_params, so a filename
+    # substitution here keeps the debias plumbing identical in both modes.
+    ekf_config_file = PythonExpression([
+        "'ekf_vio.yaml' if '", vio, "'.lower() in ('true', '1') else 'ekf.yaml'"
+    ])
+    ekf_params = PathJoinSubstitution([
+        FindPackageShare("fortis_localization"),
+        "config",
+        ekf_config_file,
+    ])
 
     declare_imu_topic = DeclareLaunchArgument(
         "imu_topic",
@@ -105,6 +126,16 @@ def generate_launch_description():
             "disarmed and subtracts it, so the EKF sees a zero-mean yaw rate "
             "at rest. true: EKF reads /imu/debiased. false: EKF reads "
             "imu_topic directly (pre-debias behaviour)."
+        ),
+    )
+    declare_vio = DeclareLaunchArgument(
+        "vio",
+        default_value="false",
+        description=(
+            "Fuse RGBD visual odometry: true selects config/ekf_vio.yaml, "
+            "which adds /fortis/vo (vx, vy only) as odom1; false keeps the "
+            "wheel+IMU-only config/ekf.yaml. Requires fortis_perception's "
+            "rgbd_vo_node to be running when true."
         ),
     )
 
@@ -179,6 +210,7 @@ def generate_launch_description():
         declare_imu_frame,
         declare_publish_imu_tf,
         declare_debias_imu,
+        declare_vio,
         wheel_odometry_node,
         imu_gyro_debias_node,
         ekf_node_debiased,
