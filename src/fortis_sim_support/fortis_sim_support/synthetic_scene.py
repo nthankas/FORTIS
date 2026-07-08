@@ -90,13 +90,43 @@ def _speckle_tile(seed: int) -> np.ndarray:
     return rng.random((_SPECKLE_TILE_N,) * 3, dtype=np.float32) - 0.5
 
 
-def shade(material: Material, points: np.ndarray) -> np.ndarray:
+def _speckle_octave(
+    tile: np.ndarray,
+    points: np.ndarray,
+    scale: float,
+    footprint_m: np.ndarray | None,
+) -> np.ndarray:
+    """Sample one zero-mean speckle octave, faded where a pixel spans cells.
+
+    Point-sampled noise ALIASES once the per-pixel surface footprint
+    exceeds the noise cell: the same surface renders differently from
+    each viewpoint, which actively corrupts feature matching. Fading the
+    octave out as footprint/cell grows (a poor man's mip-map) keeps the
+    texture view-stable at every range, like a real slightly-soft camera.
+    """
+    idx = np.floor(points * scale).astype(np.int64) % _SPECKLE_TILE_N
+    noise = tile[idx[:, 0], idx[:, 1], idx[:, 2]].astype(np.float64)
+    if footprint_m is None:
+        return noise
+    cell = 1.0 / scale
+    return noise / (1.0 + (footprint_m / cell) ** 2)
+
+
+def shade(
+    material: Material,
+    points: np.ndarray,
+    footprint_m: np.ndarray | None = None,
+) -> np.ndarray:
     """Evaluate the material color at world-space points.
 
     points is (N, 3); returns (N, 3) RGB in [0, 1]. Both the checker
     and the speckle are functions of world position only, so the same
     surface point always renders the same color from any camera pose --
-    exactly what feature tracking across frames needs.
+    exactly what feature tracking across frames needs. footprint_m (N,)
+    is the surface size one pixel covers at each hit; when given, each
+    speckle octave fades out as it would alias (see _speckle_octave).
+    Two octaves (fine + 8x coarser) keep surfaces ORB-trackable both up
+    close and across the room.
     """
     base = np.asarray(material.rgb, dtype=np.float64)
     factor = np.ones(points.shape[0], dtype=np.float64)
@@ -106,8 +136,10 @@ def shade(material: Material, points: np.ndarray) -> np.ndarray:
         factor[dark] *= material.checker_dim
     if material.speckle_amp > 0.0:
         tile = _speckle_tile(material.seed)
-        idx = np.floor(points * material.speckle_scale).astype(np.int64) % _SPECKLE_TILE_N
-        noise = tile[idx[:, 0], idx[:, 1], idx[:, 2]].astype(np.float64)
+        noise = _speckle_octave(tile, points, material.speckle_scale, footprint_m)
+        noise += 0.6 * _speckle_octave(
+            tile, points, material.speckle_scale / 8.0, footprint_m
+        )
         factor *= 1.0 + 2.0 * material.speckle_amp * noise
     return np.clip(factor[:, None] * base[None, :], 0.0, 1.0)
 

@@ -142,12 +142,17 @@ def render(
 
     rgb = np.empty((n, 3), dtype=np.uint8)
     rgb[:] = _BACKGROUND_RGB
+    # Surface size one pixel covers at the hit: (euclidean range) / fx.
+    # shade() uses it to fade speckle octaves that would alias.
+    ray_norm = np.linalg.norm(dirs_cam, axis=1)
+    fx = float(k[0, 0])
     for i, (_, prim) in enumerate(prims):
         mask = hit_prim == i
         if not mask.any():
             continue
         pts = origin + best_t[mask, None] * dirs[mask]
-        rgb[mask] = (shade(prim.material, pts) * 255.0).astype(np.uint8)
+        footprint = best_t[mask] * ray_norm[mask] / fx
+        rgb[mask] = (shade(prim.material, pts, footprint) * 255.0).astype(np.uint8)
 
     in_range = np.isfinite(best_t) & (best_t <= max_range)
     depth = np.where(in_range, np.clip(best_t * 1000.0, 0.0, 65535.0), 0.0)
