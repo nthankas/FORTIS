@@ -160,6 +160,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends ros2-testing-ap
 # No --no-install-recommends on the depthai line: the driver dlopens libs (e.g.
 # libdiagnostic_updater.so) that come in only as Recommends on a minimal base.
 
+# Perception stack deps -- mirror of the block in Dockerfile.dev. Keep in sync.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ros-humble-vision-msgs \
+    ros-humble-foxglove-msgs \
+    ros-humble-image-geometry \
+    ros-humble-sensor-msgs-py \
+    ros-humble-cv-bridge \
+    python3-opencv \
+    && rm -rf /var/lib/apt/lists/*
+
 # -----------------------------------------------------------------------------
 # Python deps - same as Dockerfile.dev. Keep in sync.
 # -----------------------------------------------------------------------------
