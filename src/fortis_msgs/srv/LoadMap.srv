@@ -1,0 +1,12 @@
+# Load a voxel map from disk, replacing the node's current map
+# (fortis_perception voxel_map_node) or setting the diff reference
+# (map_diff_node).
+#
+# path      Source file path (.npz), as written by SaveMap.
+# success   True if the map was loaded.
+# message   Human-readable detail: voxel count on success, the error otherwise.
+
+string path
+---
+bool success
+string message

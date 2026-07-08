@@ -1,0 +1,12 @@
+# Persist the current voxel map to disk (fortis_perception voxel_map_node).
+#
+# path      Destination file path (.npz). Empty = node default under map_dir
+#           with a timestamped name.
+# success   True if the map was written.
+# message   Human-readable detail: the resolved path on success, the error
+#           otherwise.
+
+string path
+---
+bool success
+string message

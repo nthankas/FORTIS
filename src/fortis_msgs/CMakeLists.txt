@@ -12,12 +12,19 @@ find_package(std_msgs REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 
 set(msg_files
+  "msg/ArmStatus.msg"
   "msg/ChassisCamClick.msg"
   "msg/GraspCandidate.msg"
+  "msg/MapDiffSummary.msg"
   "msg/MissionState.msg"
   "msg/OdriveAxisHealth.msg"
   "msg/OdriveHealth.msg"
   "msg/WheelVelocities.msg"
+)
+
+set(srv_files
+  "srv/LoadMap.srv"
+  "srv/SaveMap.srv"
 )
 
 set(action_files
@@ -26,6 +33,7 @@ set(action_files
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   ${msg_files}
+  ${srv_files}
   ${action_files}
   DEPENDENCIES builtin_interfaces geometry_msgs std_msgs
 )
