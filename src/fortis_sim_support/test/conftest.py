@@ -1,5 +1,5 @@
 """
-Per-process pytest setup for fortis_localization.
+Per-process pytest setup for fortis_sim_support.
 
 Pins this package's tests to a FIXED, unique ROS_DOMAIN_ID before any
 test imports rclpy or launches child nodes. colcon test runs each
@@ -30,7 +30,7 @@ import os
 
 #: This package's dedicated test domain. See the registry in the module
 #: docstring before changing it.
-ROS_DOMAIN_ID = "95"
+ROS_DOMAIN_ID = "97"
 
 
 def _isolate_ros_domain():

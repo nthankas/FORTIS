@@ -1,0 +1,40 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>fortis_perception</name>
+  <version>0.0.0</version>
+  <description>FORTIS perception stack: RGBD point clouds, multi-camera fusion, voxel mapping with cross-run diff, RGBD visual odometry, object detection, targeting, and system health.</description>
+  <maintainer email="nikhilthankasala@gmail.com">FORTIS</maintainer>
+  <license>MIT</license>
+
+  <depend>rclpy</depend>
+  <depend>sensor_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>vision_msgs</depend>
+  <depend>visualization_msgs</depend>
+  <depend>diagnostic_msgs</depend>
+  <depend>foxglove_msgs</depend>
+  <depend>fortis_msgs</depend>
+  <depend>fortis_comms</depend>
+  <depend>tf2_ros</depend>
+  <depend>tf2_geometry_msgs</depend>
+  <depend>message_filters</depend>
+  <depend>image_geometry</depend>
+  <depend>sensor_msgs_py</depend>
+  <depend>cv_bridge</depend>
+  <depend>python3-opencv</depend>
+  <depend>python3-numpy</depend>
+
+  <test_depend>python3-pytest</test_depend>
+  <test_depend>launch</test_depend>
+  <test_depend>launch_ros</test_depend>
+  <test_depend>launch_testing</test_depend>
+  <test_depend>launch_testing_ros</test_depend>
+  <test_depend>fortis_sim_support</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

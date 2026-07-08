@@ -20,6 +20,9 @@ ROS_DOMAIN_ID registry -- keep in sync across ALL test conftests:
     fortis_arm ............... 92
     fortis_control ........... 93
     fortis_integration_tests . 94
+    fortis_localization ...... 95
+    fortis_perception ........ 96
+    fortis_sim_support ....... 97
 IDs are in the safe 0-101 range (avoids the ephemeral-port band > 101),
 clear of the container/CI default (42) and hand-used values (0-9). A new
 ROS test package takes the next unused ID here.
