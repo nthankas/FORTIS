@@ -8,8 +8,11 @@ own ComposableNodeContainer.
 Naming: each camera is pinned by serial to its chassis position via CAMERA_ROSTER
 below (oak_chassis_front / _rear / _left / _right), so topics are stable across
 runs regardless of USB enumeration order. Discovery only spawns the cameras that
-are actually plugged in. TF attach to the robot URDF is deferred (the independent
-RGB + depth image panels don't need it).
+are actually plugged in. Each roster camera also gets a static identity TF
+``<pos>_camera_link -> oak_chassis_<pos>`` attaching the driver's calibration TF
+tree to the FORTIS URDF (same bridge as oak_chassis_front.launch.py -- see its
+docstring for the full why). Unknown-serial cameras have no URDF mount link, so
+their frames stay a detached TF tree.
 
 Params come from config/oak_chassis_cameras.yaml (the tested capture config),
 loaded once via fortis_bringup.camera_params.load_camera_params() and re-applied
@@ -22,7 +25,7 @@ one camera per tab -> only the active camera streams).
 
 from launch import LaunchDescription
 from launch.actions import LogInfo, OpaqueFunction
-from launch_ros.actions import ComposableNodeContainer
+from launch_ros.actions import ComposableNodeContainer, Node
 from launch_ros.descriptions import ComposableNode
 
 from fortis_bringup.camera_params import load_camera_params
@@ -48,8 +51,8 @@ def build_camera_node(camera_name, device_id, camera_params):
 
     Same Driver as the single-cam front launch; the only per-camera differences
     are the node name and the i_device_id serial pin. i_tf_base_frame is rooted
-    at the node name so each camera's calibration frames stay namespaced (TF
-    attach to the robot URDF is deferred).
+    at the node name so each camera's calibration frames stay namespaced;
+    build_mount_tf attaches that root to the robot URDF.
     """
     per_node_params = {
         "driver": {
@@ -71,6 +74,24 @@ def build_camera_node(camera_name, device_id, camera_params):
                 parameters=[camera_params, per_node_params],
             ),
         ],
+        output="both",
+    )
+
+
+def build_mount_tf(camera_name):
+    """Build the static identity TF attaching a camera's TF root to the URDF.
+
+    Same bridge as oak_chassis_front.launch.py: the Driver roots its calibration
+    frames at camera_name but never attaches them to the robot. The URDF mount
+    link follows from the roster name (oak_chassis_<pos> -> <pos>_camera_link);
+    identity because the URDF owns the mount pose.
+    """
+    parent_frame = camera_name.removeprefix("oak_chassis_") + "_camera_link"
+    return Node(
+        package="tf2_ros",
+        executable="static_transform_publisher",
+        name=f"{camera_name}_mount_tf",
+        arguments=["0", "0", "0", "0", "0", "0", parent_frame, camera_name],
         output="both",
     )
 
@@ -98,6 +119,9 @@ def _spawn_cameras(context):
         camera_name = CAMERA_ROSTER.get(device_id, f"oak_chassis_unknown_{device_id[:6]}")
         actions.append(LogInfo(msg=f"   {camera_name} -> {device_id}"))
         actions.append(build_camera_node(camera_name, device_id, camera_params))
+        # Only roster cameras have a URDF mount link to attach to.
+        if device_id in CAMERA_ROSTER:
+            actions.append(build_mount_tf(camera_name))
     return actions
 
 

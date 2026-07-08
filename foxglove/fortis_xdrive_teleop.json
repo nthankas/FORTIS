@@ -60,6 +60,51 @@
       "datatype": "std_msgs/msg/Empty",
       "value": "{}"
     },
+    "Publish!selectobserve": {
+      "buttonText": "SELECT OBSERVE",
+      "buttonTooltip": "Publishes std_msgs/Empty on /fortis/events/select_observe to route the mission FSM into the OBSERVE flow.",
+      "buttonColor": "#4a9ce2",
+      "advancedView": true,
+      "topicName": "/fortis/events/select_observe",
+      "datatype": "std_msgs/msg/Empty",
+      "value": "{}"
+    },
+    "Publish!selectpick": {
+      "buttonText": "SELECT PICK",
+      "buttonTooltip": "Publishes std_msgs/Empty on /fortis/events/select_pick to route the mission FSM into the PICK flow.",
+      "buttonColor": "#9c4ae2",
+      "advancedView": true,
+      "topicName": "/fortis/events/select_pick",
+      "datatype": "std_msgs/msg/Empty",
+      "value": "{}"
+    },
+    "Publish!done": {
+      "buttonText": "DONE",
+      "buttonTooltip": "Publishes std_msgs/Empty on /fortis/events/done to advance the mission FSM past the current step.",
+      "buttonColor": "#68e24a",
+      "advancedView": true,
+      "topicName": "/fortis/events/done",
+      "datatype": "std_msgs/msg/Empty",
+      "value": "{}"
+    },
+    "Publish!cancel": {
+      "buttonText": "CANCEL",
+      "buttonTooltip": "Publishes std_msgs/Empty on /fortis/events/cancel to abort the current mission FSM flow.",
+      "buttonColor": "#e2a44a",
+      "advancedView": true,
+      "topicName": "/fortis/events/cancel",
+      "datatype": "std_msgs/msg/Empty",
+      "value": "{}"
+    },
+    "Publish!reset": {
+      "buttonText": "RESET",
+      "buttonTooltip": "Publishes std_msgs/Empty on /fortis/events/reset to return the mission FSM to IDLE.",
+      "buttonColor": "#f54242",
+      "advancedView": true,
+      "topicName": "/fortis/events/reset",
+      "datatype": "std_msgs/msg/Empty",
+      "value": "{}"
+    },
     "Plot!wheels": {
       "paths": [
         { "value": "/fortis/drive/wheel_velocities.fl", "enabled": true, "timestampMethod": "receiveTime" },
@@ -74,6 +119,13 @@
     },
     "RawMessages!mission": {
       "topicPath": "/fortis/mission_state"
+    },
+    "DiagnosticSummary!diag": {
+      "minLevel": 0,
+      "pinnedIds": [],
+      "hardwareIdFilter": "",
+      "topicToRender": "/diagnostics",
+      "sortByLevel": true
     },
     "3D!scene": {
       "cameraState": {
@@ -133,12 +185,37 @@
               "splitPercentage": 50
             },
             "second": {
-              "direction": "row",
-              "first": "Publish!disarm",
-              "second": "Publish!stop",
-              "splitPercentage": 50
+              "direction": "column",
+              "first": {
+                "direction": "row",
+                "first": "Publish!disarm",
+                "second": "Publish!stop",
+                "splitPercentage": 50
+              },
+              "second": {
+                "direction": "column",
+                "first": {
+                  "direction": "row",
+                  "first": "Publish!selectobserve",
+                  "second": "Publish!selectpick",
+                  "splitPercentage": 50
+                },
+                "second": {
+                  "direction": "row",
+                  "first": "Publish!done",
+                  "second": {
+                    "direction": "row",
+                    "first": "Publish!cancel",
+                    "second": "Publish!reset",
+                    "splitPercentage": 50
+                  },
+                  "splitPercentage": 34
+                },
+                "splitPercentage": 50
+              },
+              "splitPercentage": 34
             },
-            "splitPercentage": 50
+            "splitPercentage": 25
           },
           "splitPercentage": 40
         },
@@ -151,7 +228,12 @@
       "first": "Plot!wheels",
       "second": {
         "direction": "row",
-        "first": "RawMessages!mission",
+        "first": {
+          "direction": "column",
+          "first": "RawMessages!mission",
+          "second": "DiagnosticSummary!diag",
+          "splitPercentage": 50
+        },
         "second": "3D!scene",
         "splitPercentage": 38
       },

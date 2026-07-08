@@ -1,0 +1,167 @@
+{
+  "configById": {
+    "3D!scene": {
+      "cameraState": {
+        "distance": 3.0,
+        "perspective": true,
+        "phi": 60,
+        "thetaOffset": 45,
+        "target": [0, 0, 0],
+        "targetOffset": [0, 0, 0],
+        "fovy": 45,
+        "near": 0.01,
+        "far": 5000
+      },
+      "followMode": "follow-pose",
+      "followTf": "base_link",
+      "scene": {},
+      "transforms": {},
+      "topics": {
+        "/tf": { "visible": true },
+        "/tf_static": { "visible": true }
+      },
+      "layers": {
+        "fortis-urdf": {
+          "visible": true,
+          "frameLocked": false,
+          "label": "FORTIS URDF",
+          "instanceId": "fortis-urdf",
+          "layerId": "foxglove.Urdf",
+          "order": 1,
+          "sourceType": "topic",
+          "topic": "/robot_description",
+          "framePrefix": ""
+        }
+      }
+    },
+    "Plot!joints": {
+      "paths": [
+        { "value": "/joint_states.position[0]", "enabled": true, "timestampMethod": "receiveTime", "label": "joint_j1" },
+        { "value": "/joint_states.position[1]", "enabled": true, "timestampMethod": "receiveTime", "label": "joint_j2" },
+        { "value": "/joint_states.position[2]", "enabled": true, "timestampMethod": "receiveTime", "label": "joint_j3" },
+        { "value": "/joint_states.position[3]", "enabled": true, "timestampMethod": "receiveTime", "label": "joint_j4" }
+      ],
+      "showLegend": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "sidebarDimension": 240
+    },
+    "RawMessages!armstatus": { "topicPath": "/fortis/arm/status" },
+    "RawMessages!mission": { "topicPath": "/fortis/mission_state" },
+    "DiagnosticSummary!diag": {
+      "minLevel": 0,
+      "pinnedIds": [],
+      "hardwareIdFilter": "",
+      "topicToRender": "/diagnostics",
+      "sortByLevel": true
+    },
+    "CallService!opengripper": {
+      "serviceName": "/open_gripper",
+      "requestPayload": "{}",
+      "layout": "vertical",
+      "editingMode": false,
+      "buttonText": "OPEN GRIPPER",
+      "buttonTooltip": "Calls std_srvs/Trigger /open_gripper on the arm controller.",
+      "buttonColor": "#68e24a"
+    },
+    "CallService!closegripper": {
+      "serviceName": "/close_gripper",
+      "requestPayload": "{}",
+      "layout": "vertical",
+      "editingMode": false,
+      "buttonText": "CLOSE GRIPPER",
+      "buttonTooltip": "Calls std_srvs/Trigger /close_gripper on the arm controller.",
+      "buttonColor": "#e2a44a"
+    },
+    "CallService!enable": {
+      "serviceName": "/teensy_bridge/enable",
+      "requestPayload": "{}",
+      "layout": "vertical",
+      "editingMode": false,
+      "buttonText": "ENABLE ARM",
+      "buttonTooltip": "Calls std_srvs/Trigger /teensy_bridge/enable (servo power on).",
+      "buttonColor": "#68e24a"
+    },
+    "CallService!disable": {
+      "serviceName": "/teensy_bridge/disable",
+      "requestPayload": "{}",
+      "layout": "vertical",
+      "editingMode": false,
+      "buttonText": "DISABLE ARM",
+      "buttonTooltip": "Calls std_srvs/Trigger /teensy_bridge/disable (servo power off).",
+      "buttonColor": "#f54242"
+    },
+    "CallService!home": {
+      "serviceName": "/teensy_bridge/home",
+      "requestPayload": "{}",
+      "layout": "vertical",
+      "editingMode": false,
+      "buttonText": "HOME",
+      "buttonTooltip": "Calls std_srvs/Trigger /teensy_bridge/home (move arm to home pose).",
+      "buttonColor": "#4a9ce2"
+    },
+    "CallService!clearfaults": {
+      "serviceName": "/teensy_bridge/clear_faults",
+      "requestPayload": "{}",
+      "layout": "vertical",
+      "editingMode": false,
+      "buttonText": "CLEAR FAULTS",
+      "buttonTooltip": "Calls std_srvs/Trigger /teensy_bridge/clear_faults.",
+      "buttonColor": "#e2a44a"
+    }
+  },
+  "globalVariables": {},
+  "userNodes": {},
+  "playbackConfig": { "speed": 1 },
+  "layout": {
+    "direction": "row",
+    "first": {
+      "direction": "column",
+      "first": {
+        "direction": "column",
+        "first": {
+          "direction": "row",
+          "first": "CallService!opengripper",
+          "second": "CallService!closegripper",
+          "splitPercentage": 50
+        },
+        "second": {
+          "direction": "row",
+          "first": "CallService!enable",
+          "second": "CallService!disable",
+          "splitPercentage": 50
+        },
+        "splitPercentage": 50
+      },
+      "second": {
+        "direction": "column",
+        "first": {
+          "direction": "row",
+          "first": "CallService!home",
+          "second": "CallService!clearfaults",
+          "splitPercentage": 50
+        },
+        "second": {
+          "direction": "column",
+          "first": "RawMessages!armstatus",
+          "second": "RawMessages!mission",
+          "splitPercentage": 50
+        },
+        "splitPercentage": 34
+      },
+      "splitPercentage": 40
+    },
+    "second": {
+      "direction": "row",
+      "first": "3D!scene",
+      "second": {
+        "direction": "column",
+        "first": "Plot!joints",
+        "second": "DiagnosticSummary!diag",
+        "splitPercentage": 60
+      },
+      "splitPercentage": 60
+    },
+    "splitPercentage": 28
+  }
+}

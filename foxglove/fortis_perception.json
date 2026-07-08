@@ -1,0 +1,142 @@
+{
+  "configById": {
+    "3D!scene": {
+      "cameraState": {
+        "distance": 6.0,
+        "perspective": true,
+        "phi": 60,
+        "thetaOffset": 45,
+        "target": [0, 0, 0],
+        "targetOffset": [0, 0, 0],
+        "fovy": 45,
+        "near": 0.01,
+        "far": 5000
+      },
+      "followMode": "follow-pose",
+      "followTf": "base_link",
+      "scene": {},
+      "transforms": {},
+      "topics": {
+        "/tf": { "visible": true },
+        "/tf_static": { "visible": true },
+        "/fortis/perception/points_fused": { "visible": true },
+        "/fortis/perception/map/cloud": { "visible": true },
+        "/fortis/perception/map_diff/markers": { "visible": true },
+        "/fortis/perception/detection_markers": { "visible": true }
+      },
+      "layers": {
+        "fortis-urdf": {
+          "visible": true,
+          "frameLocked": false,
+          "label": "FORTIS URDF",
+          "instanceId": "fortis-urdf",
+          "layerId": "foxglove.Urdf",
+          "order": 1,
+          "sourceType": "topic",
+          "topic": "/robot_description",
+          "framePrefix": ""
+        }
+      },
+      "publish": {
+        "type": "point",
+        "poseTopic": "/move_base_simple/goal",
+        "pointTopic": "/clicked_point",
+        "poseEstimateTopic": "/initialpose",
+        "poseEstimateXDeviation": 0.5,
+        "poseEstimateYDeviation": 0.5,
+        "poseEstimateThetaDeviation": 0.262
+      }
+    },
+    "Image!front": {
+      "imageTopic": "/oak_chassis_front/rgb/image_raw/compressed",
+      "calibrationTopic": "/oak_chassis_front/rgb/camera_info",
+      "annotations": {
+        "/fortis/perception/annotations/oak_chassis_front": { "visible": true }
+      }
+    },
+    "Plot!vo": {
+      "paths": [
+        { "value": "/fortis/vo.twist.twist.linear.x", "enabled": true, "timestampMethod": "receiveTime" },
+        { "value": "/fortis/vo.twist.twist.linear.y", "enabled": true, "timestampMethod": "receiveTime" },
+        { "value": "/odometry/filtered.twist.twist.linear.x", "enabled": true, "timestampMethod": "receiveTime" },
+        { "value": "/odometry/filtered.twist.twist.linear.y", "enabled": true, "timestampMethod": "receiveTime" }
+      ],
+      "showLegend": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "sidebarDimension": 240
+    },
+    "RawMessages!mapdiff": { "topicPath": "/fortis/perception/map_diff/summary" },
+    "RawMessages!target": { "topicPath": "/fortis/target_pose" },
+    "RawMessages!mission": { "topicPath": "/fortis/mission_state" },
+    "DiagnosticSummary!diag": {
+      "minLevel": 0,
+      "pinnedIds": [],
+      "hardwareIdFilter": "",
+      "topicToRender": "/diagnostics",
+      "sortByLevel": true
+    },
+    "Publish!startorbit": {
+      "buttonText": "START ORBIT (open gate)",
+      "buttonTooltip": "Publishes std_msgs/Empty on /fortis/events/start_orbit to move the mission FSM IDLE -> ORBIT so /cmd_vel is accepted.",
+      "buttonColor": "#4a9ce2",
+      "advancedView": true,
+      "topicName": "/fortis/events/start_orbit",
+      "datatype": "std_msgs/msg/Empty",
+      "value": "{}"
+    },
+    "Publish!stop": {
+      "buttonText": "STOP (close gate)",
+      "buttonTooltip": "Publishes std_msgs/Empty on /fortis/events/stop to move ORBIT -> IDLE; drive_node then rejects /cmd_vel and commands zeros.",
+      "buttonColor": "#f54242",
+      "advancedView": true,
+      "topicName": "/fortis/events/stop",
+      "datatype": "std_msgs/msg/Empty",
+      "value": "{}"
+    }
+  },
+  "globalVariables": {},
+  "userNodes": {},
+  "playbackConfig": { "speed": 1 },
+  "layout": {
+    "direction": "row",
+    "first": "3D!scene",
+    "second": {
+      "direction": "column",
+      "first": {
+        "direction": "row",
+        "first": "Image!front",
+        "second": "Plot!vo",
+        "splitPercentage": 55
+      },
+      "second": {
+        "direction": "column",
+        "first": {
+          "direction": "row",
+          "first": "RawMessages!mapdiff",
+          "second": {
+            "direction": "row",
+            "first": "RawMessages!target",
+            "second": "RawMessages!mission",
+            "splitPercentage": 50
+          },
+          "splitPercentage": 34
+        },
+        "second": {
+          "direction": "row",
+          "first": "DiagnosticSummary!diag",
+          "second": {
+            "direction": "row",
+            "first": "Publish!startorbit",
+            "second": "Publish!stop",
+            "splitPercentage": 50
+          },
+          "splitPercentage": 40
+        },
+        "splitPercentage": 50
+      },
+      "splitPercentage": 45
+    },
+    "splitPercentage": 55
+  }
+}
