@@ -18,8 +18,9 @@ setup(
     maintainer='Nikhil Thankasala',
     maintainer_email='nikhilthankasala@gmail.com',
     description=(
-        'Arm controller seam for FORTIS, gated by mission state, plus the '
-        'Teensy serial bridge. Kinematics deferred.'
+        'Arm control for FORTIS: mission-gated gripper seam, the Teensy '
+        'serial bridge, analytic 4-DOF kinematics and the MoveToPose '
+        'motion node.'
     ),
     license='MIT',
     extras_require={
@@ -30,6 +31,7 @@ setup(
     entry_points={
         'console_scripts': [
             'arm_controller = fortis_arm.arm_controller_node:main',
+            'arm_motion = fortis_arm.arm_motion_node:main',
             'teensy_bridge = fortis_arm.teensy_bridge_node:main',
         ],
     },

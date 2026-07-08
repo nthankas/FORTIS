@@ -3,7 +3,7 @@ Tests for fortis_perception.target_selector_node.
 
 A helper node broadcasts a static identity odom->base_link transform,
 publishes /clicked_point, and captures the target pose, latched context
-flags, and the FSM click event over real DDS.
+flag, and the FSM click event over real DDS.
 """
 
 from __future__ import annotations
@@ -68,7 +68,6 @@ class _Harness:
 
         self.poses: list[PoseStamped] = []
         self.valids: list[Bool] = []
-        self.ik_oks: list[Bool] = []
         self.events: list[Empty] = []
         self.helper.create_subscription(
             PoseStamped, "/fortis/target_pose",
@@ -76,9 +75,6 @@ class _Harness:
         self.helper.create_subscription(
             Bool, "/fortis/context/target_pose_valid",
             self.valids.append, latched_qos_profile())
-        self.helper.create_subscription(
-            Bool, "/fortis/context/ik_ok",
-            self.ik_oks.append, latched_qos_profile())
         self.helper.create_subscription(
             Empty, CLICK_EVENT_TOPIC, self.events.append, 10)
 
@@ -125,7 +121,7 @@ class _Harness:
 
 
 def test_valid_click_publishes_pose_flags_and_event(harness):
-    """An in-annulus click yields an odom pose, True flags, and one FSM event."""
+    """An in-annulus click yields an odom pose, a True flag, and one FSM event."""
     harness.wait_for_tf()
     harness.click(1.5, 0.5)
     ok = harness.spin_until(
@@ -147,13 +143,12 @@ def test_valid_click_publishes_pose_flags_and_event(harness):
     assert pose.pose.orientation.w == pytest.approx(math.cos(yaw / 2), abs=1e-6)
 
     assert harness.valids[-1].data is True
-    assert harness.ik_oks[-1].data is True
     harness.spin(0.3)  # settle: no duplicate events
     assert len(harness.events) == 1
 
 
 def test_out_of_range_click_rejected(harness):
-    """A click outside the annulus publishes False flags and no pose/event."""
+    """A click outside the annulus publishes a False flag and no pose/event."""
     harness.wait_for_tf()
     harness.click(10.0, 0.0)  # far beyond max_target_range_m (3.5)
     # Initial latched False + the rejection's False = at least 2 samples.
@@ -161,6 +156,5 @@ def test_out_of_range_click_rejected(harness):
     assert ok, "rejection flag did not arrive within timeout"
 
     assert not any(v.data for v in harness.valids)
-    assert harness.ik_oks and harness.ik_oks[-1].data is False
     assert harness.poses == []
     assert harness.events == []

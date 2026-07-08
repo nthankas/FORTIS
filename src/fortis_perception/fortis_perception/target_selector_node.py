@@ -4,10 +4,12 @@ Click-to-target node.
 Turns a Foxglove 3D-panel click (/clicked_point, geometry_msgs/PointStamped)
 into the mission target: validates the click against a horizontal range
 annulus around the robot, publishes /fortis/target_pose plus the latched
-/fortis/context/{target_pose_valid, ik_ok} flags, then fires the FSM's
+/fortis/context/target_pose_valid flag, then fires the FSM's
 /fortis/events/chassis_cam_click event (Event.CHASSIS_CAM_CLICK: ORBIT ->
 TARGETING when the target_pose_valid guard holds, see
-fortis_safety.mission_state_machine).
+fortis_safety.mission_state_machine). The /fortis/context/ik_ok flag is
+owned by fortis_arm's arm_motion node, which solves the arm IK for every
+published target.
 
 Frame policy: the pose is anchored in `odom` when the odom->base_link TF is
 available at click time, so the target does not drift while the robot keeps
@@ -36,7 +38,6 @@ NODE_NAME = "target_selector"
 CLICKED_POINT_TOPIC = "/clicked_point"
 TARGET_POSE_TOPIC = "/fortis/target_pose"
 TARGET_VALID_TOPIC = "/fortis/context/target_pose_valid"
-IK_OK_TOPIC = "/fortis/context/ik_ok"
 #: Exact FSM event topic: mission_state_node subscribes
 #: /fortis/events/<Event name lowercased> for Event.CHASSIS_CAM_CLICK.
 CLICK_EVENT_TOPIC = "/fortis/events/chassis_cam_click"
@@ -70,7 +71,6 @@ class TargetSelectorNode(Node):
         self._pose_pub = self.create_publisher(
             PoseStamped, TARGET_POSE_TOPIC, latched)
         self._valid_pub = self.create_publisher(Bool, TARGET_VALID_TOPIC, latched)
-        self._ik_ok_pub = self.create_publisher(Bool, IK_OK_TOPIC, latched)
         self._event_pub = self.create_publisher(Empty, CLICK_EVENT_TOPIC, 10)
 
         self.create_subscription(
@@ -81,7 +81,7 @@ class TargetSelectorNode(Node):
     # --- Click handling ------------------------------------------------------
 
     def _on_click(self, msg: PointStamped) -> None:
-        """Validate one click and publish pose, context flags, and FSM event."""
+        """Validate one click and publish pose, context flag, and FSM event."""
         point = msg
         if msg.header.frame_id and msg.header.frame_id != BASE_FRAME:
             try:
@@ -108,7 +108,7 @@ class TargetSelectorNode(Node):
 
         pose = self._anchor_pose(point)
         self._pose_pub.publish(pose)
-        # Context flags before the event: mission_state_node evaluates the
+        # Context flag before the event: mission_state_node evaluates the
         # target_pose_valid guard from its cached context when the event
         # lands.
         self._set_validity(True)
@@ -151,12 +151,8 @@ class TargetSelectorNode(Node):
     # --- Context flags ---------------------------------------------------------
 
     def _set_validity(self, valid: bool) -> None:
-        """Publish both latched context flags for the FSM."""
+        """Publish the latched target_pose_valid context flag for the FSM."""
         self._valid_pub.publish(Bool(data=valid))
-        # Placeholder until the arm IK solver lands: an in-range target is
-        # declared reachable so TARGETING -> ARM_AT_VIEW's ik_ok guard can
-        # pass. The real IK node will own this flag.
-        self._ik_ok_pub.publish(Bool(data=valid))
 
 
 def main(args=None):
