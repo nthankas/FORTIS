@@ -17,12 +17,19 @@ plus exact ground truth for error-bound tests:
 
     /fortis/sim/ground_truth                 nav_msgs/Odometry (odom -> base_link)
 
-With publish_tf the node broadcasts odom->base_link every frame and,
-statically, base_link -> <camera_name> (the URDF front-camera mount
-pose) and <camera_name> -> <camera_name>_rgb_camera_optical_frame, so
-the TF chain matches the live bring-up in
-fortis_bringup/launch/oak_chassis_front.launch.py (the intermediate
-front_camera_link is collapsed into the mount transform here).
+The `mount` parameter picks which of the four chassis-camera mounts
+(front | rear | left | right, URDF poses in MOUNTS) this instance
+replays; camera_name defaults to oak_chassis_<mount>. With publish_tf
+the node broadcasts, statically, base_link -> <camera_name> (its own
+mount pose) and <camera_name> -> <camera_name>_rgb_camera_optical_frame,
+so the TF chain matches the live bring-up (the intermediate
+<mount>_camera_link is collapsed into the mount transform here).
+
+Every instance samples the SAME base trajectory -- one rigid robot,
+up to four cameras -- so exactly one instance per rig may own the
+dynamic odom->base_link TF and the ground-truth topic: publish_base_tf
+(default true) gates both, and a multi-camera launch enables it on the
+first replayer only.
 
 Trajectory time is n / rate (not wall clock): a run is deterministic
 for a given seed, and every image shares its exact sample time with
@@ -57,14 +64,23 @@ BASE_FRAME = "base_link"
 #: Nominal OAK-D Lite RGB horizontal FOV; fx = fy is derived from it.
 HFOV_RAD: float = math.radians(69.0)
 
-#: Front chassis-camera mount pose in base_link, hardcoded from
-#: fortis_description/urdf/fortis_chassis.urdf.xacro + fortis_constants.xacro:
-#:   x = -(chassis_length/2 + cam_edge_to_housing + oak_lite_z/2)
-#:     = -(0.332/2 + 0.01933 + 0.017/2) = -0.19383
-#:   z = cam_height_z = 0.21514
-#:   rpy = (0, -0.524, pi): lens toward user front (-X), pitched 30 deg up.
-MOUNT_XYZ = (-0.19383, 0.0, 0.21514)
-MOUNT_RPY = (0.0, -0.524, math.pi)
+#: Chassis-camera mount poses (xyz, rpy) in base_link, keyed by mount
+#: face; hardcoded from fortis_description/urdf/fortis_chassis.urdf.xacro
+#: + fortis_constants.xacro:
+#:   cam_front_x = chassis_length/2 + cam_edge_to_housing + oak_lite_z/2
+#:               = 0.332/2 + 0.01933 + 0.017/2 = 0.19383
+#:   cam_side_y  = chassis_width/2  + cam_edge_to_housing + oak_lite_z/2
+#:               = 0.217/2 + 0.01933 + 0.017/2 = 0.13633
+#:   z = cam_height_z = 0.21514 (all four)
+#: User "front" is base_link -X (chassis convention), so front sits at
+#: -cam_front_x with yaw pi and is pitched 30 deg up (pitch -0.524);
+#: rear/left/right are level, yawed to face outward from their face.
+MOUNTS = {
+    "front": ((-0.19383, 0.0, 0.21514), (0.0, -0.524, math.pi)),
+    "rear": ((0.19383, 0.0, 0.21514), (0.0, 0.0, 0.0)),
+    "left": ((0.0, -0.13633, 0.21514), (0.0, 0.0, -math.pi / 2.0)),
+    "right": ((0.0, 0.13633, 0.21514), (0.0, 0.0, math.pi / 2.0)),
+}
 
 #: URDF optical-frame convention (fortis_chassis.urdf.xacro): Z fwd, X right, Y down.
 OPTICAL_RPY = (-math.pi / 2.0, 0.0, -math.pi / 2.0)
@@ -161,7 +177,8 @@ class OakReplayerNode(Node):
     def __init__(self, *, parameter_overrides=None) -> None:
         super().__init__(NODE_NAME, parameter_overrides=parameter_overrides)
 
-        self.declare_parameter("camera_name", "oak_chassis_front")
+        self.declare_parameter("mount", "front")
+        self.declare_parameter("camera_name", "")
         self.declare_parameter("width", 640)
         self.declare_parameter("height", 400)
         self.declare_parameter("fps", 15.0)
@@ -171,12 +188,19 @@ class OakReplayerNode(Node):
         self.declare_parameter("orbit_omega", 0.3)
         self.declare_parameter("scene", "baseline")
         self.declare_parameter("publish_tf", True)
+        self.declare_parameter("publish_base_tf", True)
         self.declare_parameter("imu_gyro_bias_z", 0.0)
         self.declare_parameter("imu_noise_std", 0.0)
         self.declare_parameter("jpeg_quality", 60)
         self.declare_parameter("seed", 0)
 
-        self._camera_name = str(self.get_parameter("camera_name").value)
+        mount = str(self.get_parameter("mount").value)
+        if mount not in MOUNTS:
+            raise ValueError(f"unknown mount {mount!r} (expected {'|'.join(MOUNTS)})")
+        self._mount_xyz, self._mount_rpy = MOUNTS[mount]
+        # Empty camera_name (the default) derives the real rig's namespace.
+        name = str(self.get_parameter("camera_name").value).strip()
+        self._camera_name = name or f"oak_chassis_{mount}"
         self._width = int(self.get_parameter("width").value)
         self._height = int(self.get_parameter("height").value)
         self._fps = float(self.get_parameter("fps").value)
@@ -199,7 +223,7 @@ class OakReplayerNode(Node):
         self._k = _pinhole_k(self._width, self._height)
         # Camera pose in the body: URDF mount, then the optical rotation.
         self._t_base_cam = (
-            _transform_from_rpy(MOUNT_XYZ, MOUNT_RPY)
+            _transform_from_rpy(self._mount_xyz, self._mount_rpy)
             @ _transform_from_rpy((0.0, 0.0, 0.0), OPTICAL_RPY)
         )
         self._rgb_frame = f"{self._camera_name}_rgb_camera_optical_frame"
@@ -220,16 +244,22 @@ class OakReplayerNode(Node):
         self._depth_info_pub = self.create_publisher(
             CameraInfo, f"{base}/stereo/camera_info", 10)
         self._imu_pub = self.create_publisher(Imu, f"{base}/imu/data", 10)
-        self._gt_pub = self.create_publisher(Odometry, GROUND_TRUTH_TOPIC, 10)
+        # Exactly one instance per rig owns ground truth (and, with
+        # publish_tf, the dynamic odom->base_link): every instance samples
+        # the same base trajectory, so duplicates would only add traffic.
+        self._publish_base_tf = bool(self.get_parameter("publish_base_tf").value)
+        self._gt_pub = (self.create_publisher(Odometry, GROUND_TRUTH_TOPIC, 10)
+                        if self._publish_base_tf else None)
 
         self._tf_broadcaster = None
         if bool(self.get_parameter("publish_tf").value):
-            self._tf_broadcaster = TransformBroadcaster(self)
+            if self._publish_base_tf:
+                self._tf_broadcaster = TransformBroadcaster(self)
             self._static_broadcaster = StaticTransformBroadcaster(self)
             stamp = self.get_clock().now().to_msg()
             self._static_broadcaster.sendTransform([
                 _tf_msg(BASE_FRAME, self._camera_name,
-                        MOUNT_XYZ, _quat_from_rpy(*MOUNT_RPY), stamp),
+                        self._mount_xyz, _quat_from_rpy(*self._mount_rpy), stamp),
                 _tf_msg(self._camera_name, self._rgb_frame,
                         (0.0, 0.0, 0.0), _quat_from_rpy(*OPTICAL_RPY), stamp),
             ])
@@ -238,10 +268,11 @@ class OakReplayerNode(Node):
         self.create_timer(1.0 / self._imu_rate_hz, self._on_imu_timer)
 
         self.get_logger().info(
-            f"oak_replayer up: {base}/* at {self._width}x{self._height}"
-            f"@{self._fps:g} fps, imu {self._imu_rate_hz:g} Hz, "
-            f"trajectory={trajectory_name} scene={scene_name}, "
-            f"ground truth on {GROUND_TRUTH_TOPIC}."
+            f"oak_replayer up: {base}/* ({mount} mount) at "
+            f"{self._width}x{self._height}@{self._fps:g} fps, "
+            f"imu {self._imu_rate_hz:g} Hz, trajectory={trajectory_name} "
+            f"scene={scene_name}, base TF/ground truth owner: "
+            f"{self._publish_base_tf}."
         )
 
     @staticmethod
@@ -323,7 +354,8 @@ class OakReplayerNode(Node):
         self._rgb_info_pub.publish(self._camera_info)
         self._depth_info_pub.publish(self._camera_info)
 
-        self._publish_ground_truth(stamp, pos, quat, lin_w, ang_w, yaw)
+        if self._gt_pub is not None:
+            self._publish_ground_truth(stamp, pos, quat, lin_w, ang_w, yaw)
         if self._tf_broadcaster is not None:
             self._tf_broadcaster.sendTransform(
                 _tf_msg(ODOM_FRAME, BASE_FRAME, pos, quat, stamp))

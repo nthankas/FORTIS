@@ -2,9 +2,10 @@
 FORTIS perception bring-up: camera source -> clouds -> map -> detection -> target.
 
 The sprint's demo entry point. One command composes the perception chain
-against either the synthetic OAK replayer (synthetic:=true, the default:
-runs anywhere, no hardware) or the real chassis cameras (synthetic:=false
-includes oak_chassis_cameras.launch.py).
+against either the synthetic OAK replayers (synthetic:=true, the
+default: one per name in `cameras`; runs anywhere, no hardware) or the
+real chassis cameras (synthetic:=false includes
+oak_chassis_cameras.launch.py).
 
 Always launched: one depth_to_cloud per name in `cameras`, cloud_fusion
 (its input_topics built from the same list), voxel_map, detection,
@@ -52,7 +53,7 @@ def _truthy(context, name):
 
 
 def _camera_source(context, cameras):
-    """Build the camera source: the synthetic replayer or the real 4-cam launch."""
+    """Build the camera source: synthetic replayers or the real 4-cam launch."""
     if not _truthy(context, "synthetic"):
         return [IncludeLaunchDescription(
             PythonLaunchDescriptionSource(PathJoinSubstitution([
@@ -61,20 +62,27 @@ def _camera_source(context, cameras):
                 "oak_chassis_cameras.launch.py",
             ])),
         )]
-    # ONE replayer, standing in for the first (front) camera. Extra names
-    # in `cameras` still get a depth_to_cloud but see no frames.
-    return [Node(
-        package="fortis_sim_support",
-        executable="oak_replayer_node",
-        name="oak_replayer",
-        output="screen",
-        parameters=[{
-            "camera_name": cameras[0],
-            "trajectory": "orbit",
-            "scene": LaunchConfiguration("scene").perform(context),
-            "publish_tf": True,
-        }],
-    )]
+    # One replayer per camera name; the mount is the name's suffix
+    # (oak_chassis_front -> front). Every instance broadcasts its own
+    # static mount TF; only the first owns odom->base_link + ground truth.
+    nodes = []
+    for index, camera in enumerate(cameras):
+        mount = camera.removeprefix("oak_chassis_")
+        nodes.append(Node(
+            package="fortis_sim_support",
+            executable="oak_replayer_node",
+            name=f"oak_replayer_{mount}",
+            output="screen",
+            parameters=[{
+                "mount": mount,
+                "camera_name": camera,
+                "trajectory": "orbit",
+                "scene": LaunchConfiguration("scene").perform(context),
+                "publish_tf": True,
+                "publish_base_tf": index == 0,
+            }],
+        ))
+    return nodes
 
 
 def _cloud_chain(cameras):
@@ -241,8 +249,9 @@ def generate_launch_description():
             "synthetic",
             default_value="true",
             description=(
-                "true: one oak_replayer (orbit trajectory, TF on) stands in "
-                "for the front camera. false: include the real "
+                "true: one oak_replayer per name in `cameras` (orbit "
+                "trajectory, TF on, ground truth owned by the first) "
+                "stands in for the camera rig. false: include the real "
                 "oak_chassis_cameras.launch.py bring-up."
             ),
         ),
@@ -257,7 +266,9 @@ def generate_launch_description():
             description=(
                 "Comma-separated camera names: one depth_to_cloud each and "
                 "the cloud_fusion input set. The first name is the "
-                "detection / VO / synthetic-replayer camera."
+                "detection / VO camera. With synthetic:=true each name "
+                "must be oak_chassis_<mount> (front|rear|left|right) and "
+                "gets its own replayer."
             ),
         ),
         DeclareLaunchArgument(
