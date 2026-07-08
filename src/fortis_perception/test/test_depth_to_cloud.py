@@ -20,7 +20,8 @@ from rclpy.parameter import Parameter
 from sensor_msgs.msg import CameraInfo, CompressedImage, Image, PointCloud2
 from sensor_msgs_py import point_cloud2
 
-from fortis_perception.depth_to_cloud_node import DepthToCloudNode, unpack_rgb
+from fortis_perception.cloud_utils import unpack_rgb
+from fortis_perception.depth_to_cloud_node import DepthToCloudNode
 
 CAMERA_NAME = "testcam"
 WIDTH, HEIGHT = 64, 48

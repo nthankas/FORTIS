@@ -1,10 +1,10 @@
 """
 Tests for the pure RGBD VO core (fortis_perception.rgbd_vo).
 
-Rendered-frame tests use fortis_sim_support's synthetic renderer and are
-skipped -- not failed -- while that package's API is still a stub, so
-this package stays green independently of the sim_support landing order.
-The blank-frame test needs no renderer and always runs.
+Rendered-frame tests drive the core with fortis_sim_support's synthetic
+renderer; importorskip lets them skip -- not fail -- when this package
+is tested without sim_support built. The blank-frame test needs no
+renderer and always runs.
 """
 
 from __future__ import annotations
@@ -32,11 +32,9 @@ TARGET = np.array([0.0, 0.0, 0.25])
 
 
 def _renderer():
-    """Import the sim_support renderer, skipping while it is still a stub."""
+    """Import the sim_support renderer, skipping when it is not built."""
     raycaster = pytest.importorskip("fortis_sim_support.raycaster")
     scenes = pytest.importorskip("fortis_sim_support.synthetic_scene")
-    if not (hasattr(raycaster, "render") and hasattr(scenes, "scene_baseline")):
-        pytest.skip("fortis_sim_support renderer API not implemented yet")
     return raycaster, scenes
 
 
@@ -122,7 +120,7 @@ def test_keyframe_refresh_integrates_long_translation():
 
     travelled = float(np.linalg.norm(vo.pose[:3, 3]))
     assert abs(travelled - 0.18) < 0.018  # within 10%
-    # 0.18 m total > keyframe_trans_m (0.05): the refresh policy must have
+    # 0.18 m total > keyframe_trans_m (0.12): the refresh policy must have
     # fired at least once beyond the bootstrap keyframe.
     assert vo.keyframe_count >= 2
 

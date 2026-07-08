@@ -1,12 +1,12 @@
 # fortis_bringup
 
-Top-level launch composition for FORTIS. `bringup.launch.py` composes the mission state machine, the drive node, and the ODrive health monitor, with opt-in includes for localization, the perception chain, and the arm seam; `sim.launch.py` and `teleop.launch.py` are now live with concrete payloads (URDF publishing + Foxglove bridge, and keyboard teleop respectively). More node includes are added per package as each one comes online.
+Top-level launch composition for FORTIS. `bringup.launch.py` composes the mission state machine, the drive stack (drive node + UI enable/disable), and the ODrive health monitor, with opt-in includes for localization, heading hold, the orbit generator, the perception chain, and the arm seam. `sim.launch.py` publishes the URDF + a Foxglove bridge for external-simulator runs; `teleop.launch.py` is keyboard teleop for developer iteration.
 
 ## Launch files
 
 | File | Status | Purpose |
 |---|---|---|
-| `launch/bringup.launch.py` | live | Composes `mission_state_node` (`fortis_safety`), `drive_node` (`fortis_drive`), and `odrive_health_monitor_node` (`fortis_safety`). Opt-in includes, all default off: `localization:=true` adds `fortis_localization`'s `localization.launch.py` (wheel odometry + EKF), `perception:=true` adds the full perception chain via `perception.launch.py` (including its default-on `foxglove_bridge` — bringup runs none of its own), and `arm:=true` adds `teensy_bridge` + `arm_controller` (`fortis_arm`; Teensy port via `serial_port`, default `/dev/ttyACM0`). |
+| `launch/bringup.launch.py` | live | Composes `mission_state_node` + `odrive_health_monitor_node` (`fortis_safety`) and `drive_node` + `drive_enable_node` (`fortis_drive`). Opt-ins, all default off: `localization:=true` adds `fortis_localization`'s `localization.launch.py` (wheel odometry + EKF); `heading_hold:=true` runs `heading_hold_node` and feeds `drive_node` from `/cmd_vel_heading` (closed-loop yaw; enable alongside `localization:=true`); `orbit:=true` runs `orbit_node` (the `chassis_orbit` launch sets it); `perception:=true` adds the full perception chain via `perception.launch.py` (including its default-on `foxglove_bridge` — bringup runs none of its own); `arm:=true` adds `teensy_bridge` + `arm_controller` (`fortis_arm`; Teensy port via `serial_port`, default `/dev/ttyACM0`). |
 | `launch/sim.launch.py` | live | Brings up `robot_state_publisher` (xacro-expanded URDF on `/robot_description` + `/tf`), `joint_state_publisher` (gated by `publish_joint_states:=true|false` so an external simulator can take over `/joint_states`), and `foxglove_bridge` on a configurable port (default 8765). Designed to pair with Isaac Sim running on the Windows host outside the container. |
 | `launch/teleop.launch.py` | live | Brings up `teleop_twist_keyboard` and remaps its output to `/cmd_vel`. Developer / debug-only entry point — production operator UI is the Foxglove + click-to-3D path. Must be launched in the foreground (the node reads stdin directly). |
 | `launch/oak_chassis_cameras.launch.py` | live | **Primary camera bring-up.** Discovers every connected OAK-D Lite and starts each (serial-pinned front/rear/left/right) as an independent depthai-ros v3 `Driver`: on-device MJPEG RGB + aligned 16UC1 depth (no RGBD cloud), IMU on. Each roster camera also gets a static identity TF `<pos>_camera_link -> oak_chassis_<pos>` attaching its calibration TF tree to the URDF (unknown serials stay detached). Shared capture config `config/oak_chassis_cameras.yaml`. Load `foxglove/fortis_chassis_cams.json` (one camera per tab; only the active tab streams). |
@@ -18,7 +18,7 @@ Top-level launch composition for FORTIS. `bringup.launch.py` composes the missio
 
 | File | Purpose |
 |---|---|
-| `config/bringup_params.yaml` | Per-node parameter blocks loaded by `bringup.launch.py`. Forward-looking — most parameters are documented placeholders that the nodes have not yet adopted via `declare_parameter()`. See the file header for the registry rationale. |
+| `config/bringup_params.yaml` | Per-node parameter blocks loaded by `bringup.launch.py`. Mixed live/documentation: the `heading_hold_node`, `orbit_node`, and `imu_gyro_debias_node` blocks are LIVE overrides (those nodes `declare_parameter()` every value); the remaining blocks document in-code constants the nodes do not read yet. See the file header for which is which. |
 | `config/oak_chassis_cameras.yaml` | Shared depthai-ros v3 capture config for ALL four chassis OAK-D Lites (identical units). 640x400 @ 15 fps, MJPEG-compressed RGB + aligned 16UC1 depth, no RGBD cloud, NN off (`i_nn_type: none`), IMU on. Loaded node-agnostically via `fortis_bringup.camera_params.load_camera_params()`, so it is tied to no single camera (the `/**` top key is a positional placeholder, read by position). |
 
 ## Building
@@ -31,7 +31,7 @@ source install/setup.bash
 ## Running
 
 ```bash
-ros2 launch fortis_bringup bringup.launch.py    # mission_state_node + drive_node + odrive_health_monitor_node
+ros2 launch fortis_bringup bringup.launch.py    # FSM + drive_node + drive_enable_node + ODrive health monitor
 ros2 launch fortis_bringup bringup.launch.py localization:=true  # + wheel odometry + robot_localization EKF
 ros2 launch fortis_bringup bringup.launch.py perception:=true    # + full perception chain (and its foxglove_bridge)
 ros2 launch fortis_bringup bringup.launch.py arm:=true           # + teensy_bridge + arm_controller (serial_port:=...)

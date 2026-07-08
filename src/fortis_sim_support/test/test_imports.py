@@ -1,4 +1,4 @@
-"""Smoke tests: every fortis_sim_support module imports, the node stub exposes main."""
+"""Smoke tests: every fortis_sim_support module imports, the node module exposes main."""
 
 import fortis_sim_support
 from fortis_sim_support import (

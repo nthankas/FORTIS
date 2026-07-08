@@ -10,7 +10,8 @@ Frame conventions
 -----------------
 - Camera OPTICAL frame: X right, Y down, Z forward.
 - base_link: X forward, Y left, Z up (REP-103). The FORTIS chassis
-  "front" -- where this camera points -- is base_link -X.
+  "front" -- where this camera points -- is base_link -X. The bolted
+  front-mount extrinsic lives in fortis_perception.geometry.
 - The VO world is the base_link pose at the instant tracking starts,
   labelled "odom" in the header. The label is nominal: the EKF variant
   consuming this topic (ekf_vio.yaml) fuses the TWIST only, so the
@@ -34,8 +35,6 @@ counts the dropped frames, and keeps publishing the inlier count on
 
 from __future__ import annotations
 
-import math
-
 import cv2
 import numpy as np
 import rclpy
@@ -45,6 +44,7 @@ from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import CameraInfo, CompressedImage, Image
 from std_msgs.msg import Float32
 
+from fortis_perception.geometry import T_BASE_CAM, T_CAM_BASE
 from fortis_perception.rgbd_vo import RgbdVo, rotation_matrix_to_quaternion
 
 #: Node name; matches the `rgbd_vo_node` console-script registration.
@@ -62,43 +62,6 @@ MAX_RGBD_SKEW_S = 0.2
 #: the EKF's trust in VO rises and falls with feature support.
 TRANS_VAR_AT_ONE_INLIER = 0.36
 ROT_VAR_AT_ONE_INLIER = 0.72
-
-
-def _rpy_matrix(roll: float, pitch: float, yaw: float) -> np.ndarray:
-    """Return the 3x3 rotation for URDF fixed-axis rpy (R = Rz @ Ry @ Rx)."""
-    cr, sr = math.cos(roll), math.sin(roll)
-    cp, sp = math.cos(pitch), math.sin(pitch)
-    cy, sy = math.cos(yaw), math.sin(yaw)
-    rz = np.array([[cy, -sy, 0.0], [sy, cy, 0.0], [0.0, 0.0, 1.0]])
-    ry = np.array([[cp, 0.0, sp], [0.0, 1.0, 0.0], [-sp, 0.0, cp]])
-    rx = np.array([[1.0, 0.0, 0.0], [0.0, cr, -sr], [0.0, sr, cr]])
-    return rz @ ry @ rx
-
-
-def _front_camera_extrinsic() -> np.ndarray:
-    """Build T_base_cam: base_link -> front-camera OPTICAL frame (4x4).
-
-    Constants mirror fortis_description's URDF rather than a live TF
-    lookup so VO works before robot_state_publisher is up.
-    fortis_chassis.urdf.xacro mounts the front camera link at
-    xyz=(-cam_front_x, 0, cam_height_z), rpy=(0, -0.524, pi) -- the
-    base_link -X face, pitched 30 deg up -- and its optical joint adds
-    rpy=(-pi/2, 0, -pi/2). From fortis_constants.xacro:
-    cam_front_x = chassis_length/2 + cam_edge_to_housing + oak_lite_z/2
-    = 0.332/2 + 0.01933 + 0.017/2 = 0.19383; cam_height_z = 0.21514.
-    """
-    mount = _rpy_matrix(0.0, -0.524, math.pi)
-    optical = _rpy_matrix(-math.pi / 2, 0.0, -math.pi / 2)
-    t = np.eye(4)
-    t[:3, :3] = mount @ optical
-    t[:3, 3] = (-0.19383, 0.0, 0.21514)
-    return t
-
-
-#: base_link -> camera-optical extrinsic: the X in the similarity
-#: T_base = X @ T_cam @ X^-1 that maps camera motion into base_link motion.
-T_BASE_CAM = _front_camera_extrinsic()
-T_CAM_BASE = np.linalg.inv(T_BASE_CAM)
 
 
 def _stamp_to_s(stamp) -> float:

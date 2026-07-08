@@ -3,7 +3,7 @@
 <package format="3">
   <name>fortis_bringup</name>
   <version>0.0.0</version>
-  <description>Top-level launch composition for FORTIS. Stub launch files only; node includes added per package as they come online.</description>
+  <description>Top-level launch composition for FORTIS: bring-up, drive test, chassis cameras, perception, sim, and teleop launch files.</description>
   <maintainer email="nikhilthankasala@gmail.com">Nikhil Thankasala</maintainer>
   <license>MIT</license>
 

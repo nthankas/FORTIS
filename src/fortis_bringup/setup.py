@@ -23,7 +23,8 @@ setup(
     maintainer='Nikhil Thankasala',
     maintainer_email='nikhilthankasala@gmail.com',
     description=(
-        'Top-level launch composition for FORTIS. Stub launch files only.'
+        'Top-level launch composition for FORTIS: bring-up, drive test, '
+        'chassis cameras, perception, sim, and teleop launch files.'
     ),
     license='MIT',
     extras_require={

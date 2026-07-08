@@ -20,9 +20,9 @@
 # What CANNOT be set here:
 #   - ROS_DOMAIN_ID. This is an environment variable, not a ROS
 #     parameter. The dev container exports ROS_DOMAIN_ID=42 from
-#     docker/docker-compose.yml; conftest.py overrides it to a
-#     per-PID value during launch_testing runs. Set it before
-#     launching, not from this file.
+#     docker/docker-compose.yml; each test package's conftest.py pins
+#     its own fixed per-package ID (91-97 registry) during test runs.
+#     Set it before launching, not from this file.
 #   - QoS profiles. QoS is configured per-publisher/per-subscriber in
 #     code, not via parameters. The /fortis/mission_state contract
 #     (TRANSIENT_LOCAL + RELIABLE, depth 1) is locked across

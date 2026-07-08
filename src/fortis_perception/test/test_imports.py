@@ -1,12 +1,14 @@
-"""Smoke tests: every fortis_perception module imports, each node stub exposes main."""
+"""Smoke tests: every fortis_perception module imports, each node module exposes main."""
 
 import fortis_perception
 from fortis_perception import (
     cloud_fusion_node,
+    cloud_utils,
     depth_to_cloud_node,
     detection_node,
     detectors,
     download_models,
+    geometry,
     map_diff_node,
     rgbd_vo,
     rgbd_vo_node,
@@ -27,7 +29,7 @@ NODE_MODULES = (
     system_health_node,
 )
 
-PURE_MODULES = (voxel_grid, rgbd_vo, detectors)
+PURE_MODULES = (voxel_grid, rgbd_vo, detectors, cloud_utils, geometry)
 
 
 def test_package_imports():

@@ -7,7 +7,9 @@ rate-limited timer, and publishes the topic-registry set: 2D detections,
 depth-backprojected 3D detections (optical frame), sphere markers in
 base_link, Foxglove image annotations, and the nearest graspable object as
 a fortis_msgs/GraspCandidate with its latched
-/fortis/context/grasp_candidate_ok flag.
+/fortis/context/grasp_candidate_ok flag. Lifts into base_link use the
+bolted front-mount extrinsic from fortis_perception.geometry, so markers
+and grasp poses are only valid when camera_name is the FRONT camera.
 
 Degradation contract: with detector:=yolo and no weights on disk the node
 logs one warning, publishes empty Detection2DArray at rate plus a WARN on
@@ -52,6 +54,7 @@ from fortis_perception.detectors import (
     ModelUnavailable,
     YoloV8OnnxDetector,
 )
+from fortis_perception.geometry import optical_to_base
 
 NODE_NAME = "detection"
 
@@ -73,35 +76,6 @@ MAX_GRASP_RANGE_M = 2.5
 #: bad depth).
 MARKER_DIAMETER_MIN_M = 0.05
 MARKER_DIAMETER_MAX_M = 0.5
-
-
-def _rpy_matrix(roll: float, pitch: float, yaw: float) -> np.ndarray:
-    """Return the 3x3 rotation for URDF fixed-axis rpy (R = Rz @ Ry @ Rx)."""
-    cr, sr = math.cos(roll), math.sin(roll)
-    cp, sp = math.cos(pitch), math.sin(pitch)
-    cy, sy = math.cos(yaw), math.sin(yaw)
-    rx = np.array([[1.0, 0.0, 0.0], [0.0, cr, -sr], [0.0, sr, cr]])
-    ry = np.array([[cp, 0.0, sp], [0.0, 1.0, 0.0], [-sp, 0.0, cp]])
-    rz = np.array([[cy, -sy, 0.0], [sy, cy, 0.0], [0.0, 0.0, 1.0]])
-    return rz @ ry @ rx
-
-
-# Front chassis camera extrinsic, base_link <- optical, hardcoded from the
-# URDF (fortis_description/urdf/fortis_chassis.urdf.xacro: front mount
-# xyz=(-cam_front_x, 0, cam_height_z), rpy=(0, -0.524, pi); optical joint
-# rpy=(-pi/2, 0, -pi/2); fortis_constants.xacro: cam_front_x =
-# chassis_length/2 + cam_edge_to_housing + oak_lite_z/2 =
-# 0.332/2 + 0.01933 + 0.017/2, cam_height_z = 0.21514). The mount is bolted,
-# so a constant beats a TF dependency here; only the FRONT camera's
-# detections are lifted into base_link.
-_FRONT_CAM_XYZ = np.array([-(0.332 / 2 + 0.01933 + 0.017 / 2), 0.0, 0.21514])
-_FRONT_CAM_R = (_rpy_matrix(0.0, -0.524, math.pi)
-                @ _rpy_matrix(-math.pi / 2, 0.0, -math.pi / 2))
-
-
-def optical_to_base(p_optical) -> np.ndarray:
-    """Map a point from the front camera's optical frame into base_link."""
-    return _FRONT_CAM_R @ np.asarray(p_optical, dtype=float) + _FRONT_CAM_XYZ
 
 
 def _class_color(name: str) -> tuple[float, float, float]:

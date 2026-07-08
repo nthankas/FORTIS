@@ -28,7 +28,7 @@ from visualization_msgs.msg import MarkerArray
 from fortis_comms.qos_profiles import latched_qos_profile
 from fortis_msgs.msg import MapDiffSummary
 from fortis_msgs.srv import SaveMap
-from fortis_perception.depth_to_cloud_node import make_xyzrgb_cloud, pack_rgb
+from fortis_perception.cloud_utils import make_xyzrgb_cloud, pack_rgb
 from fortis_perception.map_diff_node import MapDiffNode
 from fortis_perception.voxel_grid import VoxelGrid
 from fortis_perception.voxel_map_node import VoxelMapNode

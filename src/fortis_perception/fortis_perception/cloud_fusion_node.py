@@ -19,7 +19,7 @@ from sensor_msgs_py import point_cloud2
 from std_msgs.msg import Header
 from tf2_ros import Buffer, TransformException, TransformListener
 
-from fortis_perception.depth_to_cloud_node import make_xyzrgb_cloud
+from fortis_perception.cloud_utils import make_xyzrgb_cloud, transform_to_matrix
 
 #: Node name registered with ROS.
 NODE_NAME = "cloud_fusion"
@@ -34,19 +34,6 @@ DEFAULT_INPUT_TOPICS = [
     "/fortis/perception/oak_chassis_left/points",
     "/fortis/perception/oak_chassis_right/points",
 ]
-
-
-def transform_to_matrix(transform):
-    """Convert a geometry_msgs Transform into a 4x4 homogeneous matrix."""
-    q = transform.rotation
-    t = transform.translation
-    x, y, z, w = q.x, q.y, q.z, q.w
-    m = np.eye(4, dtype=np.float64)
-    m[0, :3] = (1.0 - 2.0 * (y * y + z * z), 2.0 * (x * y - z * w), 2.0 * (x * z + y * w))
-    m[1, :3] = (2.0 * (x * y + z * w), 1.0 - 2.0 * (x * x + z * z), 2.0 * (y * z - x * w))
-    m[2, :3] = (2.0 * (x * z - y * w), 2.0 * (y * z + x * w), 1.0 - 2.0 * (x * x + y * y))
-    m[:3, 3] = (t.x, t.y, t.z)
-    return m
 
 
 def voxel_downsample(xyz, rgb, voxel_size):

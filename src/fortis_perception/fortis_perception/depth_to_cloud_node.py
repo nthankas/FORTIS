@@ -7,6 +7,7 @@ stream, and publishes /fortis/perception/<cam>/points
 (sensor_msgs/PointCloud2, XYZRGB) in the incoming depth frame. One
 instance runs per camera. CameraInfo is cached from a plain
 subscription; only rgb + depth go through the approximate-time sync.
+The XYZRGB layout and rgb packing live in fortis_perception.cloud_utils.
 """
 
 import threading
@@ -17,55 +18,12 @@ import rclpy
 from message_filters import ApproximateTimeSynchronizer, Subscriber
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
-from sensor_msgs.msg import CameraInfo, CompressedImage, Image, PointCloud2, PointField
-from sensor_msgs_py import point_cloud2
+from sensor_msgs.msg import CameraInfo, CompressedImage, Image, PointCloud2
+
+from fortis_perception.cloud_utils import make_xyzrgb_cloud, pack_rgb
 
 #: Node name registered with ROS.
 NODE_NAME = "depth_to_cloud"
-
-#: XYZRGB point layout shared by every cloud publisher in fortis_perception.
-#: rgb is the classic packed convention (uint32 0x00RRGGBB bit-cast to
-#: float32) that RViz and Foxglove decode natively.
-FIELDS_XYZRGB = [
-    PointField(name="x", offset=0, datatype=PointField.FLOAT32, count=1),
-    PointField(name="y", offset=4, datatype=PointField.FLOAT32, count=1),
-    PointField(name="z", offset=8, datatype=PointField.FLOAT32, count=1),
-    PointField(name="rgb", offset=12, datatype=PointField.FLOAT32, count=1),
-]
-
-#: Bytes per point in the FIELDS_XYZRGB layout.
-_POINT_STEP = 16
-
-
-def pack_rgb(colors):
-    """Pack an Nx3 uint8 RGB array into packed-float32 rgb field values."""
-    c = np.asarray(colors, dtype=np.uint32)
-    return ((c[:, 0] << 16) | (c[:, 1] << 8) | c[:, 2]).view(np.float32)
-
-
-def unpack_rgb(packed):
-    """Unpack packed-float32 rgb field values into an Nx3 uint8 RGB array."""
-    u = np.ascontiguousarray(packed, dtype=np.float32).view(np.uint32)
-    out = np.empty((u.shape[0], 3), dtype=np.uint8)
-    out[:, 0] = (u >> 16) & 0xFF
-    out[:, 1] = (u >> 8) & 0xFF
-    out[:, 2] = u & 0xFF
-    return out
-
-
-def make_xyzrgb_cloud(header, xyz, rgb_packed):
-    """Build an XYZRGB PointCloud2 from Nx3 float xyz and N packed-rgb floats."""
-    n = int(xyz.shape[0])
-    if n == 0:
-        # create_cloud's unstructured_to_structured rejects empty input.
-        return PointCloud2(
-            header=header, height=1, width=0, fields=FIELDS_XYZRGB,
-            is_bigendian=False, point_step=_POINT_STEP, row_step=0,
-            data=b"", is_dense=True)
-    data = np.empty((n, 4), dtype=np.float32)
-    data[:, :3] = xyz
-    data[:, 3] = rgb_packed
-    return point_cloud2.create_cloud(header, FIELDS_XYZRGB, data)
 
 
 class DepthToCloudNode(Node):

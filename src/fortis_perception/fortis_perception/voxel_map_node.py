@@ -23,8 +23,13 @@ from tf2_ros import Buffer, TransformException, TransformListener
 
 from fortis_comms.qos_profiles import latched_qos_profile
 from fortis_msgs.srv import LoadMap, SaveMap
-from fortis_perception.cloud_fusion_node import FUSED_CLOUD_TOPIC, transform_to_matrix
-from fortis_perception.depth_to_cloud_node import make_xyzrgb_cloud, pack_rgb, unpack_rgb
+from fortis_perception.cloud_fusion_node import FUSED_CLOUD_TOPIC
+from fortis_perception.cloud_utils import (
+    make_xyzrgb_cloud,
+    pack_rgb,
+    transform_to_matrix,
+    unpack_rgb,
+)
 from fortis_perception.voxel_grid import VoxelGrid
 
 #: Node name registered with ROS.

@@ -2,9 +2,9 @@
 Download detection model weights into the local cache.
 
 Console script (``download_models``). Fetches the pinned YOLOv8n ONNX
-export with urllib only (no extra deps), verifies SHA256 when a pin is
-set, and writes atomically (temp file + rename) so a partial download
-never poisons the cache.
+export with urllib only (no extra deps), verifies SHA256 against the
+pinned digest, and writes atomically (temp file + rename) so a partial
+download never poisons the cache.
 """
 
 from __future__ import annotations
@@ -67,7 +67,7 @@ def main(argv=None) -> int:
                     break
                 tmp.write(chunk)
         digest = _sha256(tmp_path)
-        if EXPECTED_SHA256 is not None and digest != EXPECTED_SHA256:
+        if digest != EXPECTED_SHA256:
             print(f"sha256 mismatch: expected {EXPECTED_SHA256}, got {digest}",
                   file=sys.stderr)
             return 1
@@ -80,8 +80,7 @@ def main(argv=None) -> int:
             os.unlink(tmp_path)
 
     print(f"saved {target}")
-    suffix = "" if EXPECTED_SHA256 else "  <- pin this as EXPECTED_SHA256"
-    print(f"sha256 {digest}{suffix}")
+    print(f"sha256 {digest}")
     return 0
 
 

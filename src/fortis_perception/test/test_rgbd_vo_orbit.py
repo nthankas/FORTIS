@@ -4,7 +4,8 @@ Orbit-trajectory acceptance test for the RGBD VO core.
 Drives RgbdVo (pure, no ROS) with frames rendered along an exact orbit
 from fortis_sim_support and bounds the FINAL absolute trajectory error
 against the analytic ground truth: < 5% of path length (the sprint
-acceptance criterion). Skips while the sim_support API is still a stub.
+acceptance criterion). importorskip lets the test skip -- not fail --
+when this package is tested without sim_support built.
 """
 
 from __future__ import annotations
@@ -12,8 +13,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+from fortis_perception.geometry import T_BASE_CAM
 from fortis_perception.rgbd_vo import RgbdVo
-from fortis_perception.rgbd_vo_node import T_BASE_CAM
 
 # Radius clears the scene's object belt (props reach ~0.75 m from center;
 # the front camera rides ~0.3 m inside the base circle) so the camera
@@ -34,17 +35,10 @@ K = np.array([
 
 
 def _sim_modules():
-    """Import the sim_support renderer + trajectory API, skipping stubs."""
+    """Import the sim_support renderer + trajectory API, skipping when absent."""
     raycaster = pytest.importorskip("fortis_sim_support.raycaster")
     scenes = pytest.importorskip("fortis_sim_support.synthetic_scene")
     trajectory = pytest.importorskip("fortis_sim_support.trajectory")
-    implemented = (
-        hasattr(raycaster, "render")
-        and hasattr(scenes, "scene_baseline")
-        and hasattr(trajectory, "orbit")
-    )
-    if not implemented:
-        pytest.skip("fortis_sim_support render/trajectory API not implemented yet")
     return raycaster, scenes, trajectory
 
 
@@ -66,10 +60,7 @@ def test_orbit_final_ate_under_five_percent_of_path():
     """Bound the final trajectory error to < 5% of path length on an orbit."""
     raycaster, scenes, trajectory = _sim_modules()
     scene = scenes.scene_baseline()
-    try:
-        traj = trajectory.orbit(radius=RADIUS_M, omega=OMEGA_RAD_S)
-    except TypeError:
-        pytest.skip("trajectory.orbit signature differs from the plan contract")
+    traj = trajectory.orbit(radius=RADIUS_M, omega=OMEGA_RAD_S)
 
     vo = RgbdVo(K=K)
     t_cam_base = np.linalg.inv(T_BASE_CAM)
