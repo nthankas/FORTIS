@@ -13,8 +13,9 @@ What this brings up
 
 What this does NOT do
 ---------------------
-  * Does not arm the axis. The S1 starts in IDLE. Explicit
-    `/request_axis_state` call required to enter CLOSED_LOOP_CONTROL.
+  * Does not arm the axis. wheel_velocity_controller is spawned
+    --inactive, so the S1 stays in IDLE until the operator explicitly
+    activates the controller (which is what arms it -- see below).
     This is intentional: bench launch should never auto-spin a motor.
   * Does not bring up fortis_safety or fortis_drive. This is a hardware
     transport test, not a mission test. Once it is green, run the full

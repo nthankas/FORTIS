@@ -6,7 +6,7 @@
 # S1s but does not surface per-axis disarm / undervoltage / overcurrent
 # events into ros2_control's hardware-interface state. The mission FSM in
 # fortis_safety needs that visibility to transition to FAULT on motor
-# faults. See ADR 0002, follow-up "error feedback from the S1".
+# faults.
 #
 # Consumer: fortis_safety/odrive_health_monitor_node, which aggregates
 # the four-axis view into a single /fortis/context/drive_healthy Bool and

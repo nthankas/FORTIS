@@ -1,6 +1,7 @@
 # fortis_msgs
 
-Custom ROS 2 message types for the FORTIS tokamak inspection robot.
+Custom ROS 2 message, service, and action types for the FORTIS tokamak
+inspection robot.
 
 This is an `ament_cmake` package because IDL message generation requires the
 C++ build pipeline; an `ament_python` package can't host `.msg` files.
@@ -18,15 +19,24 @@ source install/setup.bash
 
 | Message | Used on (topic) | Purpose |
 |---|---|---|
+| `ArmStatus` | `/fortis/arm/status` (latched) | Decoded Teensy 4.1 arm-controller STATUS frame plus a `connected` flag, republished by `fortis_arm`'s teensy bridge: J1-J3 stepper positions (raw steps), J4/gripper servo pulse widths, fault bitmask, state bits, uptime, MCU temperature. When `connected` is false the other fields hold their last-known values. |
 | `ChassisCamClick` | `/fortis/targeting/chassis_click` | Operator click on a chassis camera image. Carries the pixel coordinate, the producing camera ID, and the click timestamp. The targeting pipeline consumes this to project the click into 3-D and propose an arm view-pose. |
 | `GraspCandidate` | `/fortis/planner/grasp_candidates` | A candidate grasp from the grasp planner. Carries the end-effector pose in the robot frame, planner confidence in `[0.0, 1.0]`, an approach unit vector, and a timestamp. |
+| `MapDiffSummary` | `/fortis/perception/map_diff/summary` (latched) | Machine-readable roll-up of a live-vs-reference voxel-map comparison from `fortis_perception`'s `map_diff_node`: added/removed voxel counts and volumes, voxel size, and the reference map path. Per-voxel detail ships separately as visualization markers. |
 | `MissionState` | `/fortis/mission_state_v2` | Richer mission-state announcement than the latched `std_msgs/String` topic published today by `fortis_safety/mission_state_node`. Carries previous state and the transition timestamp so consumers can render transitions and detect stalls. The plain `String` topic is preserved for back-compat. |
 | `WheelVelocities` | `/fortis/drive/wheel_velocities`, `/fortis/drive/zero_velocities` | Per-wheel angular velocity command for the X-drive (FL, FR, RL, RR in rad/s at the wheel shaft). Published by `fortis_drive/drive_node`. |
 | `OdriveAxisHealth` | (composed into `OdriveHealth`) | Per-axis health snapshot for one ODrive S1: node_id, armed flag, active-errors bitfield, vbus voltage, motor/FET temperatures. The FORTIS-owned narrow contract sitting between the upstream `odrive_ros2_control` schema and the safety FSM. |
 | `OdriveHealth` | `/fortis/drive/odrive_health` | Composite of four `OdriveAxisHealth` (fl/fr/rl/rr). Published by an upstream-to-FORTIS bridge (TBD), consumed by `fortis_safety/odrive_health_monitor_node` which aggregates it into `/fortis/context/drive_healthy` + edge-triggered `/fortis/events/fault`. |
 
-Topic names listed above are the intended use sites at the time this package
+Topic names listed above are the intended use sites at the time each message
 was created. They are not enforced by the package itself.
+
+## Services
+
+| Service | Used by | Purpose |
+|---|---|---|
+| `SaveMap` | `fortis_perception/voxel_map_node` (`~/save_map`) | Persist the current voxel map to disk as `.npz`. An empty `path` means "node default under `map_dir` with a timestamped name". Response is `success` + `message` (the resolved path, or the error). |
+| `LoadMap` | `fortis_perception` (`voxel_map_node` `~/load_map`, `map_diff_node` `~/load_reference`) | Load a voxel map written by `SaveMap`, replacing the node's current map or setting the diff reference. Response is `success` + `message` (voxel count, or the error). |
 
 ## Actions
 
@@ -48,6 +58,7 @@ was created. They are not enforced by the package itself.
 
 1. Add `msg/MyMessage.msg`.
 2. Append `"msg/MyMessage.msg"` to the `msg_files` list in `CMakeLists.txt`.
+   (Services and actions work the same way via `srv_files` / `action_files`.)
 3. If the message uses a new dependency package (e.g. `sensor_msgs`), add it
    to both the `find_package` block and the `DEPENDENCIES` list of
    `rosidl_generate_interfaces`, and add `<depend>sensor_msgs</depend>` to

@@ -3,13 +3,12 @@
 <package format="3">
   <name>fortis_comms</name>
   <version>0.0.0</version>
-  <description>Pre-ROS motor abstractions, X-drive kinematics, and EKF, packaged as an ament_python library.</description>
+  <description>X-drive kinematics and shared QoS profiles, packaged as an ament_python library.</description>
   <maintainer email="nikhilthankasala@gmail.com">Nikhil Thankasala</maintainer>
   <license>MIT</license>
 
   <depend>rclpy</depend>
   <depend>python3-numpy</depend>
-  <depend>python3-can</depend>
 
   <test_depend>python3-pytest</test_depend>
 

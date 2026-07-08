@@ -186,8 +186,8 @@ def test_disarmed_without_edge_trusts_gyro_immediately():
     """Disarmed with no prior edge (launched disarmed) skips the settle wait."""
     node = _StandaloneNode()
     try:
-        # _armed defaults True; force disarmed WITHOUT an arm->disarm edge by
-        # feeding the same value -- mirrors a node that booted already disarmed.
+        # _armed starts as None (unknown, EMA frozen); force disarmed WITHOUT
+        # an arm->disarm edge -- mirrors a node that booted already disarmed.
         node.node._armed = False
         node.feed(_make_imu(0.03))
         assert node.bias_z != 0.0

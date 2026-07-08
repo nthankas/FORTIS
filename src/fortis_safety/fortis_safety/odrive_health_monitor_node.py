@@ -31,15 +31,15 @@ Why this node exists
 The upstream odrive_ros2_control plugin owns closed-loop control of the
 four S1s but does NOT surface per-axis disarm / undervoltage / overcurrent
 events into ros2_control's hardware-interface state. The mission FSM in
-fortis_safety needs that visibility to react to motor faults. ADR 0002
-tracks this as a follow-up; this node implements the bridge.
+fortis_safety needs that visibility to react to motor faults; this node
+closes that gap on the FORTIS side.
 
 Design choice: this node consumes a FORTIS-internal OdriveHealth message
 rather than the upstream /odrive_status directly. A small translator
-node (not yet built; awaits `vcs import src < tools/vendor_repos.yaml`)
-will convert upstream -> FORTIS-internal. That decoupling means future
-upstream-schema churn is contained to the translator, and the safety
-boundary speaks a stable FORTIS-owned contract.
+node (not yet built) will convert upstream -> FORTIS-internal. That
+decoupling means future upstream-schema churn is contained to the
+translator, and the safety boundary speaks a stable FORTIS-owned
+contract.
 
 Startup semantics
 -----------------

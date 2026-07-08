@@ -99,14 +99,12 @@ VYAW_TWIST_COV: float = 0.25   # ~0.5 rad/s 1-sigma; defer to IMU gyro
 POSE_XY_COV: float = 1.0
 POSE_YAW_COV: float = 1.0
 
-#: Index of the (vx, vy, vyaw) diagonal entries in a 6x6 row-major ROS
-#: covariance (order: x, y, z, roll, pitch, yaw).
-_VX_IDX: int = 0      # row/col 0
-_VY_IDX: int = 7      # row/col 1
-_VYAW_IDX: int = 35   # row/col 5
-_POSE_X_IDX: int = 0
-_POSE_Y_IDX: int = 7
-_POSE_YAW_IDX: int = 35
+#: Diagonal indices of the x/vx, y/vy, and yaw/vyaw entries in a 6x6
+#: row-major ROS covariance (axis order: x, y, z, roll, pitch, yaw). The
+#: same indices serve both the pose and the twist covariance arrays.
+_X_IDX: int = 0      # row/col 0
+_Y_IDX: int = 7      # row/col 1
+_YAW_IDX: int = 35   # row/col 5
 
 
 # --- Helpers -----------------------------------------------------------------
@@ -226,18 +224,18 @@ class WheelOdometryNode(Node):
         odom.pose.pose.position.x = self._x
         odom.pose.pose.position.y = self._y
         odom.pose.pose.orientation = _yaw_to_quaternion(self._yaw)
-        odom.pose.covariance[_POSE_X_IDX] = POSE_XY_COV
-        odom.pose.covariance[_POSE_Y_IDX] = POSE_XY_COV
-        odom.pose.covariance[_POSE_YAW_IDX] = POSE_YAW_COV
+        odom.pose.covariance[_X_IDX] = POSE_XY_COV
+        odom.pose.covariance[_Y_IDX] = POSE_XY_COV
+        odom.pose.covariance[_YAW_IDX] = POSE_YAW_COV
 
         # The twist is the EKF's actual input from this message: a body-frame
         # velocity in child_frame_id (base_link), per the Odometry contract.
         odom.twist.twist.linear.x = vx
         odom.twist.twist.linear.y = vy
         odom.twist.twist.angular.z = yaw_rate
-        odom.twist.covariance[_VX_IDX] = VX_TWIST_COV
-        odom.twist.covariance[_VY_IDX] = VY_TWIST_COV
-        odom.twist.covariance[_VYAW_IDX] = VYAW_TWIST_COV
+        odom.twist.covariance[_X_IDX] = VX_TWIST_COV
+        odom.twist.covariance[_Y_IDX] = VY_TWIST_COV
+        odom.twist.covariance[_YAW_IDX] = VYAW_TWIST_COV
 
         self._odom_pub.publish(odom)
 

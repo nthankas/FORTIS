@@ -17,6 +17,12 @@ the rest of the stack publishes into.
   - `launch/drive_hw.launch.py` — bring up controller_manager against
     all four S1s.
 
+Both launches take a `can_interface` arg. `drive_hw.launch.py` defaults to
+`can1` — on the Jetson that is the gs_usb USB-CAN adapter; the onboard
+`can0` is the Tegra mttcan and is NOT wired to the ODrive chain.
+`bench_one_motor.launch.py` defaults to `can0` (a bench host with only the
+adapter attached). Pass `can_interface:=...` to either to override.
+
 ## Pre-requisites
 
 1. Each S1 has been calibrated per `tools/odrive_calibrate.md`
@@ -47,6 +53,10 @@ source package).
 Each step is independently verifiable. If a step fails, do not move on —
 the failure is the symptom; the cause is usually in that step or the
 prior one.
+
+The steps below use `can0` (the bench-launch default); substitute your
+interface name if the adapter enumerates differently (on the Jetson the
+adapter is `can1`).
 
 ### Step 0. The S1 is calibrated
 
@@ -172,7 +182,7 @@ ros2 control switch_controllers --deactivate wheel_velocity_controller
 
 The S1 status LED should go back to blinking.
 
-### Step 8 (optional). Drive it from the actual stack
+### Step 7 (optional). Drive it from the actual stack
 
 With the bench launch still running, in another terminal:
 
@@ -202,8 +212,8 @@ Same as above with:
   end (its built-in 120 Ω is one terminator), RL's on-board termination
   jumper closed at the far end.
 - `ros2 launch fortis_control drive_hw.launch.py` instead of
-  `bench_one_motor.launch.py`.
-- Step 6 command array is still `[fl, fr, rl, rr]` — e.g.
+  `bench_one_motor.launch.py` (defaults to `can1`, the Jetson adapter).
+- Step 5's command array is still `[fl, fr, rl, rr]` — e.g.
   `[2.0, 2.0, 2.0, 2.0]` to drive forward at constant speed on all
   four wheels. (The controller's joint order `[fl, fr, rl, rr]` is
   independent of the node_id chain order; the
@@ -231,7 +241,7 @@ Same as above with:
          odrive_ros2_control_plugin/ODriveHardwareInterface
                             |
                             v
-                       SocketCAN can0
+                     SocketCAN can0/can1
                             |
                             v
                        4x ODrive S1
@@ -240,14 +250,40 @@ Same as above with:
 `fortis_drive` was the integration point already in place. This package
 gives the topic on the bottom-left of that diagram an actual consumer.
 
+## Testing
+
+```bash
+cd /workspace
+colcon build --packages-up-to fortis_control
+source install/setup.bash
+colcon test --packages-select fortis_control
+colcon test-result --verbose
+```
+
+- `test/test_controller_yaml.py` — structural asserts on both YAMLs: joint
+  order (`[fl, fr, rl, rr]`, the contract with `drive_node`), controller
+  types, velocity interface, update rate.
+- `test/test_xacro_expansion.py` — renders `fortis_robot.urdf.xacro` for
+  every arg combination and asserts node_id mapping (FL=0, FR=1, RR=2,
+  RL=3), the mock-hardware plugin swap, and interface declarations.
+- `test/test_bench_launch.py` — launch_testing: brings up the bench launch
+  under `use_mock_hardware:=true` and drives the full
+  command → controller → mock-hardware → `/joint_states` loop.
+
+Tests pin `ROS_DOMAIN_ID=93` via `test/conftest.py` (the per-package
+test-domain registry) so parallel `colcon test` processes cannot cross-talk.
+
 ## Known limitations
 
-- **No error surfacing yet.** Per the upstream `odrive_ros2_control`
+- **Error surfacing is partial.** Per the upstream `odrive_ros2_control`
   README: "If an ODrive disarms for some reason (e.g. undervoltage),
   the application that connects to ros2_control will currently not be
-  notified." Treat `/odrive_status` as the source of truth for axis
-  health during bench work; the mission FSM cannot react to S1 faults
-  until this is plumbed.
+  notified." `fortis_safety/odrive_health_monitor_node` is ready to
+  aggregate `/fortis/drive/odrive_health` into the mission FSM's
+  `drive_healthy` context + FAULT event, but the bridge that translates
+  the upstream status into that message is not built yet — so during
+  bench work treat `/odrive_status` as the source of truth for axis
+  health.
 - **Bench variant is hardcoded to FL.** If your bench has FR instead,
   hand-edit `fortis_drive_controllers_bench.yaml` and the launch's
   `wheels:=fl` arg in the same commit. Don't introduce a launch arg

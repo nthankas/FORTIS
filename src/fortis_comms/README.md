@@ -1,18 +1,19 @@
 # fortis_comms
 
-X-drive kinematics, packaged as an ament_python ROS 2 library consumed by `fortis_drive`. Motor-control integration lives in `fortis_control` (via `odrive_ros2_control`); state estimation will use `robot_localization` once integrated.
+X-drive kinematics and shared QoS profiles, packaged as an ament_python ROS 2 library. Consumed by `fortis_drive`, `fortis_safety`, `fortis_localization`, and `fortis_arm`. Motor-control integration lives in `fortis_control` (via `odrive_ros2_control`); state estimation lives in `fortis_localization` (`robot_localization` EKF).
 
 ## Contents
 
 | Module | Purpose |
 |---|---|
 | `xdrive_kinematics` | X-drive forward / inverse kinematics (4 omni wheels at 45 deg). Module-level functions, no class wrapper. |
+| `qos_profiles` | `latched_qos_profile()` — the FORTIS "latched" QoS (TRANSIENT_LOCAL + RELIABLE, depth 1) used by every state-on-connect topic (`/fortis/mission_state`, `/fortis/drive/armed`, `/fortis/context/*`, ...). Single source of truth: a QoS mismatch makes DDS silently refuse the match, so publishers and subscribers must never hand-roll this profile. |
 
 ## Tests
 
 | File | Purpose |
 |---|---|
-| `test/test_imports.py` | Smoke test: the public module imports and IK/FK on zero input return zero. |
+| `test/test_imports.py` | Smoke test: the public modules import, IK/FK on zero input return zero, and `latched_qos_profile` stays depth=1 / TRANSIENT_LOCAL / RELIABLE. |
 | `test/test_xdrive_kinematics.py` | IK/FK round-trip across forward, strafe, rotation, diagonal, and combined commands. |
 | `test/test_kinematics_urdf_sync.py` | Drift regression: parses `fortis_description/urdf/fortis_constants.xacro` and asserts `LEN_X`, `LEN_Y`, `WHEEL_RADIUS` track the URDF (1e-4 m tolerance), plus four-way wheel symmetry. |
 
@@ -42,4 +43,4 @@ The X-drive IK is coupled to chassis geometry, and the URDF in `fortis_descripti
 
 ### Known open question
 
-The H-matrix in `xdrive_kinematics.py` uses (`LEN_X` + `LEN_Y`) as a single effective lever arm for the omega column; the per-wheel signs on the Vy and omega columns are preserved verbatim from the senior-design module and have NOT been re-derived from first principles against the URDF wheel yaws (FL=-45 deg, FR=+45 deg, RL=+45 deg, RR=-45 deg). Round-trip IK/FK tests cannot catch a sign-only error because they cancel through the pseudoinverse. Resolving this is a separate task; it should land before the first real-robot bring-up.
+The H-matrix in `xdrive_kinematics.py` uses (`LEN_X` + `LEN_Y`) as a single effective lever arm for the omega column; the per-wheel signs on the Vy and omega columns are preserved verbatim from the senior-design module and have NOT been re-derived from first principles against the URDF wheel yaws (FL=-45 deg, FR=+45 deg, RL=+45 deg, RR=-45 deg). Round-trip IK/FK tests cannot catch a sign-only error because they cancel through the pseudoinverse. The drivetrain has since been bench-driven with the boundary sign corrections in `fortis_drive` (`WHEEL_DIRECTION`, `CMD_VEL_FRAME_SIGN`), so the combined pipeline is verified — but the H-matrix itself remains un-derived. Keep the matrix frozen; correct signs at the hardware boundary, as `drive_node` does.
