@@ -61,6 +61,15 @@ class YoloV8OnnxDetector:
         path = os.path.expanduser(str(model_path))
         if not os.path.isfile(path):
             raise ModelUnavailable(f"YOLOv8 ONNX weights not found: {path}")
+        # cv2.dnn grew the YOLOv8 head ops around 4.7; Ubuntu 22.04's apt
+        # python3-opencv is 4.5.4 and fails INSIDE forward(), so gate here to
+        # degrade cleanly (the dev image adds pip opencv-python-headless).
+        major, minor = (int(v) for v in cv2.__version__.split(".")[:2])
+        if (major, minor) < (4, 7):
+            raise ModelUnavailable(
+                f"OpenCV {cv2.__version__} too old for YOLOv8 ONNX (need >= 4.7); "
+                "install opencv-python-headless"
+            )
         self._net = cv2.dnn.readNetFromONNX(path)
         self._conf_th = float(conf_th)
         self._nms_th = float(nms_th)
@@ -114,6 +123,10 @@ class YoloV8OnnxDetector:
             x, y, bw, bh = boxes[i]
             x1, y1 = max(0, x), max(0, y)
             x2, y2 = min(img_w - 1, x + bw), min(img_h - 1, y + bh)
+            if x2 <= x1 or y2 <= y1:
+                # Box sits entirely in the letterbox padding (spurious hit on
+                # the grey border): no overlap with the real image.
+                continue
             detections.append(
                 Detection(COCO_CLASSES[class_ids[i]], scores[i], (x1, y1, x2, y2))
             )

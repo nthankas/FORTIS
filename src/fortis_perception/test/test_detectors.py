@@ -69,7 +69,10 @@ def test_yolo_missing_weights_raises_model_unavailable():
                     reason="yolov8n.onnx not downloaded (run download_models)")
 def test_yolo_runs_on_real_weights():
     """Smoke-run real weights when cached: output shape/contract only."""
-    detector = YoloV8OnnxDetector(str(MODEL_PATH))
+    try:
+        detector = YoloV8OnnxDetector(str(MODEL_PATH))
+    except ModelUnavailable as exc:
+        pytest.skip(str(exc))  # e.g. apt OpenCV < 4.7 on a bare runner
     detections = detector.detect(_scene())
     assert isinstance(detections, list)
     for det in detections:

@@ -180,7 +180,9 @@ RUN pip install --no-cache-dir \
     odrive \
     numpy \
     matplotlib \
-    scipy
+    scipy \
+    opencv-python-headless
+# opencv-python-headless: see Dockerfile.dev -- YOLOv8 needs cv2 >= 4.7.
 
 # -----------------------------------------------------------------------------
 # User setup - mirror Dockerfile.dev. The Isaac ROS Dev Base ships with an

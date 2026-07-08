@@ -88,7 +88,11 @@ RUN pip install --no-cache-dir \
     odrive \
     numpy \
     matplotlib \
-    scipy
+    scipy \
+    opencv-python-headless
+# opencv-python-headless: cv2.dnn in apt's 4.5.4 predates YOLOv8 support
+# (fortis_perception detectors need >= 4.7). The pip cv2 shadows the apt one
+# for Python; apt python3-opencv stays as cv_bridge's dependency.
 
 RUN groupadd --gid ${USER_GID} ${USERNAME} \
  && useradd -m -s /bin/bash --uid ${USER_UID} --gid ${USER_GID} ${USERNAME} \

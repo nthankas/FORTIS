@@ -16,15 +16,15 @@ import sys
 import tempfile
 import urllib.request
 
-#: Pinned model source (Unity's mirror of the ultralytics YOLOv8n ONNX export).
-MODEL_URL = ("https://huggingface.co/unity/inference-engine-yolo/"
-             "resolve/main/yolov8n.onnx")
+#: Pinned model source: standard ultralytics YOLOv8n COCO export, pinned to a
+#: HuggingFace revision hash so the content can never change under the URL.
+MODEL_URL = ("https://huggingface.co/SpotLab/YOLOv8Detection/resolve/"
+             "3005c6751fb19cdeb6b10c066185908faf66a097/yolov8n.onnx")
 MODEL_FILENAME = "yolov8n.onnx"
 
-# TODO: pin after the first verified download. Run this script once on a
-# trusted network, take the sha256 it prints, and paste it here. While None
-# the hash is printed but not enforced.
-EXPECTED_SHA256 = None
+#: Verified 2026-07-08 against the revision-pinned URL above; enforced on
+#: every download. Inference requires OpenCV >= 4.7 (see detectors.py).
+EXPECTED_SHA256 = "dd48a79dd7fec8ca25fde4eca742ff7bca23b27e2e903eb23bc1d9f83a459bd2"
 
 DEFAULT_DEST = os.path.join("~", ".cache", "fortis", "models")
 
