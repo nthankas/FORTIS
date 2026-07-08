@@ -108,9 +108,11 @@ class ImuGyroDebiasNode(Node):
         #: True once at least one disarmed, post-settle sample has updated the
         #: EMA -- gates the "converged" wording in the periodic log only.
         self._has_estimate = False
-        #: Latest /fortis/drive/armed value. Assume armed until told otherwise
-        #: so we never fold MOTION into the bias before the first armed msg.
-        self._armed = True
+        #: Latest /fortis/drive/armed value. None = not yet known; the EMA
+        #: stays frozen until the first armed msg so we never fold MOTION
+        #: into the bias, but a first msg of "disarmed" is NOT an edge (the
+        #: motors were never released, so there is no settle transient).
+        self._armed: bool | None = None
         #: Monotonic-ish ROS time of the most recent arm->disarm edge; the EMA
         #: stays frozen until settle_skip_s past this. None = no edge seen yet.
         self._disarm_time: Time | None = None
@@ -139,7 +141,7 @@ class ImuGyroDebiasNode(Node):
     def _on_armed(self, msg: Bool) -> None:
         """Track the armed flag and stamp each arm->disarm edge for the settle skip."""
         armed = bool(msg.data)
-        if self._armed and not armed:
+        if self._armed is True and not armed:
             # Just disarmed: start the settle window before trusting the gyro.
             self._disarm_time = self.get_clock().now()
         self._armed = armed
@@ -152,7 +154,8 @@ class ImuGyroDebiasNode(Node):
 
     def _stationary_and_settled(self) -> bool:
         """Report whether we are disarmed AND past the post-disarm settle window."""
-        if self._armed:
+        if self._armed is not False:
+            # Armed, or armed-state unknown: never fold motion into the bias.
             return False
         if self._disarm_time is None:
             # Disarmed since before any edge was observed (e.g. launched
@@ -191,7 +194,7 @@ class ImuGyroDebiasNode(Node):
 
     def _log_bias(self) -> None:
         """Periodically surface the live bias estimate and the gating state."""
-        state = "estimating" if not self._armed else "frozen (armed)"
+        state = "estimating" if self._armed is False else "frozen (armed/unknown)"
         seen = "converging" if self._has_estimate else "no estimate yet"
         self.get_logger().info(
             f"gyro bias [{state}, {seen}] (rad/s): "
