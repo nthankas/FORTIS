@@ -11,6 +11,9 @@
   <exec_depend>launch_ros</exec_depend>
   <exec_depend>teleop_twist_keyboard</exec_depend>
   <exec_depend>fortis_description</exec_depend>
+  <exec_depend>fortis_perception</exec_depend>
+  <exec_depend>fortis_sim_support</exec_depend>
+  <exec_depend>fortis_arm</exec_depend>
   <exec_depend>robot_state_publisher</exec_depend>
   <exec_depend>joint_state_publisher</exec_depend>
   <exec_depend>xacro</exec_depend>

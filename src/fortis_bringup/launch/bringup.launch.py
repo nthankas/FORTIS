@@ -3,8 +3,9 @@ Top-level FORTIS bringup launch file.
 
 Composes mission_state_node (FSM), drive_node (X-drive ROS interface),
 drive_enable_node (UI arm/disarm of the wheel controller), and the
-odrive health monitor into a single launch entry point. Arm controller,
-perception, and diagnostics will be added as those packages come online.
+odrive health monitor into a single launch entry point. The perception
+chain and the arm seam are available as OPT-IN includes (see below);
+diagnostics ride along with perception's system_health.
 
 Localization (wheel odometry + robot_localization EKF) is available as an
 OPT-IN include, gated by the `localization` launch arg (default false). It
@@ -19,13 +20,32 @@ IMU-dominated EKF yaw. When false drive_node reads /cmd_vel directly and the
 node graph is byte-for-byte the existing one. heading_hold needs the EKF
 running, so it implies localization:=true in practice (enable both).
 
+The perception chain is a third OPT-IN, gated by the `perception` arg
+(default false). When true it includes perception.launch.py: camera source
+(synthetic replayer by default), per-camera point clouds, cloud fusion,
+voxel map (+ optional cross-run diff), detection, click-to-target, system
+health, optional RGBD VO, and that file's default-on foxglove_bridge --
+bringup runs no bridge of its own, so it stays the only one. Pass
+foxglove:=false when a composed launch (e.g. drive_test.launch.py) already
+owns a bridge. Pair with localization:=true vio:=true to fuse the VO
+stream into the EKF.
+
+The arm seam is a fourth OPT-IN, gated by the `arm` arg (default false):
+teensy_bridge (serial link to the arm Teensy; port from `serial_port`,
+default /dev/ttyACM0 -- point it at tools/mock_teensy.py's pty for
+hardware-free runs) plus arm_controller (mission-gated gripper services).
+
 Loads config/bringup_params.yaml so any future declare_parameter() the
 nodes adopt picks up the documented defaults automatically (heading_hold_node
 already reads its gains from there). See that file's header for which values
 are live vs. documentation-only.
 """
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import (
+    DeclareLaunchArgument,
+    GroupAction,
+    IncludeLaunchDescription,
+)
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import (
@@ -69,6 +89,15 @@ def generate_launch_description():
     # which flows through heading_hold (if enabled) then drive_node, exactly
     # like a teleop command.
     orbit = LaunchConfiguration("orbit")
+
+    # Opt-in perception chain and arm seam. Both off by default.
+    perception = LaunchConfiguration("perception")
+    perception_launch = PathJoinSubstitution([
+        FindPackageShare("fortis_bringup"),
+        "launch",
+        "perception.launch.py",
+    ])
+    arm = LaunchConfiguration("arm")
 
     mission_state_node = Node(
         package='fortis_safety',
@@ -142,9 +171,43 @@ def generate_launch_description():
         parameters=[bringup_params],
     )
 
+    # Serial bridge to the arm Teensy 4.1 + the mission-gated arm controller.
+    # Only launched when arm:=true. serial_port overrides the bridge's
+    # declared default so a mock pty can be injected from the CLI.
+    teensy_bridge_node = Node(
+        package='fortis_arm',
+        executable='teensy_bridge',
+        name='teensy_bridge',
+        output='screen',
+        parameters=[bringup_params,
+                    {'serial_port': LaunchConfiguration('serial_port')}],
+        condition=IfCondition(arm),
+    )
+
+    arm_controller_node = Node(
+        package='fortis_arm',
+        executable='arm_controller',
+        name='arm_controller',
+        output='screen',
+        parameters=[bringup_params],
+        condition=IfCondition(arm),
+    )
+
     localization_include = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([localization_launch]),
         condition=IfCondition(localization),
+    )
+
+    # Scoped group on purpose: the include pins the child's `arm` arg false
+    # (bringup owns the arm nodes above) and include launch_arguments are
+    # otherwise GLOBAL -- unscoped, that pin would also flip this file's
+    # IfCondition(arm) off for any entity visited after it.
+    perception_group = GroupAction(
+        [IncludeLaunchDescription(
+            PythonLaunchDescriptionSource([perception_launch]),
+            launch_arguments={"arm": "false"}.items(),
+        )],
+        condition=IfCondition(perception),
     )
 
     return LaunchDescription([
@@ -178,11 +241,42 @@ def generate_launch_description():
                 "launch sets it true."
             ),
         ),
+        DeclareLaunchArgument(
+            "perception",
+            default_value="false",
+            description=(
+                "Include perception.launch.py: cameras (synthetic by "
+                "default) -> point clouds -> voxel map -> detection -> "
+                "click-to-target + system health, plus its default-on "
+                "foxglove_bridge (bringup has none of its own). Off by "
+                "default; the existing node graph is unchanged unless true."
+            ),
+        ),
+        DeclareLaunchArgument(
+            "arm",
+            default_value="false",
+            description=(
+                "Run teensy_bridge + arm_controller (fortis_arm). Off by "
+                "default. See serial_port for the Teensy device."
+            ),
+        ),
+        DeclareLaunchArgument(
+            "serial_port",
+            default_value="/dev/ttyACM0",
+            description=(
+                "Teensy USB-CDC port for teensy_bridge (only used with "
+                "arm:=true); use the pty printed by tools/mock_teensy.py "
+                "for hardware-free runs."
+            ),
+        ),
         mission_state_node,
         drive_node,
         drive_enable_node,
         odrive_health_monitor_node,
         heading_hold_node,
         orbit_node,
+        teensy_bridge_node,
+        arm_controller_node,
         localization_include,
+        perception_group,
     ])
