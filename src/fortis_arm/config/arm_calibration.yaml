@@ -1,0 +1,42 @@
+# FORTIS Teensy arm-bridge calibration (ROS 2 params for node "teensy_bridge").
+#
+# Every step/servo mapping below is a PLACEHOLDER pending a bench pass on the
+# assembled arm. Override on hardware only; do not treat these as accurate.
+teensy_bridge:
+  ros__parameters:
+    # steps_per_rad = motor_steps_per_rev * gear_ratio / (2 * pi)
+    # Assumption: 200 full-step NEMA-23 x 8 microsteps = 1600 steps/rev.
+    #   J1, J2: 50:1 planetary -> 1600 * 50 / (2*pi) = 12732.4
+    #   J3    : 27:1 planetary -> 1600 * 27 / (2*pi) =  6875.5
+    # PLACEHOLDER - bench-calibrate on hardware.
+    steps_per_rad_j1: 12732.4
+    steps_per_rad_j2: 12732.4
+    steps_per_rad_j3: 6875.5
+
+    # J4 = Hitec D845WP servo. Bench pulse range 800..2000 us mapped across
+    # the URDF joint_j4 limit of -pi/2..+pi/2 rad, centered at the mid pulse.
+    #   j4_us_per_rad = (2000 - 800) / pi = 382
+    # PLACEHOLDER - bench-calibrate on hardware.
+    j4_us_center: 1400.0
+    j4_us_per_rad: 382.0
+    j4_us_min: 800
+    j4_us_max: 2000
+
+    # Gripper servo pulse widths, within the protocol-allowed 1000..2000 us.
+    # closed_us maps to jaw position 0 m, open_us to gripper_stroke_m (URDF
+    # gripper_jaw_stroke = 0.027 m).
+    # PLACEHOLDER - bench-calibrate on hardware.
+    gripper_open_us: 1900
+    gripper_closed_us: 1100
+    gripper_stroke_m: 0.027
+
+    # Soft per-joint velocity ceilings (steps/sec). PLACEHOLDER.
+    max_sps_j1: 8000.0
+    max_sps_j2: 8000.0
+    max_sps_j3: 8000.0
+
+    # Link / timing.
+    serial_port: /dev/ttyACM0
+    baud: 1000000
+    status_rate_hz: 20.0
+    heartbeat_rate_hz: 20.0

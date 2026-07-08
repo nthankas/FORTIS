@@ -13,8 +13,8 @@ Test cases:
 1. IDLE, ORBIT, TARGETING, and FAULT reject both gripper services with
    the "rejected: state X not in {ALLOWED_ARM_STATES}" message.
 2. ARM_AT_VIEW, INSPECT, PICK, HOLDING, and RETURN_HOME accept the
-   gripper services with the "gripper actuation not implemented" stub
-   message, since the Teensy serial layer has not landed.
+   gripper services with success=True and the "gripper command sent"
+   message, now that the Teensy bridge relays the command.
 
 Allowlist comes from fortis_arm.arm_controller_node.ALLOWED_ARM_STATES.
 Topic names, service names, and FSM event/state enums are imported
@@ -57,7 +57,7 @@ SPIN_ONCE_TIMEOUT_S: float = 0.02
 DEFAULT_WAIT_TIMEOUT_S: float = 5.0
 SERVICE_RESPONSE_TIMEOUT_S: float = 3.0
 
-STUB_GRIPPER_MESSAGE: str = "gripper actuation not implemented"
+STUB_GRIPPER_MESSAGE: str = "gripper command sent"
 REJECT_MESSAGE_PREFIX: str = "rejected: state "
 
 
@@ -278,21 +278,20 @@ class TestSafetyArmIntegration(unittest.TestCase):
         )
 
     def _assert_stub_accepted(self, response: Trigger.Response, state_name: str):
-        # The arm controller returns success=False even for accepted
-        # gripper calls because the Teensy serial layer has not landed.
-        # Contract: explicit stub message, not silence, so the operator
-        # sees the difference between "rejected by gate" and "accepted
-        # but actuation missing".
-        self.assertFalse(
+        # The arm controller now relays the gripper command to the Teensy
+        # bridge over /fortis/arm/command and returns success=True.
+        # Contract: an accepted gate yields an explicit "command sent"
+        # message so the operator can tell it apart from a gate rejection.
+        self.assertTrue(
             response.success,
-            f"stub gripper call should return success=False in {state_name} "
-            "until the Teensy layer lands"
+            f"accepted gripper call should return success=True in {state_name} "
+            "now that the Teensy bridge relays the command"
         )
         self.assertEqual(
             response.message,
             STUB_GRIPPER_MESSAGE,
             f"in {state_name} the gripper should accept the gate and return "
-            f"the stub message {STUB_GRIPPER_MESSAGE!r}, got: "
+            f"the message {STUB_GRIPPER_MESSAGE!r}, got: "
             f"{response.message!r}"
         )
 
@@ -399,9 +398,9 @@ class TestSafetyArmIntegration(unittest.TestCase):
         self._assert_rejected(self._call_gripper(self.open_client), "FAULT")
         self._assert_rejected(self._call_gripper(self.close_client), "FAULT")
 
-    # --- Allowed states (stub success) ---------------------------------
+    # --- Allowed states (command sent) ---------------------------------
 
-    def test_05_arm_at_view_accepts_with_stub_message(self):
+    def test_05_arm_at_view_accepts_with_command_message(self):
         self._drive_to_arm_at_view()
         self._assert_stub_accepted(
             self._call_gripper(self.open_client), "ARM_AT_VIEW"
@@ -410,7 +409,7 @@ class TestSafetyArmIntegration(unittest.TestCase):
             self._call_gripper(self.close_client), "ARM_AT_VIEW"
         )
 
-    def test_06_inspect_accepts_with_stub_message(self):
+    def test_06_inspect_accepts_with_command_message(self):
         self._drive_to_inspect()
         self._assert_stub_accepted(
             self._call_gripper(self.open_client), "INSPECT"
@@ -419,7 +418,7 @@ class TestSafetyArmIntegration(unittest.TestCase):
             self._call_gripper(self.close_client), "INSPECT"
         )
 
-    def test_07_pick_accepts_with_stub_message(self):
+    def test_07_pick_accepts_with_command_message(self):
         self._drive_to_pick()
         self._assert_stub_accepted(
             self._call_gripper(self.open_client), "PICK"
@@ -428,7 +427,7 @@ class TestSafetyArmIntegration(unittest.TestCase):
             self._call_gripper(self.close_client), "PICK"
         )
 
-    def test_08_holding_accepts_with_stub_message(self):
+    def test_08_holding_accepts_with_command_message(self):
         self._drive_to_holding()
         self._assert_stub_accepted(
             self._call_gripper(self.open_client), "HOLDING"
@@ -437,7 +436,7 @@ class TestSafetyArmIntegration(unittest.TestCase):
             self._call_gripper(self.close_client), "HOLDING"
         )
 
-    def test_09_return_home_accepts_with_stub_message(self):
+    def test_09_return_home_accepts_with_command_message(self):
         self._drive_to_return_home()
         self._assert_stub_accepted(
             self._call_gripper(self.open_client), "RETURN_HOME"

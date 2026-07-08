@@ -10,6 +10,14 @@ Subscribes
                                               the pattern, do not invent
                                               a new one.
 
+Publishes
+---------
+    /fortis/arm/command    sensor_msgs/JointState
+        In allowed states the gripper services publish a partial
+        JointState naming gripper_left_joint at the calibrated open or
+        closed position. The teensy_bridge node translates it to a
+        CMD_SET_JOINT_TARGETS frame and drives the servo.
+
 Services
 --------
     open_gripper    std_srvs/srv/Trigger
@@ -17,8 +25,8 @@ Services
         Both are state-gated against ALLOWED_ARM_STATES (ARM_AT_VIEW,
         INSPECT, PICK, HOLDING, RETURN_HOME). Calls outside
         ALLOWED_ARM_STATES return success=False with an explanatory
-        message; calls inside return success=False with
-        message="gripper actuation not implemented".
+        message; calls inside publish the gripper command and return
+        success=True with message="gripper command sent".
 
 Why std_srvs/Trigger
 --------------------
@@ -38,9 +46,9 @@ the log.
 Threading
 ---------
 SingleThreadedExecutor is sufficient: the state subscription and the
-service callbacks all do trivial work (state comparison + log +
-immediate response). MultiThreaded would buy nothing and would invite a
-data race on the cached state string.
+service callbacks all do trivial work (state comparison + log + publish
++ immediate response). MultiThreaded would buy nothing and would invite
+a data race on the cached state string.
 
 """
 
@@ -50,6 +58,7 @@ import rclpy
 from rclpy.duration import Duration
 from rclpy.node import Node
 from rclpy.time import Time
+from sensor_msgs.msg import JointState
 from std_msgs.msg import String
 from std_srvs.srv import Trigger
 
@@ -73,16 +82,21 @@ ALLOWED_ARM_STATES: frozenset[str] = frozenset({
 REJECT_LOG_THROTTLE_S: float = 1.0
 
 MISSION_STATE_TOPIC: str = "/fortis/mission_state"
+ARM_COMMAND_TOPIC: str = "/fortis/arm/command"
 OPEN_GRIPPER_SERVICE: str = "open_gripper"
 CLOSE_GRIPPER_SERVICE: str = "close_gripper"
+
+#: Actuated gripper joint (URDF); the right jaw mimics it. The teensy
+#: bridge maps this prismatic position to a servo pulse width.
+GRIPPER_LEFT_JOINT: str = "gripper_left_joint"
 
 #: Throttle-history key used in place of a real state name when logging
 #: a rejection that happened before any /fortis/mission_state arrived.
 _UNKNOWN_STATE_KEY: str = "<no_state_received>"
 
-#: Stub message returned on accepted gripper service calls. Replace
-#: when the actual Teensy serial protocol lands.
-_STUB_GRIPPER_MESSAGE: str = "gripper actuation not implemented"
+#: Message returned on accepted gripper service calls, now that the call
+#: publishes a real command to the teensy bridge.
+_GRIPPER_SENT_MESSAGE: str = "gripper command sent"
 
 
 # --- Node --------------------------------------------------------------------
@@ -109,6 +123,14 @@ class ArmControllerNode(Node):
         # content; we want one warning per state per second.
         self._last_reject_log: dict[str, Time] = {}
 
+        # Calibrated jaw positions (metres) matching config/arm_calibration
+        # gripper_open_us / gripper_closed_us endpoints. Defaults track the
+        # URDF gripper_jaw_stroke (0.027 m open, 0.0 closed).
+        self._gripper_open_pos = float(
+            self.declare_parameter("gripper_open_pos", 0.027).value)
+        self._gripper_closed_pos = float(
+            self.declare_parameter("gripper_closed_pos", 0.0).value)
+
         # Latched QoS for the mission_state subscription. Matches the
         # publisher in fortis_safety/mission_state_node and the
         # subscription in fortis_drive/drive_node: TRANSIENT_LOCAL +
@@ -124,6 +146,10 @@ class ArmControllerNode(Node):
             MISSION_STATE_TOPIC,
             self._on_mission_state,
             latched_qos,
+        )
+
+        self._command_pub = self.create_publisher(
+            JointState, ARM_COMMAND_TOPIC, 10
         )
 
         self.create_service(
@@ -192,9 +218,19 @@ class ArmControllerNode(Node):
                 f"not in {sorted(ALLOWED_ARM_STATES)}"
             )
             return response
-        # Allowed-state path: stub. False + explanation.
-        response.success = False
-        response.message = _STUB_GRIPPER_MESSAGE
+        # Allowed-state path: publish the gripper command to the teensy
+        # bridge, which maps the jaw position to a servo pulse width.
+        position = (
+            self._gripper_open_pos if kind == "open_gripper"
+            else self._gripper_closed_pos
+        )
+        command = JointState()
+        command.header.stamp = self.get_clock().now().to_msg()
+        command.name = [GRIPPER_LEFT_JOINT]
+        command.position = [float(position)]
+        self._command_pub.publish(command)
+        response.success = True
+        response.message = _GRIPPER_SENT_MESSAGE
         return response
 
 

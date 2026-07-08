@@ -3,7 +3,7 @@
 <package format="3">
   <name>fortis_arm</name>
   <version>0.0.0</version>
-  <description>Arm controller seam for FORTIS, gated by mission state. Kinematics deferred -- this package is the contract scaffold.</description>
+  <description>Arm controller seam for FORTIS, gated by mission state, plus the Teensy 4.1 serial bridge.</description>
   <maintainer email="nikhilthankasala@gmail.com">Nikhil Thankasala</maintainer>
   <license>MIT</license>
 
@@ -14,6 +14,8 @@
   <depend>std_srvs</depend>
   <depend>geometry_msgs</depend>
   <depend>sensor_msgs</depend>
+  <depend>diagnostic_msgs</depend>
+  <depend>python3-serial</depend>
 
   <test_depend>python3-pytest</test_depend>
 

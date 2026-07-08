@@ -36,10 +36,13 @@ SPIN_DURATION_S: float = 0.3
 #: callback rather than blocking for a full slice.
 SPIN_ONCE_TIMEOUT_S: float = 0.02
 
-#: Per-future timeout. The service stub resolves immediately, so anything
+#: Per-future timeout. The service resolves immediately, so anything
 #: > a few hundred ms means something is wrong (DDS not discovered,
 #: callback not registered, etc.).
 FUTURE_TIMEOUT_S: float = 2.0
+
+#: Message returned on an accepted gripper call.
+GRIPPER_SENT_MESSAGE: str = "gripper command sent"
 
 #: Every state defined in fortis_safety.mission_state_machine.State.
 #: Listed explicitly here rather than imported so this test does not
@@ -194,15 +197,15 @@ class _Harness:
 
 
 @pytest.mark.parametrize("state", sorted(ALLOWED_ARM_STATES))
-def test_open_gripper_in_allowed_states_returns_stub(harness, state):
+def test_open_gripper_in_allowed_states_sends_command(harness, state):
     harness.publish_state(state)
     harness.spin()
 
     response = harness.call_open_gripper()
-    assert response.success is False, \
-        f"scaffold open_gripper must return success=False (stub) in state {state}"
-    assert "gripper actuation not implemented" in response.message, \
-        f"unexpected stub message in state {state}: {response.message!r}"
+    assert response.success is True, \
+        f"open_gripper must return success=True in allowed state {state}"
+    assert response.message == GRIPPER_SENT_MESSAGE, \
+        f"unexpected accepted message in state {state}: {response.message!r}"
 
 
 @pytest.mark.parametrize("state", sorted(DISALLOWED_STATES))
@@ -218,13 +221,13 @@ def test_open_gripper_rejected_in_disallowed_states(harness, state):
 
 
 @pytest.mark.parametrize("state", sorted(ALLOWED_ARM_STATES))
-def test_close_gripper_in_allowed_states_returns_stub(harness, state):
+def test_close_gripper_in_allowed_states_sends_command(harness, state):
     harness.publish_state(state)
     harness.spin()
 
     response = harness.call_close_gripper()
-    assert response.success is False
-    assert "gripper actuation not implemented" in response.message
+    assert response.success is True
+    assert response.message == GRIPPER_SENT_MESSAGE
 
 
 @pytest.mark.parametrize("state", sorted(DISALLOWED_STATES))
