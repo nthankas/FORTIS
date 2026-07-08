@@ -20,6 +20,17 @@ v3 nests it under /imu/data); the EKF config subscribes to /imu. The
 `imu_topic` arg drives a remap so the source
 topic can change (e.g. a different camera) without editing ekf.yaml.
 
+Gyro debias (default on)
+------------------------
+The BMI270 gyro has a small zero-rate bias, so the IMU-owned yaw integrates a
+slow drift and heading-hold creeps. With `debias_imu:=true` (default) an
+imu_gyro_debias_node sits between the raw IMU and the EKF: it estimates the
+gyro-Z bias whenever the drive is disarmed (robot physically still) and
+subtracts it from every sample, publishing /imu/debiased. The EKF then reads
+/imu/debiased instead of the raw `imu_topic`, so it sees a zero-mean yaw rate
+at rest. Set `debias_imu:=false` to bypass the node entirely -- the EKF reads
+`imu_topic` directly, byte-for-byte the pre-debias behaviour.
+
 Why the static IMU TF is conditional
 -------------------------------------
 The EKF needs a TF path from the IMU message's frame_id to base_link. The
@@ -36,10 +47,15 @@ base_link -> ... -> imu_frame chain, to avoid a duplicate transform.
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
-from launch.conditions import IfCondition
+from launch.conditions import IfCondition, UnlessCondition
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
+
+#: Fixed intermediate topic the debias node publishes and the EKF reads when
+#: debias_imu is on. Not an arg: it is internal plumbing between the two nodes
+#: in THIS launch file, so exposing it would only invite a mismatch.
+DEBIASED_IMU_TOPIC = "/imu/debiased"
 
 
 def generate_launch_description():
@@ -52,6 +68,7 @@ def generate_launch_description():
     imu_topic = LaunchConfiguration("imu_topic")
     imu_frame = LaunchConfiguration("imu_frame")
     publish_imu_tf = LaunchConfiguration("publish_imu_tf")
+    debias_imu = LaunchConfiguration("debias_imu")
 
     declare_imu_topic = DeclareLaunchArgument(
         "imu_topic",
@@ -79,6 +96,17 @@ def generate_launch_description():
             "imu_frame chain, to avoid a duplicate TF."
         ),
     )
+    declare_debias_imu = DeclareLaunchArgument(
+        "debias_imu",
+        default_value="true",
+        description=(
+            "Insert imu_gyro_debias_node between the raw IMU and the EKF: it "
+            "auto-estimates the gyro zero-rate bias while the drive is "
+            "disarmed and subtracts it, so the EKF sees a zero-mean yaw rate "
+            "at rest. true: EKF reads /imu/debiased. false: EKF reads "
+            "imu_topic directly (pre-debias behaviour)."
+        ),
+    )
 
     wheel_odometry_node = Node(
         package="fortis_localization",
@@ -87,7 +115,39 @@ def generate_launch_description():
         output="screen",
     )
 
-    ekf_node = Node(
+    # The bias estimator reads the RAW imu_topic and republishes the corrected
+    # stream on DEBIASED_IMU_TOPIC. Only launched when debias_imu is true.
+    imu_gyro_debias_node = Node(
+        package="fortis_localization",
+        executable="imu_gyro_debias_node",
+        name="imu_gyro_debias_node",
+        output="screen",
+        parameters=[{
+            "raw_imu_topic": imu_topic,
+            "debiased_imu_topic": DEBIASED_IMU_TOPIC,
+        }],
+        condition=IfCondition(debias_imu),
+    )
+
+    # Two EKF variants guarded by opposite conditions on debias_imu: a launch
+    # remap target cannot itself be conditional, so the only difference -- which
+    # topic /imu maps to -- is expressed as which of these two nodes runs.
+    # debias on -> EKF consumes the debiased stream; debias off -> EKF consumes
+    # the raw imu_topic exactly as before. Both carry the same name/config so
+    # the running system is identical apart from the IMU source.
+    ekf_node_debiased = Node(
+        package="robot_localization",
+        executable="ekf_node",
+        name="ekf_filter_node",
+        output="screen",
+        parameters=[ekf_params],
+        remappings=[
+            ("/imu", DEBIASED_IMU_TOPIC),
+            ("odometry/filtered", "/odometry/filtered"),
+        ],
+        condition=IfCondition(debias_imu),
+    )
+    ekf_node_raw = Node(
         package="robot_localization",
         executable="ekf_node",
         name="ekf_filter_node",
@@ -97,6 +157,7 @@ def generate_launch_description():
             ("/imu", imu_topic),
             ("odometry/filtered", "/odometry/filtered"),
         ],
+        condition=UnlessCondition(debias_imu),
     )
 
     # Identity static transform: the OAK IMU sits at the chassis front, close
@@ -117,7 +178,10 @@ def generate_launch_description():
         declare_imu_topic,
         declare_imu_frame,
         declare_publish_imu_tf,
+        declare_debias_imu,
         wheel_odometry_node,
-        ekf_node,
+        imu_gyro_debias_node,
+        ekf_node_debiased,
+        ekf_node_raw,
         imu_to_base_tf,
     ])
