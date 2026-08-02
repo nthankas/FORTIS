@@ -74,14 +74,20 @@ release-to-stop is crisp instead of waiting out the drive watchdog.
 
 ## Parameters
 
-`drive_node` deliberately declares none. The set of allowed states, the
-watchdog timeout, the throttle interval, and the topic names are module-level
-constants in `drive_node.py` to avoid the failure mode of "node silently does
-the wrong thing because someone overrode a parameter at launch". If
-parametrisation becomes necessary, declare them through `declare_parameter`
-with explicit defaults that match the constants today.
+`drive_node` declares exactly one:
 
-`heading_hold_node` and `orbit_node` DO declare their knobs with
+| Param | Default | Meaning |
+|---|---|---|
+| `cmd_vel_timeout_s` | 0.5 | `/cmd_vel` dead-man watchdog window, s (see Gating and safety stops above). Live-overridable from `bringup_params.yaml`. |
+
+Everything else on `drive_node` — the set of allowed states, the throttle
+interval, the topic names — stays a module-level constant in `drive_node.py`
+to avoid the failure mode of "node silently does the wrong thing because
+someone overrode a parameter at launch". Any future parametrisation should
+follow `cmd_vel_timeout_s`: `declare_parameter` with an explicit default that
+matches the constant.
+
+`heading_hold_node` and `orbit_node` also declare their knobs with
 `declare_parameter`; the in-code defaults below are live-overridable from
 `fortis_bringup/config/bringup_params.yaml`.
 

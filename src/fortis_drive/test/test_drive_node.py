@@ -31,6 +31,7 @@ import pytest
 import rclpy
 from geometry_msgs.msg import Twist
 from rclpy.node import Node
+from rclpy.parameter import Parameter
 from rclpy.qos import QoSDurabilityPolicy, QoSProfile, QoSReliabilityPolicy
 from std_msgs.msg import Float64MultiArray, String
 
@@ -534,3 +535,21 @@ def test_stop_transition_zeros_immediately(harness):
     assert len(harness.zero_msgs) > zeros_before, \
         "gate-close must publish zeros immediately, not wait for next /cmd_vel"
     assert list(harness.controller_msgs[-1].data) == [0.0, 0.0, 0.0, 0.0]
+
+
+def test_cmd_vel_timeout_parameter_override_wins(rclpy_session):
+    """
+    cmd_vel_timeout_s is a live ROS parameter: an override beats the default.
+
+    A launch/YAML override (bringup_params.yaml) must reach the watchdog, so
+    construct the node the way rclpy applies YAML params -- via
+    parameter_overrides -- and assert the internal timeout reflects it.
+    """
+    node = DriveNode(
+        parameter_overrides=[Parameter("cmd_vel_timeout_s", value=1.25)]
+    )
+    try:
+        assert node._cmd_vel_timeout_s == 1.25, \
+            "parameter override must win over the injected constructor default"
+    finally:
+        node.destroy_node()

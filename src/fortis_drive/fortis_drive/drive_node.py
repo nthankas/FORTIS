@@ -240,14 +240,17 @@ class DriveNode(Node):
     timestamp of the last /cmd_vel (for the dead-man watchdog).
     """
 
-    def __init__(self, cmd_vel_timeout_s: float = CMD_VEL_TIMEOUT_S) -> None:
-        super().__init__("drive_node")
+    def __init__(self, cmd_vel_timeout_s: float = CMD_VEL_TIMEOUT_S, **kwargs) -> None:
+        super().__init__("drive_node", **kwargs)
 
         # Dead-man timeout for this instance. Injectable so tests can pass a
         # large value (watchdog effectively disabled, for timing-stable gating
-        # tests) or a tiny one (fires quickly). Production uses the
-        # CMD_VEL_TIMEOUT_S default.
-        self._cmd_vel_timeout_s: float = cmd_vel_timeout_s
+        # tests) or a tiny one (fires quickly). Declared as a parameter so a
+        # launch/YAML override (bringup_params.yaml) beats the injected
+        # default at runtime.
+        self._cmd_vel_timeout_s: float = float(
+            self.declare_parameter("cmd_vel_timeout_s", cmd_vel_timeout_s).value
+        )
 
         # Most recent mission state seen on /fortis/mission_state. None
         # until the first message arrives; this guarantees we reject
