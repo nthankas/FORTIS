@@ -5,7 +5,7 @@
 # fully-qualified node name; values under "ros__parameters:" are the
 # defaults that node will see at startup unless a launch arg overrides.
 #
-# Most fortis_* nodes do NOT call declare_parameter() (see
+# Some fortis_* nodes do NOT call declare_parameter() (see
 # src/fortis_drive/README.md "Parameters" section for the rationale:
 # the module-level constants were left in code to make accidental
 # override impossible). For those, loading this YAML is a no-op in ROS 2
@@ -13,9 +13,11 @@
 # entries here are forward-looking documentation of the values that would
 # become overridable once those nodes adopt declare_parameter().
 #
-# The EXCEPTION is heading_hold_node (below), which DOES declare each of
-# its parameters -- so its block is a LIVE override, not documentation.
-# Each block notes whether it is live or documentation-only.
+# LIVE overrides (the node declares the parameter, so editing it here
+# changes behaviour at launch): heading_hold_node, orbit_node,
+# imu_gyro_debias_node, drive_node (cmd_vel_timeout_s), teensy_bridge,
+# arm_motion, and arm_controller's gripper positions. Each block notes
+# whether it is live or documentation-only.
 #
 # What CANNOT be set here:
 #   - ROS_DOMAIN_ID. This is an environment variable, not a ROS
@@ -132,13 +134,58 @@ imu_gyro_debias_node:
 arm_controller:
   ros__parameters:
     # Reject-warning throttle interval, seconds. Same role as
-    # drive_node above. Hardcoded as REJECT_LOG_THROTTLE_S in
-    # arm_controller_node.py.
+    # drive_node above. Documentation only: hardcoded as
+    # REJECT_LOG_THROTTLE_S in arm_controller_node.py.
     reject_log_throttle_s: 1.0
-    # Teensy heartbeat watchdog rate placeholder. The Teensy 4.1
-    # firmware (firmware/teensy/teensy.ino) expects a heartbeat every
-    # 250 ms; if a heartbeat is missed for this many consecutive
-    # cycles, the Teensy latches a fault and the arm controller must
-    # surface it. Not wired up until the Teensy serial bridge lands.
-    teensy_heartbeat_period_s: 0.25
-    teensy_heartbeat_miss_threshold: 3
+    # Gripper jaw positions (m) the services publish on /fortis/arm/command.
+    # LIVE: arm_controller declares both. Defaults mirror the URDF
+    # gripper_jaw_stroke (0.027 m open, 0.0 closed).
+    gripper_open_pos: 0.027
+    gripper_closed_pos: 0.0
+
+teensy_bridge:
+  ros__parameters:
+    # Serial bridge to the arm Teensy 4.1. LIVE: every key below is
+    # declared in teensy_bridge_node.py. NOTE: bringup.launch.py passes
+    # its serial_port launch arg inline AFTER this file, so that arg
+    # (default /dev/ttyACM0) wins over the value here.
+    serial_port: "/dev/ttyACM0"
+    baud: 1000000
+    # ArmStatus publish rate and heartbeat rate, Hz. The firmware
+    # (firmware/teensy/teensy.ino) faults if it misses heartbeats for
+    # 250 ms, so 20 Hz (50 ms) leaves a 5x margin.
+    status_rate_hz: 20.0
+    heartbeat_rate_hz: 20.0
+    # Stepper scale, steps per joint radian (microstepping x gearing).
+    steps_per_rad_j1: 12732.4
+    steps_per_rad_j2: 12732.4
+    steps_per_rad_j3: 6875.5
+    # J4 (wrist servo) pulse-width map: us at zero rad, us per rad, and
+    # the clamp range.
+    j4_us_center: 1400.0
+    j4_us_per_rad: 382.0
+    j4_us_min: 800
+    j4_us_max: 2000
+    # Gripper servo pulse widths and the jaw stroke they span (m);
+    # stroke pairs with arm_controller's gripper_open_pos above.
+    gripper_open_us: 1900
+    gripper_closed_us: 1100
+    gripper_stroke_m: 0.027
+    # Per-joint stepper speed ceilings, steps/s.
+    max_sps_j1: 8000.0
+    max_sps_j2: 8000.0
+    max_sps_j3: 8000.0
+
+arm_motion:
+  ros__parameters:
+    # IK/MoveToPose execution. LIVE: arm_motion declares each of these.
+    # Joint-space interpolation speed (rad/s) and waypoint stream rate (Hz).
+    joint_speed_rad_s: 0.3
+    command_rate_hz: 20.0
+    # A move succeeds once /joint_states settles within this tolerance
+    # (rad); it aborts after move_timeout_s.
+    joint_tolerance_rad: 0.05
+    move_timeout_s: 30.0
+    # Emit /fortis/events/arm_at_view_pose after a successful move
+    # (drives the FSM TARGETING -> ARM_AT_VIEW under the ik_ok guard).
+    publish_view_event: true
