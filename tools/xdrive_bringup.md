@@ -4,7 +4,7 @@ End-to-end test: operator drives from Foxglove (PC) → mission FSM + X-drive
 kinematics on the Jetson → `odrive_ros2_control` → CAN → 4× ODrive S1 → wheels.
 
 Everything runs **in the container on the Jetson**. From the PC:
-`ssh fortis@100.93.172.109` → `cd /data/fortis_ws/src/FORTIS && ./stack exec`
+`ssh fortis@<jetson-tailscale-ip>` → `cd /data/fortis_ws/src/FORTIS && ./stack exec`
 → inside: `source /opt/ros/humble/setup.bash && source /workspace/install/setup.bash`.
 
 ---
@@ -59,7 +59,7 @@ the wheel controller loads INACTIVE on purpose.
 ## 3. Connect Foxglove (PC)
 
 - [ ] Foxglove Studio → Open connection → Foxglove WebSocket →
-      `ws://100.93.172.109:8765` (Tailscale) or the wired/LAN IP.
+      `ws://<jetson-tailscale-ip>:8765` (Tailscale) or the wired/LAN IP.
 - [ ] Import the ready-made layout **`foxglove/fortis_xdrive_teleop.json`**
       (Studio → Layouts → Import from file…). It loads a **Translate** pad
       (fwd/back + strafe), a **Rotate** pad, **START ORBIT** / **STOP** buttons,
