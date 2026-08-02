@@ -104,7 +104,7 @@ def axis_health(
 def snapshot_is_fresh(
     ages_s: Sequence[Optional[float]], stale_after_s: float
 ) -> bool:
-    """True iff every per-stream age exists and is inside the window."""
+    """Return True iff every per-stream age exists and is inside the window."""
     return all(age is not None and age <= stale_after_s for age in ages_s)
 
 

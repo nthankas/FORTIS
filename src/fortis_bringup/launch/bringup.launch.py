@@ -9,8 +9,9 @@ diagnostics ride along with perception's system_health.
 
 Localization (wheel odometry + robot_localization EKF) is available as an
 OPT-IN include, gated by the `localization` launch arg (default false). It
-is off by default so this entry point's behaviour is unchanged until the
-estimation layer is bench-verified; bring it up with `localization:=true`.
+is off by default so this entry point's behaviour is unchanged out of the
+box; the estimation layer is validated hardware-free in simulation. Bring
+it up with `localization:=true`.
 
 Heading hold (closed-loop yaw on the EKF estimate) is a second OPT-IN, gated
 by the `heading_hold` arg (default false). When true it launches

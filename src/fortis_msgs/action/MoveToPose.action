@@ -11,9 +11,8 @@ geometry_msgs/PoseStamped target_pose
 # Action result.
 #
 # succeeded   True if the arm reached the goal within tolerance, false
-#             otherwise. The fortis_arm scaffold returns false with
-#             message="kinematics not implemented" until the IK and
-#             trajectory pipeline lands.
+#             otherwise (unreachable target, TF failure, or joint
+#             settling timeout in fortis_arm/arm_motion_node).
 # message     Human-readable explanation. Always populated.
 
 bool succeeded
@@ -22,6 +21,6 @@ string message
 # Action feedback. Published periodically while the goal is active.
 #
 # progress    Estimated fraction of the trajectory completed, in
-#             [0.0, 1.0]. The scaffold does not publish feedback.
+#             [0.0, 1.0].
 
 float32 progress
