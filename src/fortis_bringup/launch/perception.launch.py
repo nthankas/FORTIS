@@ -18,7 +18,8 @@ target_selector, and system_health. Options:
   * foxglove:=true (default) runs ONE foxglove_bridge on :8765. Pass
     foxglove:=false when composing with a launch that already owns a
     bridge (drive_test.launch.py / chassis_orbit.launch.py).
-  * arm:=true adds teensy_bridge (see serial_port) + arm_controller.
+  * arm:=true adds teensy_bridge (see serial_port) + arm_controller +
+    arm_motion (ik_ok flag and the MoveToPose action server).
 
 The mission FSM is NOT started here: bringup.launch.py owns
 mission_state_node (run `bringup.launch.py perception:=true` for the full
@@ -200,7 +201,7 @@ def _foxglove(context):
 
 
 def _arm(context):
-    """Build teensy_bridge + arm_controller when arm:=true."""
+    """Build teensy_bridge + arm_controller + arm_motion when arm:=true."""
     if not _truthy(context, "arm"):
         return []
     return [
@@ -217,6 +218,12 @@ def _arm(context):
             package="fortis_arm",
             executable="arm_controller",
             name="arm_controller",
+            output="screen",
+        ),
+        Node(
+            package="fortis_arm",
+            executable="arm_motion",
+            name="arm_motion",
             output="screen",
         ),
     ]
@@ -307,7 +314,10 @@ def generate_launch_description():
         DeclareLaunchArgument(
             "arm",
             default_value="false",
-            description="Run teensy_bridge + arm_controller (fortis_arm).",
+            description=(
+                "Run teensy_bridge + arm_controller + arm_motion "
+                "(fortis_arm)."
+            ),
         ),
         DeclareLaunchArgument(
             "serial_port",

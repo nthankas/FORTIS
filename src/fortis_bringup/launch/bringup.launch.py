@@ -33,7 +33,9 @@ stream into the EKF.
 The arm seam is a fourth OPT-IN, gated by the `arm` arg (default false):
 teensy_bridge (serial link to the arm Teensy; port from `serial_port`,
 default /dev/ttyACM0 -- point it at tools/mock_teensy.py's pty for
-hardware-free runs) plus arm_controller (mission-gated gripper services).
+hardware-free runs), arm_controller (mission-gated gripper services), and
+arm_motion (analytic IK: the latched ik_ok context flag plus the
+MoveToPose action server that emits ARM_AT_VIEW_POSE).
 
 Loads config/bringup_params.yaml so any future declare_parameter() the
 nodes adopt picks up the documented defaults automatically (heading_hold_node
@@ -193,6 +195,18 @@ def generate_launch_description():
         condition=IfCondition(arm),
     )
 
+    # IK-backed ik_ok context flag + the MoveToPose action server. Rides the
+    # same `arm` gate: without it the FSM can never take TARGETING ->
+    # ARM_AT_VIEW, so the seam is incomplete with bridge+controller alone.
+    arm_motion_node = Node(
+        package='fortis_arm',
+        executable='arm_motion',
+        name='arm_motion',
+        output='screen',
+        parameters=[bringup_params],
+        condition=IfCondition(arm),
+    )
+
     localization_include = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([localization_launch]),
         condition=IfCondition(localization),
@@ -256,8 +270,9 @@ def generate_launch_description():
             "arm",
             default_value="false",
             description=(
-                "Run teensy_bridge + arm_controller (fortis_arm). Off by "
-                "default. See serial_port for the Teensy device."
+                "Run teensy_bridge + arm_controller + arm_motion "
+                "(fortis_arm). Off by default. See serial_port for the "
+                "Teensy device."
             ),
         ),
         DeclareLaunchArgument(
@@ -277,6 +292,7 @@ def generate_launch_description():
         orbit_node,
         teensy_bridge_node,
         arm_controller_node,
+        arm_motion_node,
         localization_include,
         perception_group,
     ])
