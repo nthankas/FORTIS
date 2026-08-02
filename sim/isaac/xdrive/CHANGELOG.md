@@ -3,6 +3,10 @@
 High-level history of the X-drive simulation. Details live in git log; this
 file tracks the milestones that changed the canonical model.
 
+Note (2026-08-02): the `deprecated/` tree and superseded result dirs that
+older entries reference were removed in the handoff cleanup; recover any of
+them from git history if ever needed.
+
 ---
 
 ## 2026-05-04 — V3 arm + 5-sphere realwheel collider + deprecated/ split (abe4d84)

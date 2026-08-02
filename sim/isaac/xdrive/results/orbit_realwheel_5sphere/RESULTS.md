@@ -82,8 +82,8 @@ the M8325s.
 | `plot_5sphere.py` | Plot generator |
 
 The single-sphere baseline this used to be compared against has been
-moved to `deprecated/results/orbit_realwheel_singlesphere/`. The 5-sphere
-chain is the canonical roller model now.
+retired (see git history). The 5-sphere chain is the canonical roller
+model now.
 
 ## Pipeline
 

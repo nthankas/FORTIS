@@ -4,9 +4,9 @@ Smoke tests: every public module imports, and the basic APIs round-trip.
 These tests catch packaging regressions (missing module, broken relative
 import, missing package_data entry) without depending on any ROS runtime.
 
-Note: motor_base, odrive_s1, and ekf were moved to ``legacy/`` and are
-no longer imported by the build. Replaced by ros2_control + standard
-ROS 2 packages.
+Note: the early motor_base, odrive_s1, and ekf modules were retired
+(removed from the tree; see git history). Replaced by ros2_control +
+standard ROS 2 packages.
 """
 
 import numpy as np

@@ -19,8 +19,7 @@ V3 HARDWARE SPEC (2026-05-03) -- single 30" carbon-fiber build, no variants.
   End effector        : ServoCity parallel kit + D645MW (133 g total)
   Loaded payload      : 3 lb (1361 g) at L4 tip (always loaded in v3)
 
-This module is the v3 counterpart to arm_ik_v2.py. Callers should import
-arm_ik_v3 directly when they want the v3 spec; v2 remains untouched.
+This module supersedes the retired arm_ik_v2.py (see git history).
 
 No variant flags: 30 inch CF, loaded, is the only configuration.
 
@@ -117,7 +116,7 @@ M_L3 = CF_DENSITY_KG_PER_M * L_L3
 M_L4 = CF_DENSITY_KG_PER_M * L_L4
 
 # ----------------------------------------------------------------------
-# Chassis geometry (matches xdrive_realwheel.py / arm_ik_v2.py)
+# Chassis geometry (matches xdrive_realwheel.py)
 # ----------------------------------------------------------------------
 CHASSIS_L = 13.082 * IN
 CHASSIS_W = 8.54 * IN

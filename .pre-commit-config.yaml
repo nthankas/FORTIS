@@ -12,7 +12,7 @@
 #
 # Scope notes:
 # - Python lint (flake8, pydocstyle) is restricted to ROS packages under
-#   src/. sim/, legacy/, and analysis/ are research / reference code with
+#   src/. sim/ and analysis/ are research / reference code with
 #   different conventions and are intentionally excluded (mirrors .flake8).
 # - Hygiene hooks (trailing whitespace, EOF, merge conflict, YAML) run on
 #   the whole tree, with build/install/log and binary asset dirs excluded.
@@ -23,7 +23,6 @@ exclude: |
       install/.*|
       log/.*|
       sim/.*|
-      legacy/.*|
       analysis/.*|
       \.venv/.*|
       venv/.*|

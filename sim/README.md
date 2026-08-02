@@ -29,7 +29,7 @@ Any new sim that needs the FORTIS chassis copies its build path from `canonical/
 - `tools/arm_mc_sweep_v4.py` -- **canonical arm sim.** Headless 5k Monte Carlo sweep of (J1, J2, J3, J4); chassis 10.144 kg + arm 6.515 kg + wheels 4 kg = 20.66 kg total (~45 lb). Records analytical and physics tipping per pose. Supersedes the Cartesian-grid `arm_continuous_sweep_v*` pipeline (J1 was fixed at 0; v4 sweeps all four joints).
 - `tools/arm_mc_filter_v4.py` -- analytical post-filter for the MC sweep (chassis/self/floor + reactor envelope + tipping); does NOT drop unstable poses.
 - `tools/arm_mc_plot_v4.py` -- sampling histogram, torque table, per-joint torque bar chart (J1-J4), and poloidal cross-section.
-- `tools/sweep_orbit_realwheel.py` -- orbit-mode torque sweep on the canonical realwheel chassis. Used to validate the 5-sphere roller collider against the previous single-sphere baseline; results live under `results/orbit_realwheel_5sphere/` and `results/orbit_realwheel_singlesphere/`.
+- `tools/sweep_orbit_realwheel.py` -- orbit-mode torque sweep on the canonical realwheel chassis. Used to validate the 5-sphere roller collider against the previous single-sphere baseline; results live under `results/orbit_realwheel_5sphere/`.
 - `tools/clearance_sweep.py`, `tools/measure_r0_port.py`, `tools/test_drift.py` -- standalone analytical / measurement utilities (no Isaac Sim needed).
 
 ## Hardware spec parity
