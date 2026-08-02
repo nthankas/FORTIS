@@ -37,6 +37,11 @@ hardware-free runs), arm_controller (mission-gated gripper services), and
 arm_motion (analytic IK: the latched ik_ok context flag plus the
 MoveToPose action server that emits ARM_AT_VIEW_POSE).
 
+odrive_bridge (default false) is a hardware-only OPT-IN: it runs
+odrive_status_bridge, feeding the health monitor from the vendored
+odrive_can node's per-axis status topics -- which exist only on the
+robot, so simulation runs leave it off.
+
 Loads config/bringup_params.yaml so any future declare_parameter() the
 nodes adopt picks up the documented defaults automatically (heading_hold_node
 already reads its gains from there). See that file's header for which values
@@ -91,6 +96,10 @@ def generate_launch_description():
     # which flows through heading_hold (if enabled) then drive_node, exactly
     # like a teleop command.
     orbit = LaunchConfiguration("orbit")
+
+    # Opt-in odrive_can -> OdriveHealth bridge. Off by default: its source
+    # topics exist only where the vendored odrive_can node runs (hardware).
+    odrive_bridge = LaunchConfiguration("odrive_bridge")
 
     # Opt-in perception chain and arm seam. Both off by default.
     perception = LaunchConfiguration("perception")
@@ -171,6 +180,19 @@ def generate_launch_description():
         name='odrive_health_monitor_node',
         output='screen',
         parameters=[bringup_params],
+    )
+
+    # Translates the upstream per-axis odrive_can status topics into the
+    # fortis_msgs/OdriveHealth snapshot the monitor above consumes. Only
+    # launched when odrive_bridge:=true (real hardware: needs the vendored
+    # odrive_can node publishing /odrive_axis{0..3}/*).
+    odrive_status_bridge_node = Node(
+        package='fortis_safety',
+        executable='odrive_status_bridge',
+        name='odrive_status_bridge',
+        output='screen',
+        parameters=[bringup_params],
+        condition=IfCondition(odrive_bridge),
     )
 
     # Serial bridge to the arm Teensy 4.1 + the mission-gated arm controller.
@@ -267,6 +289,15 @@ def generate_launch_description():
             ),
         ),
         DeclareLaunchArgument(
+            "odrive_bridge",
+            default_value="false",
+            description=(
+                "Run odrive_status_bridge (fortis_safety): per-axis "
+                "odrive_can status -> /fortis/drive/odrive_health. Off by "
+                "default; only real hardware has the source topics."
+            ),
+        ),
+        DeclareLaunchArgument(
             "arm",
             default_value="false",
             description=(
@@ -288,6 +319,7 @@ def generate_launch_description():
         drive_node,
         drive_enable_node,
         odrive_health_monitor_node,
+        odrive_status_bridge_node,
         heading_hold_node,
         orbit_node,
         teensy_bridge_node,

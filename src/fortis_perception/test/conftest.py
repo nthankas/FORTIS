@@ -21,6 +21,7 @@ ROS_DOMAIN_ID registry -- keep in sync across ALL test conftests:
     fortis_localization ...... 95
     fortis_perception ........ 96
     fortis_sim_support ....... 97
+    fortis_safety ............ 99
 IDs are in the safe 0-101 range (avoids the ephemeral-port band > 101),
 clear of the container/CI default (42) and hand-used values (0-9). A new
 ROS test package takes the next unused ID here.
@@ -41,3 +42,8 @@ def _isolate_ros_domain():
 
 
 _isolate_ros_domain()
+
+
+def pytest_configure(config):
+    """Register local marks (deselect with -m 'not slow')."""
+    config.addinivalue_line("markers", "slow: long-running dataset benchmark")

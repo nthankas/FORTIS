@@ -1,18 +1,10 @@
 """
-Per-process pytest setup for fortis_drive.
+Per-process pytest setup for fortis_safety.
 
 Pins this package's tests to a FIXED, unique ROS_DOMAIN_ID before any
-test imports rclpy or launches child nodes. colcon test runs each
-package's tests in a separate process, and on the default
-ROS_DOMAIN_ID those processes share one DDS domain: the integration
-test's mission_state_node latches IDLE (TRANSIENT_LOCAL) onto
-/fortis/mission_state, which then flips a colliding drive node's gate
-shut -- the intermittent state-flip flake that passes when each package
-is tested alone.
-
-A fixed per-package ID (not a pid-derived one) makes isolation
-deterministic: pid % N silently collides when two concurrent test
-processes share a residue, which is exactly the flake we are removing.
+test imports rclpy or launches child nodes, so the bridge round-trip
+test cannot cross-talk with sibling test packages running in parallel
+under colcon test. Same rationale as fortis_drive's conftest.
 
 ROS_DOMAIN_ID registry -- keep in sync across ALL test conftests:
     fortis_drive ............. 91
@@ -25,14 +17,15 @@ ROS_DOMAIN_ID registry -- keep in sync across ALL test conftests:
     fortis_safety ............ 99
 IDs are in the safe 0-101 range (avoids the ephemeral-port band > 101),
 clear of the container/CI default (42) and hand-used values (0-9). A new
-ROS test package takes the next unused ID here.
+ROS test package takes the next unused ID here (98 is earmarked for the
+planned fortis_gz package).
 """
 
 import os
 
 #: This package's dedicated test domain. See the registry in the module
 #: docstring before changing it.
-ROS_DOMAIN_ID = "91"
+ROS_DOMAIN_ID = "99"
 
 
 def _isolate_ros_domain():
