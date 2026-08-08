@@ -4,7 +4,7 @@
 //
 // Purpose: visually demonstrate the CMD_HOME_REQUEST behavior for the J4
 // servo (mask bit 3) WITHOUT needing the host-side protocol bridge that
-// Nikhil + Claude are writing. Mirrors the exact behavior the main firmware
+// Nikhil is writing. Mirrors the exact behavior the main firmware
 // implements in handleHomeRequest() for bit 3:
 //
 //     mask & 0x08  ->  writeServos(kJ4HomeUs, current_gripper_us)
