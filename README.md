@@ -197,6 +197,10 @@ The cross-package seam between safety and drive is exercised by
 
 ## Documentation
 
+- [`docs/HANDOFF.md`](docs/HANDOFF.md) -- **start here.** Full project handoff:
+  architecture, per-subsystem state (what is hardware-verified vs synthetic-only),
+  standing the stack up on a fresh workstation and on the Jetson, Tailscale remote
+  access, the GitHub transfer procedure, and the known-gaps list.
 - `tools/odrive_calibrate.md` -- per-S1 `odrivetool` calibration runbook; required before `fortis_control` will spin a motor
 - `foxglove/` -- Foxglove Studio layouts: `fortis_xdrive_teleop.json`, `fortis_chassis_cams.json`, `fortis_perception.json`, `fortis_arm.json` (open in Foxglove on the PC, bridge on :8765)
 - `sim/README.md` and `sim/isaac/xdrive/CHANGELOG.md` -- simulation state and history
