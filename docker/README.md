@@ -38,7 +38,7 @@ Common (both containers):
 ### CPU container (`fortis-dev`)
 
 ```bash
-docker compose -f docker/docker-compose.yml build
+docker compose --env-file .env -f docker/docker-compose.yml build
 ```
 
 ### GPU container (`fortis-dev-gpu`)
@@ -47,7 +47,8 @@ The GPU compose file is an *overlay* on top of the base compose file. Always
 include both with `-f`:
 
 ```bash
-docker compose -f docker/docker-compose.yml \
+docker compose --env-file .env \
+               -f docker/docker-compose.yml \
                -f docker/docker-compose.gpu.yml build
 ```
 
@@ -59,14 +60,20 @@ First pull is slow: the Isaac ROS Dev Base image is multi-GB (roughly 8 to
 ### CPU container
 
 ```bash
-docker compose -f docker/docker-compose.yml up -d
+docker compose --env-file .env -f docker/docker-compose.yml up -d
 docker exec -it fortis-dev /bin/bash
 ```
+
+> **Pass `--env-file .env` on raw `docker compose` calls.** Compose resolves its
+> project directory to the compose file's parent (`docker/`), so it does **not**
+> auto-discover the repo-root `.env` — without the flag it silently falls back to
+> the built-in defaults. `./stack` exports the values itself and is unaffected.
 
 ### GPU container
 
 ```bash
-docker compose -f docker/docker-compose.yml \
+docker compose --env-file .env \
+               -f docker/docker-compose.yml \
                -f docker/docker-compose.gpu.yml up -d
 docker exec -it fortis-dev-gpu /bin/bash
 ```

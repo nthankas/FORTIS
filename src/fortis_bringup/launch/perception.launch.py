@@ -15,7 +15,7 @@ target_selector, and system_health. Options:
     fuses it is NOT launched here: bringup.launch.py owns localization
     (localization:=true vio:=true selects ekf_vio.yaml).
   * reference_map:=<path.npz> adds map_diff against that saved run.
-  * foxglove:=true (default) runs ONE foxglove_bridge on :8765. Pass
+  * foxglove:=true (default) runs ONE foxglove_bridge (port:=8765). Pass
     foxglove:=false when composing with a launch that already owns a
     bridge (drive_test.launch.py / chassis_orbit.launch.py).
   * arm:=true adds teensy_bridge (see serial_port) + arm_controller +
@@ -32,6 +32,8 @@ assembled at launch time inside an OpaqueFunction (same pattern as
 oak_chassis_cameras.launch.py).
 """
 
+import os
+
 from launch import LaunchDescription
 from launch.actions import (
     DeclareLaunchArgument,
@@ -43,9 +45,17 @@ from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
-#: Fixed bridge port; matches drive_test.launch.py's default so Foxglove
-#: always connects to ws://<host>:8765 whichever launch owns the bridge.
-FOXGLOVE_PORT = 8765
+
+def _env_default(name, fallback):
+    """Return os.environ[name] when set and non-empty, else fallback."""
+    return os.environ.get(name, "").strip() or fallback
+
+
+#: Default bridge port. Matches drive_test.launch.py so Foxglove always
+#: connects to the same ws://<host>:<port> whichever launch owns the bridge.
+#: Overridable per machine via FORTIS_FOXGLOVE_PORT in .env (template
+#: fortis.env.example), or per run via port:=<n>.
+FOXGLOVE_PORT = _env_default("FORTIS_FOXGLOVE_PORT", "8765")
 
 
 def _truthy(context, name):
@@ -184,7 +194,7 @@ def _foxglove(context):
         name="foxglove_bridge",
         output="screen",
         parameters=[{
-            "port": FOXGLOVE_PORT,
+            "port": int(LaunchConfiguration("port").perform(context)),
             "address": "0.0.0.0",
             "tls": False,
             "use_compression": False,
@@ -306,10 +316,14 @@ def generate_launch_description():
             "foxglove",
             default_value="true",
             description=(
-                "Run the single foxglove_bridge on :8765. Set false when a "
-                "composed launch (drive_test / chassis_orbit) already owns "
-                "a bridge."
+                "Run the single foxglove_bridge. Set false when a composed "
+                "launch (drive_test / chassis_orbit) already owns a bridge."
             ),
+        ),
+        DeclareLaunchArgument(
+            "port",
+            default_value=FOXGLOVE_PORT,
+            description="WebSocket port for foxglove_bridge.",
         ),
         DeclareLaunchArgument(
             "arm",
@@ -321,7 +335,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             "serial_port",
-            default_value="/dev/ttyACM0",
+            default_value=_env_default("FORTIS_TEENSY_PORT", "/dev/ttyACM0"),
             description=(
                 "Teensy USB-CDC port for teensy_bridge; use the pty printed "
                 "by tools/mock_teensy.py for hardware-free runs."

@@ -4,7 +4,7 @@
 #
 # A thin wrapper around `git` and `docker compose` so common deployment
 # workflows are one-line operations. Reads configuration from a .env file in
-# the repository root (template: tools/stack/.env.example).
+# the repository root (template: fortis.env.example).
 #
 # Usage:
 #     ./stack <command> [args...]
@@ -33,7 +33,7 @@ done
 SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
 REPO_ROOT="${SCRIPT_DIR}"
 ENV_FILE="${REPO_ROOT}/.env"
-ENV_EXAMPLE="${REPO_ROOT}/tools/stack/.env.example"
+ENV_EXAMPLE="${REPO_ROOT}/fortis.env.example"
 COMPOSE_BASE="${REPO_ROOT}/docker/docker-compose.yml"
 COMPOSE_GPU="${REPO_ROOT}/docker/docker-compose.gpu.yml"
 
@@ -87,6 +87,16 @@ load_env() {
     : "${COMPOSE_PROJECT_NAME:=fortis}"
     : "${FORTIS_JETSON_HOST:=}"
     : "${NGC_API_KEY:=}"
+    # Machine-level knobs consumed inside the container: can-up.sh brings the
+    # ODrive bus up from FORTIS_CAN_*, and the fortis_bringup launch files use
+    # FORTIS_FOXGLOVE_PORT / FORTIS_TEENSY_PORT as launch-argument defaults.
+    # Defaults here mirror the ${VAR:-default} fallbacks in the compose files,
+    # so behaviour is identical whether or not a .env exists.
+    : "${ROS_LOCALHOST_ONLY:=1}"
+    : "${FORTIS_CAN_IF:=can1}"
+    : "${FORTIS_CAN_BITRATE:=250000}"
+    : "${FORTIS_FOXGLOVE_PORT:=8765}"
+    : "${FORTIS_TEENSY_PORT:=/dev/ttyACM0}"
     # Host architecture for multi-arch Dockerfile base selection. `docker
     # compose build` does NOT auto-populate the predefined TARGETARCH buildarg
     # the way `docker buildx build` does, so docker-compose.gpu.yml reads it
@@ -100,13 +110,15 @@ load_env() {
 
     export FORTIS_REF COMPOSE_PROFILE ROS_DOMAIN_ID COMPOSE_PROJECT_NAME
     export FORTIS_JETSON_HOST NGC_API_KEY TARGETARCH COMPOSE_PROFILES
+    export ROS_LOCALHOST_ONLY FORTIS_CAN_IF FORTIS_CAN_BITRATE
+    export FORTIS_FOXGLOVE_PORT FORTIS_TEENSY_PORT
 }
 
 require_env_file() {
     if [[ "${ENV_LOADED:-0}" -ne 1 ]]; then
         err "No .env file at ${ENV_FILE}"
         err "Copy the template and edit values for this machine:"
-        err "    cp tools/stack/.env.example .env"
+        err "    cp fortis.env.example .env"
         exit 1
     fi
 }
@@ -225,8 +237,8 @@ COMMANDS
     help [command]        Print this help, or help for one command.
 
 ENVIRONMENT
-    Reads .env in the repo root. Copy from tools/stack/.env.example on first run:
-        cp tools/stack/.env.example .env
+    Reads .env in the repo root. Copy from fortis.env.example on first run:
+        cp fortis.env.example .env
 
     Required keys: FORTIS_REF, COMPOSE_PROFILE, ROS_DOMAIN_ID,
                    COMPOSE_PROJECT_NAME.
@@ -687,7 +699,7 @@ cmd_status() {
     if [[ "${ENV_LOADED:-0}" -eq 1 ]]; then
         printf '  .env:               loaded (%s)\n' "${ENV_FILE}"
     else
-        printf '  .env:               %sMISSING%s (falling back to defaults; copy tools/stack/.env.example to .env)\n' \
+        printf '  .env:               %sMISSING%s (falling back to defaults; copy fortis.env.example to .env)\n' \
             "${C_WARN}" "${C_RESET}"
     fi
 

@@ -34,7 +34,13 @@ services:
     environment:
       - DISPLAY=${DISPLAY:-:0}
       - QT_X11_NO_MITSHM=1
-      - ROS_DOMAIN_ID=42
+      # See docker-compose.yml for the .env-backed parameterisation notes.
+      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-42}
+      - ROS_LOCALHOST_ONLY=${ROS_LOCALHOST_ONLY:-1}
+      - FORTIS_CAN_IF=${FORTIS_CAN_IF:-can1}
+      - FORTIS_CAN_BITRATE=${FORTIS_CAN_BITRATE:-250000}
+      - FORTIS_FOXGLOVE_PORT=${FORTIS_FOXGLOVE_PORT:-8765}
+      - FORTIS_TEENSY_PORT=${FORTIS_TEENSY_PORT:-/dev/ttyACM0}
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=all
     # Modern GPU reservation via the compose v3+ device API. Requires the

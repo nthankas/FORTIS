@@ -98,7 +98,7 @@ make_sandbox_repo() {
     dir="$(mktemp -d -p "${SCRATCH}" sandbox.XXXX)"
     cp "${STACK}" "${dir}/stack"
     chmod +x "${dir}/stack"
-    cp "${REPO_ROOT}/tools/stack/.env.example" "${dir}/.env"
+    cp "${REPO_ROOT}/fortis.env.example" "${dir}/.env"
     # Provide empty docker-compose stubs so dc() never fails on missing files.
     mkdir -p "${dir}/docker"
     printf 'services:\n  dev:\n    image: busybox\n' > "${dir}/docker/docker-compose.yml"

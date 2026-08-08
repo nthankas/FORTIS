@@ -33,12 +33,21 @@ services:
     environment:
       - DISPLAY=${DISPLAY:-:0}
       - QT_X11_NO_MITSHM=1
-      - ROS_DOMAIN_ID=42
+      # Every value below comes from .env (template: fortis.env.example) with
+      # the historical default as the fallback, so an absent .env behaves
+      # exactly as this file did before it was parameterised.
+      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-42}
       # All FORTIS ROS nodes are co-located in this container; host networking
       # exposes tailscale0/docker0/wifi, which breaks default DDS multicast
       # discovery between co-located nodes. Loopback-only DDS is correct here
       # (only the Foxglove WebSocket crosses machines, not DDS).
-      - ROS_LOCALHOST_ONLY=1
+      - ROS_LOCALHOST_ONLY=${ROS_LOCALHOST_ONLY:-1}
+      # Read by docker/can-up.sh (entrypoint) to bring the ODrive bus up.
+      - FORTIS_CAN_IF=${FORTIS_CAN_IF:-can1}
+      - FORTIS_CAN_BITRATE=${FORTIS_CAN_BITRATE:-250000}
+      # Read by fortis_bringup launch files as launch-argument defaults.
+      - FORTIS_FOXGLOVE_PORT=${FORTIS_FOXGLOVE_PORT:-8765}
+      - FORTIS_TEENSY_PORT=${FORTIS_TEENSY_PORT:-/dev/ttyACM0}
     stdin_open: true
     tty: true
     # Bring the ODrive CAN bus up before nodes start. See docker/can-up.sh.

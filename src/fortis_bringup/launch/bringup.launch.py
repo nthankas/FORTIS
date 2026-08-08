@@ -48,6 +48,8 @@ nodes adopt picks up the documented defaults automatically (heading_hold_node
 already reads its gains from there). See that file's header for which values
 are live vs. documentation-only.
 """
+import os
+
 from launch import LaunchDescription
 from launch.actions import (
     DeclareLaunchArgument,
@@ -63,6 +65,13 @@ from launch.substitutions import (
 )
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
+
+#: Launch-argument defaults resolved from the machine config (.env, template
+#: fortis.env.example) which docker-compose injects into the container. An
+#: explicit `arg:=value` on the command line still wins over both.
+def _env_default(name, fallback):
+    """Return os.environ[name] when set and non-empty, else fallback."""
+    return os.environ.get(name, "").strip() or fallback
 
 
 def generate_launch_description():
@@ -242,7 +251,10 @@ def generate_launch_description():
     perception_group = GroupAction(
         [IncludeLaunchDescription(
             PythonLaunchDescriptionSource([perception_launch]),
-            launch_arguments={"arm": "false"}.items(),
+            launch_arguments={
+                "arm": "false",
+                "port": LaunchConfiguration("port"),
+            }.items(),
         )],
         condition=IfCondition(perception),
     )
@@ -290,6 +302,14 @@ def generate_launch_description():
             ),
         ),
         DeclareLaunchArgument(
+            "port",
+            default_value=_env_default("FORTIS_FOXGLOVE_PORT", "8765"),
+            description=(
+                "WebSocket port forwarded to perception.launch.py's "
+                "foxglove_bridge (only used with perception:=true)."
+            ),
+        ),
+        DeclareLaunchArgument(
             "odrive_bridge",
             default_value="false",
             description=(
@@ -309,7 +329,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             "serial_port",
-            default_value="/dev/ttyACM0",
+            default_value=_env_default("FORTIS_TEENSY_PORT", "/dev/ttyACM0"),
             description=(
                 "Teensy USB-CDC port for teensy_bridge (only used with "
                 "arm:=true); use the pty printed by tools/mock_teensy.py "

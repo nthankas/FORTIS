@@ -39,11 +39,18 @@ Args
     heading_hold:=false        closed-loop yaw on the EKF (needs localization:=true)
 """
 
+import os
+
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.substitutions import FindPackageShare
+
+def _env_default(name, fallback):
+    """Return os.environ[name] when set and non-empty, else fallback."""
+    return os.environ.get(name, "").strip() or fallback
+
 
 
 def generate_launch_description():
@@ -97,7 +104,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             "port",
-            default_value="8765",
+            default_value=_env_default("FORTIS_FOXGLOVE_PORT", "8765"),
             description="WebSocket port for the single foxglove_bridge.",
         ),
         DeclareLaunchArgument(

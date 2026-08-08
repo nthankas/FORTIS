@@ -54,12 +54,21 @@ Args
     orbit:=false               forward to bringup: held ORBIT button -> face-center orbit
 """
 
+import os
+
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
+
+#: Launch-argument defaults resolved from the machine config (.env, template
+#: fortis.env.example) which docker-compose injects into the container. An
+#: explicit `arg:=value` on the command line still wins over both.
+def _env_default(name, fallback):
+    """Return os.environ[name] when set and non-empty, else fallback."""
+    return os.environ.get(name, "").strip() or fallback
 
 
 def generate_launch_description():
@@ -119,7 +128,7 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument(
             "can_interface",
-            default_value="can1",
+            default_value=_env_default("FORTIS_CAN_IF", "can1"),
             description=(
                 "SocketCAN interface for the ODrive bus. Default can1 is the "
                 "gs_usb USB-CAN adapter on the Jetson; can0 is the onboard "
@@ -133,7 +142,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             "port",
-            default_value="8765",
+            default_value=_env_default("FORTIS_FOXGLOVE_PORT", "8765"),
             description="WebSocket port for foxglove_bridge.",
         ),
         DeclareLaunchArgument(

@@ -54,7 +54,7 @@ isim.bat
 SUMMARY.md
 CLAUDE.md
 
-# Local stack CLI environment (real values; template lives in tools/stack/.env.example)
+# Per-machine config (real values; tracked template is fortis.env.example)
 .env
 .env.local
 

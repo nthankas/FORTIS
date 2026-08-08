@@ -240,7 +240,7 @@ This is the path for a General Atomics engineer's own laptop or desktop. It gets
 git clone https://github.com/nthankas/FORTIS.git      # ← update to the GA URL after §9
 cd FORTIS
 
-cp tools/stack/.env.example .env      # per-machine config; .env is gitignored
+cp fortis.env.example .env      # per-machine config; .env is gitignored
 ```
 
 Edit `.env`. The values that matter on a fresh workstation:
@@ -273,7 +273,7 @@ pre-commit run --all-files      # should pass clean on main
 `./stack` is a bash wrapper around `git` + `docker compose`. It is a convenience layer, **not** a hard dependency — every command has a documented raw equivalent in `tools/stack/README.md` under "Fallback". The raw CPU equivalents are:
 
 ```bash
-docker compose -f docker/docker-compose.yml up -d
+docker compose --env-file .env -f docker/docker-compose.yml up -d
 docker exec -it fortis-dev bash
 ```
 
@@ -420,7 +420,7 @@ sudo mkdir -p /data/fortis_ws/src && sudo chown -R $USER /data/fortis_ws
 cd /data/fortis_ws/src
 git clone https://github.com/nthankas/FORTIS.git    # ← GA URL after §9
 cd FORTIS
-cp tools/stack/.env.example .env
+cp fortis.env.example .env
 ```
 
 In the Jetson's `.env`:
@@ -564,14 +564,20 @@ So integrating FORTIS with any network — Tailscale, a GA corporate VPN, a jump
 
 ### 8.2 The complete configuration surface
 
-There are four configuration layers, and only one of them contains anything network-related.
+All per-machine configuration lives in **one file at the repo root**: copy the tracked template `fortis.env.example` to `.env` (gitignored) and edit it. That single file carries every address, port, device node, and mode, and it feeds all three consumers — `./stack`, the compose files, and the ROS launch-argument defaults.
+
+There are four configuration layers in total, and only the first contains anything machine- or network-specific.
 
 | Layer | File | Scope | In git? |
 |---|---|---|---|
-| **1. Per-machine environment** | `.env` (from `tools/stack/.env.example`) | Which ref this machine runs, cpu/gpu profile, DDS domain, **the Jetson's address** | **No** — gitignored |
+| **1. Per-machine environment** | `.env` (from `fortis.env.example`) | Which ref this machine runs, cpu/gpu profile, DDS domain, **the Jetson's address** | **No** — gitignored |
 | **2. Container runtime** | `docker/docker-compose.yml` (+ `.gpu.yml`) | `network_mode: host`, `ROS_DOMAIN_ID=42`, `ROS_LOCALHOST_ONLY=1`, `DISPLAY`, `/dev` passthrough, CAN entrypoint | Yes |
 | **3. ROS node parameters** | `src/fortis_bringup/config/bringup_params.yaml` | Per-node tunables (heading-hold PID, orbit speed/radius, IMU debias). Mixed live/documentation — the file header says which blocks are actually read | Yes |
 | **4. Launch arguments** | CLI at `ros2 launch` time | `can_interface`, `port`, `serial_port`, `cameras`, `detector`, `synthetic`, `vio`, … | Yes (defaults) |
+
+Layers 1 and 4 are connected: `can_interface`, `port`, and `serial_port` take their defaults from `FORTIS_CAN_IF`, `FORTIS_FOXGLOVE_PORT`, and `FORTIS_TEENSY_PORT` in `.env`, so setting them once per machine is enough. Precedence is *built-in default < `.env` < explicit `arg:=value`*, so a one-off override on the command line always wins without editing anything.
+
+> **Raw `docker compose` needs `--env-file .env`.** Compose resolves its project directory to the compose file's parent (`docker/`) and therefore does not auto-discover the repo-root `.env`; without the flag it silently uses built-in defaults. `./stack` exports the values itself and is unaffected.
 
 **Every network-addressable value in the entire repo:**
 
@@ -579,11 +585,12 @@ There are four configuration layers, and only one of them contains anything netw
 |---|---|---|---|
 | `FORTIS_JETSON_HOST` | `.env` (layer 1) | *(blank)* | **The only host/address string the codebase reads.** Consumed solely by `./stack ssh`. Accepts anything ssh accepts: bare IP, DNS name, `user@host`, or a `~/.ssh/config` alias. Blank on the Jetson itself, where `./stack ssh` correctly no-ops. |
 | Foxglove bridge port | `drive_test.launch.py`, `sim.launch.py` → `port:=` launch arg | `8765` | Overridable at launch. |
-| Foxglove bridge port | `perception.launch.py` → `FOXGLOVE_PORT` **module constant**, line 48 | `8765` | **Not a launch arg.** To change the port on the perception/`chassis_orbit` path you must edit the constant. See [§12](#12-known-gaps-risks-and-open-items). |
+| Foxglove bridge port | `perception.launch.py` → `port:=` launch arg, default from `FORTIS_FOXGLOVE_PORT` | `8765` | Was a hardcoded module constant; now a launch arg like the others. |
 | Foxglove bridge bind address | `perception.launch.py` `_foxglove()` | `0.0.0.0` | Binds **all** interfaces. See the security note in [§8.4](#84-before-you-expose-the-bridge-on-a-corporate-network). |
 | Foxglove Studio connection URL | Typed into Studio by the operator | — | **Not in the repo at all.** |
 | `ROS_DOMAIN_ID` | `.env` + both compose files + CI | `42` | A DDS domain, **not** a network address. Irrelevant across machines given `ROS_LOCALHOST_ONLY=1`. |
-| `FORTIS_CAN_IF` / `FORTIS_CAN_BITRATE` | env vars read by `docker/can-up.sh` | `can1` / `250000` | SocketCAN, not IP. |
+| `FORTIS_CAN_IF` / `FORTIS_CAN_BITRATE` | `.env` → compose → `docker/can-up.sh`; also the `can_interface` launch-arg default | `can1` / `250000` | SocketCAN, not IP. |
+| `FORTIS_TEENSY_PORT` | `.env` → compose → `serial_port` launch-arg default | `/dev/ttyACM0` | USB-CDC device node, not IP. |
 
 That is the whole list. **Two strings** carry the deployment's networking: `FORTIS_JETSON_HOST` in `.env`, and the URL the operator types into Foxglove Studio.
 
@@ -798,7 +805,7 @@ These items are cheap now and expensive or impossible after GA has cloned the re
       pip install detect-secrets   # or use gitleaks / trufflehog
       gitleaks detect --source . --log-opts="--all"
       ```
-      Known-good by design: `.env` is gitignored (it holds `NGC_API_KEY` and `FORTIS_JETSON_HOST`), and `tools/stack/.env.example` is a template with blank values. Verify no real `.env` was ever committed.
+      Known-good by design: `.env` is gitignored (it holds `NGC_API_KEY` and `FORTIS_JETSON_HOST`), and `fortis.env.example` is a template with blank values. Verify no real `.env` was ever committed.
 - [ ] **Add a root `LICENSE` file.** Every one of the 12 packages declares `MIT` in `package.xml` and `setup.py`, but **there is no `LICENSE` at the repo root.** Any GA legal review will catch this. Add the MIT text with the correct copyright holder(s), or replace the per-package declarations if GA wants different terms — but resolve the mismatch before transfer, not after.
 - [ ] **Confirm authorship and ownership.** Package maintainers are currently `Nikhil Thankasala <nikhilthankasala@gmail.com>` (and `FORTIS` for `fortis_control`). Decide whether these become GA addresses and update `setup.py` + `package.xml` together if so.
 - [ ] **Verify no Git LFS and no huge blobs.** The repo is ~6.3 MiB packed, no LFS, no submodules. Largest tracked files are simulation artifacts (`omniwheels.usd` 4 MB, a couple of MC-sweep CSVs). Transfer is trivial — but confirm rather than assume.
@@ -950,18 +957,17 @@ Ordered by "will bite you soonest".
 11. **R0 port-entry simulation not started.** Plan exists (`sim/isaac/xdrive/docs/R0_ENTRY_PLAN.md`); descent through the 22" × 35.5" port is unmodelled.
 12. **The tether's data path is unspecified in the repo.** The BOM records the tether as power-only; the Jetson's GbE is listed but never described as tethered. Since the deployed operator link is a physical cable ([§8.3](#83-the-deployed-path-a-direct-wired-link)), confirm with the mechanical team: does the tether carry an Ethernet pair, what is the run length, and does it stay inside Cat5e/Cat6's 100 m limit? If not, plan a fibre media converter or PoE extender before integration.
 13. **`foxglove_bridge` runs unauthenticated and binds `0.0.0.0`.** `tls: False`, no auth, with `clientPublish` and `services` enabled — anyone who reaches TCP 8765 can command the robot. Acceptable on a dedicated cable, not on a shared LAN. See [§8.4](#84-before-you-expose-the-bridge-on-a-corporate-network) for the four ways to close it.
-14. **The Foxglove port is a hardcoded constant on the perception path.** `drive_test.launch.py` and `sim.launch.py` expose `port:=`, but `perception.launch.py` sets `FOXGLOVE_PORT = 8765` as a module constant (line 48), so `perception.launch.py` and `chassis_orbit.launch.py` need a source edit to move the port. Promote it to a launch arg for consistency.
-15. **`/fortis/mission_state_v2`** (`fortis_msgs/MissionState`, carrying previous state + transition timestamp) is defined but **not published** — the latched `std_msgs/String` topic is what ships.
+14. **`/fortis/mission_state_v2`** (`fortis_msgs/MissionState`, carrying previous state + transition timestamp) is defined but **not published** — the latched `std_msgs/String` topic is what ships.
 
 ### Documentation drift found while preparing this handoff
 
 These are safe to fix and worth fixing early, because they mislead a newcomer:
 
-16. **`src/fortis_arm/README.md` is stale.** It documents only the gripper-service stub ("gripper actuation not implemented") and lists IK, the Teensy serial protocol, position-file handling, and gripper actuation as "intentionally not in here." All of those have since landed (`teensy_bridge_node.py`, `arm_motion_node.py`, `arm_ik.py`, a live `MoveToPose` action server), and the gripper is verified on hardware. **Trust the code and the root README over this file.**
-17. **`src/fortis_integration_tests/README.md` lists 3 of the 7 test files.** Missing: `test_perception_chain.py`, `test_multicam_fusion.py`, `test_full_mission.py`, and `test_bringup_launch.py` is described but the perception/mission coverage is absent.
-18. **`fortis_msgs/README.md` and `fortis_bringup/README.md` both describe the ODrive health bridge as "TBD".** It shipped in `15943c3` as `fortis_safety/odrive_status_bridge_node.py`.
-19. **`tools/stack/README.md` omits `stack build`,** which exists in the `stack` script.
-20. **`firmware/teensy/HANDOFF.md` §7 predates the Jetson-side bridge.** It says the bridge is "not yet written"; `teensy_bridge_node.py` exists and the gripper has been driven through it live.
+15. **`src/fortis_arm/README.md` is stale.** It documents only the gripper-service stub ("gripper actuation not implemented") and lists IK, the Teensy serial protocol, position-file handling, and gripper actuation as "intentionally not in here." All of those have since landed (`teensy_bridge_node.py`, `arm_motion_node.py`, `arm_ik.py`, a live `MoveToPose` action server), and the gripper is verified on hardware. **Trust the code and the root README over this file.**
+16. **`src/fortis_integration_tests/README.md` lists 3 of the 7 test files.** Missing: `test_perception_chain.py`, `test_multicam_fusion.py`, `test_full_mission.py`, and `test_bringup_launch.py` is described but the perception/mission coverage is absent.
+17. **`fortis_msgs/README.md` and `fortis_bringup/README.md` both describe the ODrive health bridge as "TBD".** It shipped in `15943c3` as `fortis_safety/odrive_status_bridge_node.py`.
+18. **`tools/stack/README.md` omits `stack build`,** which exists in the `stack` script.
+19. **`firmware/teensy/HANDOFF.md` §7 predates the Jetson-side bridge.** It says the bridge is "not yet written"; `teensy_bridge_node.py` exists and the gripper has been driven through it live.
 
 ---
 

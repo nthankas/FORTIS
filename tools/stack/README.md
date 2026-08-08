@@ -36,7 +36,7 @@ All examples below use `./stack`, which works from the repo root. To run
 ## Quickstart
 
 ```bash
-cp tools/stack/.env.example .env       # copy template, then edit for this machine
+cp fortis.env.example .env       # copy template, then edit for this machine
 ./stack up                 # bring the stack up
 ./stack exec               # open a shell inside the dev container
 ./stack status             # show what's running
@@ -235,7 +235,7 @@ exit
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| `[stack] No .env file at ...` | First run on this machine. | `cp tools/stack/.env.example .env` and edit. |
+| `[stack] No .env file at ...` | First run on this machine. | `cp fortis.env.example .env` and edit. |
 | `[stack] Unknown COMPOSE_PROFILE=...` | Typo in `.env`. | Set `COMPOSE_PROFILE=cpu` or `gpu`. |
 | `docker: 'compose' is not a docker command` | Old docker without the compose v2 plugin. | Install Docker 24+ with the compose plugin (see `docker/README.md`). |
 | `[stack] Working tree is dirty.` blocking pull | Local uncommitted changes. | Commit / stash, or pass `--force`. |
@@ -250,15 +250,20 @@ underlying commands are:
 
 ```bash
 # cpu profile equivalents
-docker compose -f docker/docker-compose.yml up -d
-docker compose -f docker/docker-compose.yml down
-docker compose -f docker/docker-compose.yml logs --follow
+docker compose --env-file .env -f docker/docker-compose.yml up -d
+docker compose --env-file .env -f docker/docker-compose.yml down
+docker compose --env-file .env -f docker/docker-compose.yml logs --follow
 docker exec -it fortis-dev bash
 
 # gpu profile equivalents
-docker compose -f docker/docker-compose.yml -f docker/docker-compose.gpu.yml up -d
+docker compose --env-file .env -f docker/docker-compose.yml -f docker/docker-compose.gpu.yml up -d
 docker exec -it fortis-dev-gpu bash
 ```
+
+> **Pass `--env-file .env` on raw `docker compose` calls.** Compose resolves its
+> project directory to the compose file's parent (`docker/`), so it does **not**
+> auto-discover the repo-root `.env` — without the flag it silently falls back to
+> the built-in defaults. `./stack` exports the values itself and is unaffected.
 
 The CLI is a convenience layer, not a hard dependency. Treat it as such.
 

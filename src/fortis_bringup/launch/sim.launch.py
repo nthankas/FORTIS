@@ -38,6 +38,8 @@ Pairs with
                         argument to disable joint_state_publisher).
 """
 
+import os
+
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.conditions import IfCondition
@@ -50,6 +52,11 @@ from launch.substitutions import (
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.substitutions import FindPackageShare
+
+def _env_default(name, fallback):
+    """Return os.environ[name] when set and non-empty, else fallback."""
+    return os.environ.get(name, "").strip() or fallback
+
 
 
 def generate_launch_description():
@@ -82,7 +89,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             "port",
-            default_value="8765",
+            default_value=_env_default("FORTIS_FOXGLOVE_PORT", "8765"),
             description="WebSocket port for foxglove_bridge.",
         ),
 

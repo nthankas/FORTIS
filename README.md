@@ -40,6 +40,8 @@ OnShape model and `FORTIS_FINAL_BOM` are the source of truth; this table is a sn
 ```
 .devcontainer/      VSCode dev container
 .gitattributes      Force LF on text files (cross-machine hygiene)
+fortis.env.example  Machine config template -> copy to .env (single source for
+                    addresses, ports, device nodes, cpu/gpu mode)
 docker/             Dockerfile.dev + docker-compose.yml (ROS 2 Humble desktop); GPU variant in progress
 firmware/teensy/    Teensy 4.1 arm-motion firmware (teensy.ino, PROTOCOL.md, HANDOFF.md)
 foxglove/           Foxglove Studio layouts (teleop, chassis cams, perception, arm)
@@ -77,11 +79,37 @@ VSCode "Dev Containers: Reopen in Container" is the supported workflow for the C
 Outside VSCode:
 
 ```bash
-docker compose -f docker/docker-compose.yml up -d
+docker compose --env-file .env -f docker/docker-compose.yml up -d
 docker exec -it fortis-dev bash
 ```
 
+> **Pass `--env-file .env` on raw `docker compose` calls.** Compose resolves its
+> project directory to the compose file's parent (`docker/`), so it does **not**
+> auto-discover the repo-root `.env` — without the flag it silently falls back to
+> the built-in defaults. `./stack` exports the values itself and is unaffected.
+
 The repo mounts at `/workspace` inside the container.
+
+### Configuration: one file
+
+Every per-machine setting — addresses, ports, device nodes, cpu/gpu mode —
+lives in a single file at the repo root:
+
+```bash
+cp fortis.env.example .env      # then edit for THIS machine
+```
+
+`fortis.env.example` is the tracked, commented template; `.env` is
+gitignored so each machine (operator station, Jetson, laptop) carries its
+own. It is read by `./stack`, substituted into the compose files, injected
+into the dev container, and used as the launch-argument defaults for
+`can_interface`, `port`, and `serial_port` — so `FORTIS_CAN_IF=vcan0` in
+`.env` reaches the ODrive bringup with no `ros2 launch` flags. An explicit
+`arg:=value` on the command line still wins for that run.
+
+Tuned robot behaviour (PID gains, orbit speed, IMU debias rates) is
+identical on every machine and stays in version control at
+`src/fortis_bringup/config/bringup_params.yaml` — not in `.env`.
 
 ### `./stack` (preferred entry point)
 
@@ -91,7 +119,7 @@ preferred way to bring the dev environment up; the raw `docker compose`
 calls still work and are the documented fallback.
 
 ```bash
-cp tools/stack/.env.example .env
+cp fortis.env.example .env
 ./stack up
 ./stack exec
 ./stack status
