@@ -9,7 +9,7 @@ This document is the single entry point. It answers four questions:
 1. [What is FORTIS and what does it actually do today?](#1-what-fortis-is)
 2. [What state is every subsystem in, and what has been proven on hardware?](#3-current-state-by-subsystem)
 3. [How do I stand the whole thing up on a computer that has never seen it?](#6-standing-up-a-new-workstation) (and [on the robot](#7-standing-up-the-jetson-robot-compute))
-4. [How do we move the network access ([Tailscale](#8-tailscale-remote-access)) and the code ([GitHub](#9-github-transfer)) to General Atomics?](#9-github-transfer)
+4. [How do we integrate it with General Atomics' network](#8-networking-configuration-and-remote-access) and [move the code across](#9-github-transfer)?
 
 Everything else in the repo hangs off the [documentation index](#11-documentation-index). Where this document and a package README disagree, **this document is newer** — see [§12 Known gaps](#12-known-gaps-risks-and-open-items) for the specific stale files.
 
@@ -23,7 +23,7 @@ Design constraints that explain most of the architecture:
 
 - **No onboard battery.** All power is tether-supplied.
 - **The robot straddles a 4.5" step** between the inner and outer reactor floor. Skid-steer point turns while straddling that step were tested in 60 simulated configurations; only 3 completed (5%), all with dangerous tilt and drift. That rejection is why the drivetrain is a **holonomic X-drive** (four omni wheels at the chamfered 45° corners), documented in `sim/analysis/skid_steer_rejection.md`.
-- **The operator is remote.** The control surface is Foxglove Studio on a laptop talking to a `foxglove_bridge` WebSocket on the robot. No ROS traffic crosses machines — see [§8.5](#85-why-dds-does-not-cross-tailscale).
+- **The operator is remote, over a cable.** The robot is tethered; the control surface is Foxglove Studio on the operator station talking to a `foxglove_bridge` WebSocket on the robot over the wired link. No ROS traffic crosses machines — see [§8.6](#86-why-dds-does-not-cross-the-network).
 - **Nothing moves unless the mission state machine says it can.** A single latched topic, `/fortis/mission_state`, gates both drive and arm motion. This is the safety spine.
 
 Ship target for the student team was mid-June 2026.
@@ -230,7 +230,7 @@ This is the path for a General Atomics engineer's own laptop or desktop. It gets
 | **git** | Any recent version. |
 | **Python 3 + pip on the host** | Only for `pre-commit`. |
 | *(optional)* **NVIDIA GPU + Container Toolkit** | Only if you want the `gpu` profile. Not required for anything currently wired into `src/`. |
-| *(optional)* **Foxglove Studio** | The operator UI. Free desktop download. |
+| **Foxglove Studio** | **Required — this is the operator UI.** Free desktop download. Not optional: there is no other way to drive the robot. |
 
 > **WSL2 caveat:** OAK-D cameras re-enumerate from a USB2 bootloader to a USB3 SuperSpeed runtime device during firmware upload. That transition currently breaks under Windows/WSL2 Docker, so **live camera streaming is a Jetson-only path**. This is exactly why `fortis_sim_support` exists — every perception node is developed and tested against synthetic sources first.
 
@@ -541,17 +541,141 @@ ros2 launch fortis_bringup bringup.launch.py arm:=true serial_port:=/dev/ttyACM0
 
 ---
 
-## 8. Tailscale (remote access)
+## 8. Networking, configuration, and remote access
 
-### 8.1 What Tailscale is actually for here
+### 8.1 What the stack actually requires from a network
 
-FORTIS's operator interface is **Foxglove Studio on a laptop connecting to a WebSocket on the robot** (`ws://<robot>:8765`), plus **ssh** for everything else (launching, calibration, log pulls). Both need a routable path from the operator's machine to the Jetson.
+Almost nothing. This is the single most important fact for anyone integrating FORTIS into an existing corporate network.
 
-On a lab bench that is just a LAN cable. In a real deployment the laptop and the robot may be on different subnets, behind different firewalls, or on networks the team does not administer. Tailscale gives the Jetson a **stable, private, encrypted address that does not change with the network it is plugged into** — the same `ssh` command and the same Foxglove URL work from the bench, from a conference room, or from home.
+The robot needs **exactly two inbound TCP ports** from the operator's machine:
 
-The stack depends on Tailscale for exactly two things: **TCP 22 (ssh)** and **TCP 8765 (Foxglove bridge)**. Nothing else. If General Atomics mandates a different remote-access mechanism (corporate VPN, jump host, plain LAN), **substitute it freely** — set `FORTIS_JETSON_HOST` to whatever hostname works and point Foxglove at `ws://<that-host>:8765`. Tailscale is a convenience, not an architectural dependency.
+| Port | Protocol | Purpose |
+|---|---|---|
+| **22** | ssh | Launching, calibration, log pulls, `./stack` remote commands |
+| **8765** | WebSocket (`foxglove_bridge`) | The entire operator interface — telemetry, teleop, click-to-target, service calls |
 
-### 8.2 Set up the tailnet
+Nothing else on the robot has a network identity at all. The reason is structural, not incidental:
+
+- **DDS never leaves the machine.** The container sets `ROS_LOCALHOST_ONLY=1`; all ROS nodes are co-located in one container. There is no multi-machine ROS graph to configure, no discovery peers, no DDS tuning, no multicast requirement. See [§8.6](#86-why-dds-does-not-cross-the-network).
+- **Every sensor and actuator is a local bus.** Cameras are USB, the drivetrain is CAN, the arm is USB-CDC serial. None of them is IP-attached.
+- **No cloud dependency at runtime.** Network access is needed to *build* (apt, Docker registries, the pinned `ros_odrive` clone) and never to *run*.
+
+So integrating FORTIS with any network — Tailscale, a GA corporate VPN, a jump host, or a bare Ethernet cable — is the same job: **make TCP 22 and 8765 reachable, then set two strings.**
+
+### 8.2 The complete configuration surface
+
+There are four configuration layers, and only one of them contains anything network-related.
+
+| Layer | File | Scope | In git? |
+|---|---|---|---|
+| **1. Per-machine environment** | `.env` (from `tools/stack/.env.example`) | Which ref this machine runs, cpu/gpu profile, DDS domain, **the Jetson's address** | **No** — gitignored |
+| **2. Container runtime** | `docker/docker-compose.yml` (+ `.gpu.yml`) | `network_mode: host`, `ROS_DOMAIN_ID=42`, `ROS_LOCALHOST_ONLY=1`, `DISPLAY`, `/dev` passthrough, CAN entrypoint | Yes |
+| **3. ROS node parameters** | `src/fortis_bringup/config/bringup_params.yaml` | Per-node tunables (heading-hold PID, orbit speed/radius, IMU debias). Mixed live/documentation — the file header says which blocks are actually read | Yes |
+| **4. Launch arguments** | CLI at `ros2 launch` time | `can_interface`, `port`, `serial_port`, `cameras`, `detector`, `synthetic`, `vio`, … | Yes (defaults) |
+
+**Every network-addressable value in the entire repo:**
+
+| Value | Where it lives | Default | Notes |
+|---|---|---|---|
+| `FORTIS_JETSON_HOST` | `.env` (layer 1) | *(blank)* | **The only host/address string the codebase reads.** Consumed solely by `./stack ssh`. Accepts anything ssh accepts: bare IP, DNS name, `user@host`, or a `~/.ssh/config` alias. Blank on the Jetson itself, where `./stack ssh` correctly no-ops. |
+| Foxglove bridge port | `drive_test.launch.py`, `sim.launch.py` → `port:=` launch arg | `8765` | Overridable at launch. |
+| Foxglove bridge port | `perception.launch.py` → `FOXGLOVE_PORT` **module constant**, line 48 | `8765` | **Not a launch arg.** To change the port on the perception/`chassis_orbit` path you must edit the constant. See [§12](#12-known-gaps-risks-and-open-items). |
+| Foxglove bridge bind address | `perception.launch.py` `_foxglove()` | `0.0.0.0` | Binds **all** interfaces. See the security note in [§8.4](#84-before-you-expose-the-bridge-on-a-corporate-network). |
+| Foxglove Studio connection URL | Typed into Studio by the operator | — | **Not in the repo at all.** |
+| `ROS_DOMAIN_ID` | `.env` + both compose files + CI | `42` | A DDS domain, **not** a network address. Irrelevant across machines given `ROS_LOCALHOST_ONLY=1`. |
+| `FORTIS_CAN_IF` / `FORTIS_CAN_BITRATE` | env vars read by `docker/can-up.sh` | `can1` / `250000` | SocketCAN, not IP. |
+
+That is the whole list. **Two strings** carry the deployment's networking: `FORTIS_JETSON_HOST` in `.env`, and the URL the operator types into Foxglove Studio.
+
+### 8.3 The deployed path: a direct wired link
+
+**FORTIS is a tethered robot. In the deployed configuration the Jetson is physically cabled to the operator station, so there is no VPN, no overlay, and no remote-access product in the operating path at all.** Everything in [§8.5](#85-tailscale-optional-for-remote-development) is a development convenience, not a deployment dependency.
+
+On a direct link, "networking" is one decision — how the two ends get addresses:
+
+| Approach | Setup | When to use |
+|---|---|---|
+| **Static IPs on both ends** | e.g. Jetson `192.168.10.2/24`, operator station `192.168.10.1/24`, no gateway, no DNS | **Recommended.** Deterministic, survives reboots in any order, no DHCP server to fail mid-mission. |
+| Link-local (APIPA/mDNS) | Both ends auto-assign `169.254.x.x`; reach the robot as `fortis-jetson.local` | Zero config, but mDNS resolution is the flakiest part and adds a failure mode you do not need. |
+| DHCP reservation | GA's network hands the Jetson a pinned lease | Only if the robot lives on a managed GA subnet rather than a point-to-point cable. |
+
+With a static pair, the entire configuration is:
+
+```ini
+# operator station .env
+FORTIS_JETSON_HOST=fortis@192.168.10.2
+```
+```
+# Foxglove Studio → Open connection → Foxglove WebSocket
+ws://192.168.10.2:8765
+```
+
+That is the whole networking integration. Give the operator station a second NIC (or a USB-Ethernet dongle) dedicated to the robot link, so the robot subnet stays separate from GA's corporate LAN — that also resolves the exposure concern in [§8.4](#84-before-you-expose-the-bridge-on-a-corporate-network), because the unauthenticated bridge is then only reachable from the one directly-cabled machine.
+
+> **Open item — the tether's data path is not documented in this repo.** The BOM records the tether as *power only* ("Tether-supplied, no onboard battery"), and the Jetson's GbE port is listed but never described as tethered. Confirm with the mechanical team whether the tether carries an Ethernet pair, whether it is a separate umbilical, and what the run length is — Cat5e/Cat6 tops out at 100 m, and a reactor-to-console run plus service loop can approach that. If it does not fit, the options are a fibre media converter in the tether or a PoE extender chain. Flagged in [§12](#12-known-gaps-risks-and-open-items).
+
+### 8.3.1 If the operator station is *not* the cabled machine
+
+Only relevant if someone needs to reach the robot from elsewhere on GA's network — a second engineer, a remote observer, bring-up from a desk. Then:
+
+1. **Make the Jetson reachable** on TCP 22 and 8765 from that machine, by whatever means GA's network team prefers. A static DHCP reservation or a DNS A record for the Jetson is worth asking for — it makes step 2 stable.
+2. **Set `FORTIS_JETSON_HOST`** in each operator machine's `.env` to whatever now works:
+   ```ini
+   FORTIS_JETSON_HOST=fortis@fortis-jetson.robotics.ga.com   # corporate DNS
+   FORTIS_JETSON_HOST=fortis@10.4.12.31                      # static lease
+   FORTIS_JETSON_HOST=fortis-jetson                          # ~/.ssh/config alias
+   ```
+   The `~/.ssh/config` alias form is the most robust — it lets GA encode a `ProxyJump` bastion, a non-standard port, an identity file, or a `HostName` that changes, **without touching the repo at all**:
+   ```sshconfig
+   Host fortis-jetson
+       HostName    10.4.12.31
+       User        fortis
+       ProxyJump   bastion.ga.com
+       IdentityFile ~/.ssh/id_fortis
+   ```
+3. **Point Foxglove Studio** at `ws://<same-host>:8765`.
+
+Three deployment shapes, all supported with no code change:
+
+| Shape | `FORTIS_JETSON_HOST` | Foxglove URL | Notes |
+|---|---|---|---|
+| Direct cable / same VLAN | `fortis@10.4.12.31` | `ws://10.4.12.31:8765` | Simplest. Works in an air-gapped reactor area. |
+| Corporate VPN | `fortis@fortis-jetson.ga.com` | `ws://fortis-jetson.ga.com:8765` | Operator joins the VPN; robot is a normal internal host. |
+| Bastion / jump host | `fortis-jetson` (ssh alias w/ `ProxyJump`) | `ws://localhost:8765` **via an ssh tunnel** | See below. |
+
+**Bastion case — the one that needs a tunnel.** If GA only permits ssh to the robot and not arbitrary inbound TCP, forward the bridge over the ssh session:
+
+```bash
+ssh -N -L 8765:localhost:8765 fortis-jetson      # leave running
+# Foxglove Studio → ws://localhost:8765
+```
+
+This is often the *preferred* posture on a locked-down network: it gives you a single authenticated, encrypted, audited channel and closes the unauthenticated bridge problem described next.
+
+### 8.4 Before you expose the bridge on a corporate network
+
+On a dedicated point-to-point cable ([§8.3](#83-the-deployed-path-a-direct-wired-link)) this is largely moot — the only machine that can reach the bridge is the one plugged into it. Read this before the bridge becomes reachable from anything wider than that, including an operator station that is dual-homed onto GA's corporate LAN.
+
+`foxglove_bridge` is launched with `tls: False`, `address: "0.0.0.0"`, and these capabilities: `clientPublish`, `parameters`, `parametersSubscribe`, `services`, `connectionGraph`, `assets`.
+
+**That means anyone who can reach TCP 8765 can command the robot** — publish `/cmd_vel`, fire mission events, call the gripper services, change node parameters. There is no authentication and no transport encryption on that port. The mission FSM gate is a *safety* interlock against out-of-sequence commands; it is **not** an access-control mechanism, and it does not care who is connected.
+
+That is an acceptable posture on a private overlay with per-node ACLs (which is what [§8.5](#85-tailscale-one-concrete-implementation) sets up). It is **not** acceptable on a general corporate LAN. Pick one before deployment:
+
+- **ssh tunnel only** ([§8.3.1](#831-if-the-operator-station-is-not-the-cabled-machine)) — bridge binds locally, authentication is ssh's. Simplest hardening, no code change.
+- **Host firewall on the Jetson** — `ufw`/`nftables` restricting 8765 to specific operator source addresses.
+- **Overlay ACLs** — Tailscale/Headscale policy limiting 8765 to a tagged operator group.
+- **Enable TLS + auth on the bridge** — `foxglove_bridge` supports `tls`, `certfile`, `keyfile`; wiring those (and narrowing `address` off `0.0.0.0`) is a small change to `_foxglove()` in `perception.launch.py`. Not done today.
+
+Whichever GA picks, record it — this is the kind of decision that silently reverts during a demo scramble.
+
+### 8.5 Tailscale (optional, for remote development)
+
+**Not required for deployment.** The deployed robot is cabled ([§8.3](#83-the-deployed-path-a-direct-wired-link)). This section documents the student team's development setup and is offered only as a reference for the case where an engineer wants to reach the Jetson from a desk without moving the robot or re-cabling.
+
+Tailscale gives the Jetson a **stable private address that does not change with the network it is plugged into** — the same `ssh` command and the same Foxglove URL work from the bench, a conference room, or home, with no firewall rules to negotiate per site. GA should feel free to skip it entirely, or substitute their own VPN per [§8.3.1](#831-if-the-operator-station-is-not-the-cabled-machine).
+
+#### Set up the tailnet
 
 1. **Create or choose a tailnet.** General Atomics should use a GA-owned tailnet (SSO-backed against the corporate IdP), not a personal account. The student team's tailnet should be considered temporary and torn down at handoff.
 2. **Define tags before adding devices.** Tags let you write access policy about *roles* instead of *machines*, and a tagged device does not expire with a user account. In the tailnet's Access Controls:
@@ -583,7 +707,7 @@ The stack depends on Tailscale for exactly two things: **TCP 22 (ssh)** and **TC
 
    Adjust group names to GA's directory. The principle: the robot is a *destination*, operators are *sources*, and the only open ports are 22 and 8765.
 
-### 8.3 Join the Jetson
+#### Join the Jetson
 
 ```bash
 curl -fsSL https://tailscale.com/install.sh | sh
@@ -607,7 +731,7 @@ tailscale ip -4          # e.g. 100.x.y.z — stable for the life of the node
 
 **Enable MagicDNS** in the tailnet settings so `fortis-jetson` resolves by name from every member device. Prefer the name over the 100.x address everywhere — it survives node re-creation.
 
-### 8.4 Join operator machines and wire it into the stack
+#### Join operator machines and wire it into the stack
 
 ```bash
 # on each operator laptop / workstation
@@ -641,15 +765,15 @@ cd /data/fortis_ws/src/FORTIS && ./stack exec
 # inside: source /opt/ros/humble/setup.bash && source /workspace/install/setup.bash
 ```
 
-### 8.5 Why DDS does not cross Tailscale
+### 8.6 Why DDS does not cross the network
 
-The container sets **`ROS_LOCALHOST_ONLY=1`**, and that is deliberate. All FORTIS ROS nodes are co-located in one container with `network_mode: host`. Host networking exposes `tailscale0`, `docker0`, and wifi to DDS, which **breaks default multicast discovery between the co-located nodes** — the very nodes that must talk to each other. Loopback-only DDS is the correct setting here.
+The container sets **`ROS_LOCALHOST_ONLY=1`**, and that is deliberate. All FORTIS ROS nodes are co-located in one container with `network_mode: host`. Host networking exposes every host interface (VPN tunnels, `docker0`, wifi) to DDS, which **breaks default multicast discovery between the co-located nodes** — the very nodes that must talk to each other. Loopback-only DDS is the correct setting here.
 
-**Consequence:** you cannot run `ros2 topic echo` from your laptop against the robot's topics over Tailscale. Only the Foxglove WebSocket crosses machines. This is a feature — one TCP port to firewall, one auditable surface, no DDS discovery storms over a VPN.
+**Consequence:** you cannot run `ros2 topic echo` from your laptop against the robot's topics over *any* remote transport — VPN, overlay, or tunnel. Only the Foxglove WebSocket crosses machines. This is a feature, not a limitation to work around: one TCP port to firewall, one auditable surface, and no DDS discovery traffic on a corporate network. It is also what makes [§8.3](#83-the-deployed-path-a-direct-wired-link) a two-string change rather than a networking project.
 
-If a future need genuinely requires cross-machine DDS, that is a design change, not a config tweak: it means dropping `ROS_LOCALHOST_ONLY`, moving to unicast/discovery-server DDS configuration, and accepting the DDS-over-WireGuard MTU and multicast caveats. **Do not do it casually.**
+If a future need genuinely requires cross-machine DDS, that is a design change, not a config tweak: it means dropping `ROS_LOCALHOST_ONLY`, moving to unicast/discovery-server DDS configuration, and accepting the DDS-over-tunnel MTU and multicast caveats (most corporate VPNs do not carry multicast at all). **Do not do it casually.**
 
-### 8.6 GA network considerations
+### 8.7 Tailscale-specific network considerations
 
 | Concern | Detail |
 |---|---|
@@ -807,27 +931,37 @@ Ordered by "will bite you soonest".
 2. **Teensy bench bring-up is incomplete.** `firmware/teensy/HANDOFF.md` §10 steps 3–10 (scope the level-shifter outputs, wire J1, force a driver fault, J2/J3, servos, EEPROM round-trip, e-stop loop, heartbeat watchdog) are not done. Two specific unknowns: **`PIN_DRV_ENABLE` polarity is unverified** (multimeter it before powering motors) and the **TXS0108E B-side is open-drain** (may need 5 V pull-ups). Do not energise steppers before working through that list in order.
 3. **Stepper homing is not implemented.** `handleHomeRequest` still NAKs `ERR_NOT_IMPLEMENTED` for J1/J2/J3. J4 servo homing is done; the gripper still NAKs pending safe-range characterisation. Position recovery on boot reads a **last-known-position file**, and the planned reconciliation against the CL57T's reported position (refuse to act beyond a tolerance) is **not written yet**. Treat arm position after an unexpected power cycle as untrusted until that lands.
 4. **Per-joint software limits are not defined.** `clamp_to_limits` in `CMD_SET_JOINT_TARGETS` is parsed and **ignored**. The URDF now carries revolute limits for J1–J4 — those are the canonical values to propagate into the firmware.
-5. **No `LICENSE` file at the repo root** despite all 12 packages declaring MIT. Resolve before transfer ([§9.1](#91-pre-transfer-checklist--do-this-first-in-this-order)).
+5. **The operator UI is a required deliverable and is only partially built.** This is not an optional nicety — Foxglove Studio plus the four committed layouts **is** the operator interface, and there is no fallback path to driving the robot without it.
+
+   *What works today:* `foxglove/fortis_xdrive_teleop.json` (translate/rotate pads, START ORBIT / STOP, ENABLE DRIVE, wheel-velocity plot, mission-state readout, 3D view), `fortis_chassis_cams.json`, `fortis_perception.json`, `fortis_arm.json`. The full drive loop — arm the motors, open the mission gate, drive, orbit — is operable from the teleop layout with no CLI, and was bench-driven that way.
+
+   *What is missing:* (a) a **mission-level UI** — advancing the FSM through `TARGETING` → `ARM_AT_VIEW` → `INSPECT`/`PICK` → `HOLDING` still requires `event_console`, which is explicitly a bring-up REPL and **not** a runtime component; (b) **fault presentation and the operator-ack RESET** have no UI surface, so today clearing a latched `FAULT` means publishing an ack topic by hand; (c) no **layout regression test** — the JSON layouts can silently drift from renamed topics, and nothing catches it.
+
+   The seams the UI needs already exist and are stable: every FSM event is a `std_msgs/Empty` topic at `/fortis/events/<name>`, every guard is a `std_msgs/Bool` at `/fortis/context/<field>`, and state comes back latched on `/fortis/mission_state`. A Foxglove panel set can drive all of it with no new ROS code — the missing work is UI, not plumbing. `/fortis/mission_state_v2` (item 11) exists precisely to give that UI previous-state and transition timestamps; publishing it is a prerequisite for rendering transitions and detecting stalls.
+
+6. **No `LICENSE` file at the repo root** despite all 12 packages declaring MIT. Resolve before transfer ([§9.1](#91-pre-transfer-checklist--do-this-first-in-this-order)).
 
 ### Functional gaps
 
-6. **`fortis_description` is not yet integrated as the robot's live description.** The hand-written xacro tree is clean (26 links / 25 joints, no loop closures) and `fortis_comms` has a drift test pinning `LEN_X`/`LEN_Y`/`WHEEL_RADIUS` to it, but the earlier OnShape native export was unusable (95 links / 94 joints, closed loops, orphan links, no collision geometry, no joint limits) and the CAD→URDF track is not finished. Arm link lengths remain **TBD** pending mechanical confirmation.
-7. **Isaac ROS is staged but wired to nothing.** `isaac_ros_visual_slam` (cuVSLAM), `isaac_ros_nvblox`, `isaac_ros_cumotion`(+MoveIt adapter), and `isaac_ros_image_proc` are preinstalled in `fortis-dev-gpu` and invoked by **no** package in `src/`. The CPU perception stack is the deployable default. GPU enablement on the Jetson is gated on NGC login ([§7.1](#71-base-os-and-docker)).
-8. **MoveIt 2 is not wired.** `fortis_arm` uses analytic 4-DOF IK; there is no `fortis_moveit_config`, and `bringup.launch.py` has a placeholder TODO for the include.
-9. **Perception is verified against synthetic data and one public dataset, not against the real reactor.** The RGBD VO number (0.7% ATE on TUM `freiburg1_xyz`) is real and good, but the reactor is a low-texture, specular, IR-hostile environment that nothing in the test set represents. **Expect VO and detection to need retuning on first real data**, and budget time for it.
-10. **R0 port-entry simulation not started.** Plan exists (`sim/isaac/xdrive/docs/R0_ENTRY_PLAN.md`); descent through the 22" × 35.5" port is unmodelled.
-11. **No operator UI beyond Foxglove layouts.** `event_console` is a bring-up REPL, explicitly not a runtime component. Mission planning / behaviour trees, and FSM state persistence across restarts, are all out of scope as built.
-12. **`/fortis/mission_state_v2`** (`fortis_msgs/MissionState`, carrying previous state + transition timestamp) is defined but **not published** — the latched `std_msgs/String` topic is what ships.
+7. **`fortis_description` is not yet integrated as the robot's live description.** The hand-written xacro tree is clean (26 links / 25 joints, no loop closures) and `fortis_comms` has a drift test pinning `LEN_X`/`LEN_Y`/`WHEEL_RADIUS` to it, but the earlier OnShape native export was unusable (95 links / 94 joints, closed loops, orphan links, no collision geometry, no joint limits) and the CAD→URDF track is not finished. Arm link lengths remain **TBD** pending mechanical confirmation.
+8. **Isaac ROS is staged but wired to nothing.** `isaac_ros_visual_slam` (cuVSLAM), `isaac_ros_nvblox`, `isaac_ros_cumotion`(+MoveIt adapter), and `isaac_ros_image_proc` are preinstalled in `fortis-dev-gpu` and invoked by **no** package in `src/`. The CPU perception stack is the deployable default. GPU enablement on the Jetson is gated on NGC login ([§7.1](#71-base-os-and-docker)).
+9. **MoveIt 2 is not wired.** `fortis_arm` uses analytic 4-DOF IK; there is no `fortis_moveit_config`, and `bringup.launch.py` has a placeholder TODO for the include.
+10. **Perception is verified against synthetic data and one public dataset, not against the real reactor.** The RGBD VO number (0.7% ATE on TUM `freiburg1_xyz`) is real and good, but the reactor is a low-texture, specular, IR-hostile environment that nothing in the test set represents. **Expect VO and detection to need retuning on first real data**, and budget time for it.
+11. **R0 port-entry simulation not started.** Plan exists (`sim/isaac/xdrive/docs/R0_ENTRY_PLAN.md`); descent through the 22" × 35.5" port is unmodelled.
+12. **The tether's data path is unspecified in the repo.** The BOM records the tether as power-only; the Jetson's GbE is listed but never described as tethered. Since the deployed operator link is a physical cable ([§8.3](#83-the-deployed-path-a-direct-wired-link)), confirm with the mechanical team: does the tether carry an Ethernet pair, what is the run length, and does it stay inside Cat5e/Cat6's 100 m limit? If not, plan a fibre media converter or PoE extender before integration.
+13. **`foxglove_bridge` runs unauthenticated and binds `0.0.0.0`.** `tls: False`, no auth, with `clientPublish` and `services` enabled — anyone who reaches TCP 8765 can command the robot. Acceptable on a dedicated cable, not on a shared LAN. See [§8.4](#84-before-you-expose-the-bridge-on-a-corporate-network) for the four ways to close it.
+14. **The Foxglove port is a hardcoded constant on the perception path.** `drive_test.launch.py` and `sim.launch.py` expose `port:=`, but `perception.launch.py` sets `FOXGLOVE_PORT = 8765` as a module constant (line 48), so `perception.launch.py` and `chassis_orbit.launch.py` need a source edit to move the port. Promote it to a launch arg for consistency.
+15. **`/fortis/mission_state_v2`** (`fortis_msgs/MissionState`, carrying previous state + transition timestamp) is defined but **not published** — the latched `std_msgs/String` topic is what ships.
 
 ### Documentation drift found while preparing this handoff
 
 These are safe to fix and worth fixing early, because they mislead a newcomer:
 
-13. **`src/fortis_arm/README.md` is stale.** It documents only the gripper-service stub ("gripper actuation not implemented") and lists IK, the Teensy serial protocol, position-file handling, and gripper actuation as "intentionally not in here." All of those have since landed (`teensy_bridge_node.py`, `arm_motion_node.py`, `arm_ik.py`, a live `MoveToPose` action server), and the gripper is verified on hardware. **Trust the code and the root README over this file.**
-14. **`src/fortis_integration_tests/README.md` lists 3 of the 7 test files.** Missing: `test_perception_chain.py`, `test_multicam_fusion.py`, `test_full_mission.py`, and `test_bringup_launch.py` is described but the perception/mission coverage is absent.
-15. **`fortis_msgs/README.md` and `fortis_bringup/README.md` both describe the ODrive health bridge as "TBD".** It shipped in `15943c3` as `fortis_safety/odrive_status_bridge_node.py`.
-16. **`tools/stack/README.md` omits `stack build`,** which exists in the `stack` script.
-17. **`firmware/teensy/HANDOFF.md` §7 predates the Jetson-side bridge.** It says the bridge is "not yet written"; `teensy_bridge_node.py` exists and the gripper has been driven through it live.
+16. **`src/fortis_arm/README.md` is stale.** It documents only the gripper-service stub ("gripper actuation not implemented") and lists IK, the Teensy serial protocol, position-file handling, and gripper actuation as "intentionally not in here." All of those have since landed (`teensy_bridge_node.py`, `arm_motion_node.py`, `arm_ik.py`, a live `MoveToPose` action server), and the gripper is verified on hardware. **Trust the code and the root README over this file.**
+17. **`src/fortis_integration_tests/README.md` lists 3 of the 7 test files.** Missing: `test_perception_chain.py`, `test_multicam_fusion.py`, `test_full_mission.py`, and `test_bringup_launch.py` is described but the perception/mission coverage is absent.
+18. **`fortis_msgs/README.md` and `fortis_bringup/README.md` both describe the ODrive health bridge as "TBD".** It shipped in `15943c3` as `fortis_safety/odrive_status_bridge_node.py`.
+19. **`tools/stack/README.md` omits `stack build`,** which exists in the `stack` script.
+20. **`firmware/teensy/HANDOFF.md` §7 predates the Jetson-side bridge.** It says the bridge is "not yet written"; `teensy_bridge_node.py` exists and the gripper has been driven through it live.
 
 ---
 
@@ -868,8 +1002,9 @@ Sign this off and the handoff is complete.
 - [ ] `vcan` dry run emits `Set_Input_Vel` frames ([§6.6e](#66-prove-it-works--hardware-free-demos)).
 
 **Robot**
-- [ ] Jetson on the GA tailnet (or GA's chosen remote-access path), key expiry disabled.
-- [ ] `ssh` and `ws://fortis-jetson:8765` both reachable from a GA operator machine.
+- [ ] Wired link up: operator station and Jetson have stable addresses ([§8.3](#83-the-deployed-path-a-direct-wired-link)); `ssh` and `ws://<jetson>:8765` both reachable across the tether.
+- [ ] Tether data path confirmed with the mechanical team (Ethernet pair present, run length within spec).
+- [ ] Decision recorded on bridge exposure ([§8.4](#84-before-you-expose-the-bridge-on-a-corporate-network)) — dedicated NIC, firewall, tunnel, or TLS.
 - [ ] `./stack status` on the Jetson shows the expected ref and a clean tree.
 - [ ] `candump can1` shows all four ODrive heartbeats.
 - [ ] All four S1s report `is_calibrated` / `is_ready`.
@@ -878,5 +1013,6 @@ Sign this off and the handoff is complete.
 
 **Knowledge**
 - [ ] A GA engineer has driven the FSM by hand through `event_console` and can explain the `FAULT` + operator-ack rule.
-- [ ] A GA engineer has done one full bench cycle: CAN up → launch → arm → drive → teardown.
+- [ ] A GA engineer has done one full bench cycle: CAN up → launch → arm → drive → teardown, driven entirely from the Foxglove operator layouts.
+- [ ] Operator-UI scope agreed ([§12](#12-known-gaps-risks-and-open-items) item 5): who builds the mission-level panels and the fault/RESET surface.
 - [ ] Off-repo artifacts handed over: OnShape model, `FORTIS_FINAL_BOM`, power BOM, reactor STL.
