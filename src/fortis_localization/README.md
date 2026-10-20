@@ -12,6 +12,8 @@ Planar state estimation for the FORTIS X-drive base: wheel odometry plus a
 | `imu_gyro_debias_node` | Estimates the gyro zero-rate bias whenever the drive is DISARMED (`/fortis/drive/armed` false — the motors are idle, so the chassis is physically still by definition) and subtracts it from every IMU sample, publishing `/imu/debiased`. The estimate freezes while armed and skips a settle window after each disarm edge (the chassis rocks as the motors release). |
 | `ekf_filter_node` | `robot_localization`'s stock `ekf_node`, launched from this package with `config/ekf.yaml` (or `config/ekf_vio.yaml` when `vio:=true`). |
 
+`launch/cuvslam.launch.py` is a scaffold for cuVSLAM stereo visual-inertial odometry remapped onto `/fortis/vo`; it needs the GPU image and NGC access on the Jetson, is never included by bring-up, and has not run on the robot.
+
 ## Running
 
 ```bash
