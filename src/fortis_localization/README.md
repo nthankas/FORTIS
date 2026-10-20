@@ -38,6 +38,7 @@ Launch arguments:
 | Topic | Type | Direction | Notes |
 |---|---|---|---|
 | `/joint_states` | `sensor_msgs/JointState` | subscribed (wheel odometry) | wheel shaft velocities in rad/s from `joint_state_broadcaster` (`fortis_control`); read by joint name, never by index |
+| `/fortis/drive/slip_residual` | `std_msgs/Float32` | published (wheel odometry) | RMS mismatch (m/s) between the four wheel speeds and the best-fit body twist, one per `/joint_states` sample. Near zero without slip (slip-free X-drive speeds satisfy FL + FR == RL + RR), larger when a wheel slips or drags. Diagnostic only; not fused by the EKF. |
 | `/odom` | `nav_msgs/Odometry` | published (wheel odometry) | body twist + dead-reckoned pose, frames `odom` -> `base_link`. The EKF fuses the TWIST only; the pose covariance is reported large and fixed because open-loop dead reckoning is never trustworthy on its own. |
 | `<imu_topic>` | `sensor_msgs/Imu` | subscribed (debias node) | raw IMU stream |
 | `/fortis/drive/armed` | `std_msgs/Bool` | subscribed (debias node) | latched (TRANSIENT_LOCAL); gates bias estimation |

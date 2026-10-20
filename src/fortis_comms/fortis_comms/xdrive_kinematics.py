@@ -49,7 +49,24 @@ def xdrive_ik_solver(Vx: float, Vy: float, omega: float) -> np.ndarray:
 
 
 def xdrive_fk_solver(wheel_speeds) -> np.ndarray:
+    """Recover the least-squares chassis twist (Vx, Vy, omega) from four wheel speeds."""
     return np.linalg.pinv(H) @ np.array(wheel_speeds)
+
+
+def xdrive_fk_residual(wheel_speeds) -> float:
+    """RMS mismatch (m/s) between the wheel speeds and the best-fit twist.
+
+    Four wheels over-determine a three-component twist, so the FK solve is a
+    least-squares fit and its residual is a free slip indicator. For this H
+    the rows satisfy FL + FR == RL + RR for every twist (the vector
+    [1, 1, -1, -1] is in H's left null space), so slip-free wheel speeds
+    always obey that identity and the residual is about zero. A wheel that
+    slips, or is dragged, breaks the identity and the residual grows with
+    the mismatch. Diagnostic only: it says how far the measurement is from
+    any rigid-body motion, not which wheel is slipping.
+    """
+    w = np.asarray(wheel_speeds, dtype=float)
+    return float(np.sqrt(np.mean((w - H @ xdrive_fk_solver(w)) ** 2)))
 
 
 def wheel_rot_to_lin_vel(omega: float) -> float:
