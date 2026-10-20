@@ -10,15 +10,19 @@ Subscribes
         flag -- the TARGETING -> ARM_AT_VIEW guard in
         fortis_safety.mission_state_machine.
     /joint_states           sensor_msgs/JointState
-        Arm feedback from teensy_bridge; start point for interpolation and
-        the convergence check.
+        Arm feedback from teensy_bridge; the start point of a move, the
+        lead stepper's progress and the convergence check.
     /fortis/mission_state   std_msgs/String (latched)
         Gate for MoveToPose goals, mirroring arm_controller's gripper gate.
 
 Publishes
 ---------
     /fortis/context/ik_ok            std_msgs/Bool (latched)
-    /fortis/arm/command              sensor_msgs/JointState waypoints
+    /fortis/arm/command              sensor_msgs/JointState targets
+        One command with the J1..J3 goals (and J4 held) starts the
+        firmware's coordinated move; J4-only commands then ease the wrist
+        servo along the lead stepper's measured progress. The bridge
+        merges partial commands by joint name.
     /fortis/events/arm_at_view_pose  std_msgs/Empty
         Fired after a successful move when publish_view_event is true;
         Event.ARM_AT_VIEW_POSE moves the FSM TARGETING -> ARM_AT_VIEW under
@@ -28,9 +32,12 @@ Action
 ------
     move_to_pose    fortis_msgs/action/MoveToPose
         IK the goal pose; abort with a message when unreachable or TF
-        fails; otherwise stream joint waypoints at joint_speed_rad_s with
-        feedback progress 0..1, succeeding once /joint_states settles
-        within joint_tolerance_rad (abort after move_timeout_s).
+        fails; otherwise command the J1..J3 goal once (the firmware runs
+        the acceleration-profiled move itself), ease J4 behind the lead
+        stepper, and report feedback progress 0..1, succeeding once
+        /joint_states settles within joint_tolerance_rad (abort after
+        move_timeout_s). Cancel or timeout re-targets every joint at its
+        measured position, a soft stop, before finishing the goal.
 
 State gating: goals are accepted only in TARGETING, ARM_AT_VIEW, INSPECT
 and PICK. TARGETING is where the view-pose move happens (its success emits
@@ -45,7 +52,6 @@ transform hardcoded below.
 
 from __future__ import annotations
 
-import math
 import threading
 import time
 
@@ -104,6 +110,9 @@ TF_TIMEOUT_S = 0.5
 _JOINT_WAIT_S = 2.0
 #: Poll period while waiting for the arm to settle on target.
 _SETTLE_POLL_S = 0.05
+#: The stepper joints the firmware moves as one coordinated group.
+_STEPPER_INDICES = (0, 1, 2)
+_J4_INDEX = 3
 
 
 def _base_to_arm(x: float, y: float, z: float) -> "tuple[float, float, float]":
@@ -118,7 +127,6 @@ class ArmMotionNode(Node):
     def __init__(self, **kwargs) -> None:
         super().__init__(NODE_NAME, **kwargs)
 
-        self._joint_speed = self._declf("joint_speed_rad_s", 0.3)
         self._command_rate = self._declf("command_rate_hz", 20.0)
         self._tolerance = self._declf("joint_tolerance_rad", 0.05)
         self._move_timeout = self._declf("move_timeout_s", 30.0)
@@ -250,34 +258,41 @@ class ArmMotionNode(Node):
         goal_q = min(
             solutions,
             key=lambda s: sum(abs(a - b) for a, b in zip(s, start)))
-        deltas = [g - s for g, s in zip(goal_q, start)]
         period = 1.0 / max(self._command_rate, 1.0)
-        duration = max(
-            max(abs(d) for d in deltas) / max(self._joint_speed, 1e-3),
-            period)
-        steps = max(1, math.ceil(duration / period))
+
+        # J1..J3: one command. The firmware's stepper group runs a single
+        # coordinated move with its own acceleration profile from this
+        # target, so there is nothing for the Jetson to interpolate. J4 is a
+        # servo with no profile of its own, so it is held at its start here
+        # and eased along the lead stepper's measured progress below.
+        start_j4 = start[_J4_INDEX]
+        goal_j4 = goal_q[_J4_INDEX]
+        self._publish_command(
+            MOTION_JOINT_NAMES,
+            [goal_q[0], goal_q[1], goal_q[2], start_j4])
+
+        travel = [abs(goal_q[i] - start[i]) for i in _STEPPER_INDICES]
+        lead = max(_STEPPER_INDICES, key=lambda i: travel[i])
 
         feedback = MoveToPose.Feedback()
-        for i in range(1, steps + 1):
-            if goal_handle.is_cancel_requested:
-                return self._cancel(goal_handle, result)
-            alpha = i / steps
-            self._publish_command(
-                [s + alpha * d for s, d in zip(start, deltas)])
-            # Reserve the last 10% of progress for physical convergence.
-            feedback.progress = 0.9 * alpha
-            goal_handle.publish_feedback(feedback)
-            time.sleep(period)
-
         deadline = time.monotonic() + self._move_timeout
         while not self._within_tolerance(goal_q):
             if goal_handle.is_cancel_requested:
+                self._soft_stop()
                 return self._cancel(goal_handle, result)
             if time.monotonic() > deadline:
+                self._soft_stop()
                 return self._abort(
                     goal_handle, result,
                     f"arm did not settle within {self._move_timeout:.0f}s")
-            time.sleep(_SETTLE_POLL_S)
+            frac = self._lead_progress(lead, start[lead], goal_q[lead])
+            self._publish_command(
+                (MOTION_JOINT_NAMES[_J4_INDEX],),
+                [start_j4 + frac * (goal_j4 - start_j4)])
+            # Reserve the last 10% of progress for physical convergence.
+            feedback.progress = 0.9 * frac
+            goal_handle.publish_feedback(feedback)
+            time.sleep(period)
 
         feedback.progress = 1.0
         goal_handle.publish_feedback(feedback)
@@ -315,13 +330,39 @@ class ArmMotionNode(Node):
             time.sleep(_SETTLE_POLL_S)
         return None
 
-    def _publish_command(self, positions) -> None:
-        """Publish one joint waypoint to the teensy bridge."""
+    def _publish_command(self, names, positions) -> None:
+        """Publish joint targets to the teensy bridge, which merges by name."""
         cmd = JointState()
         cmd.header.stamp = self.get_clock().now().to_msg()
-        cmd.name = list(MOTION_JOINT_NAMES)
+        cmd.name = list(names)
         cmd.position = [float(p) for p in positions]
         self._cmd_pub.publish(cmd)
+
+    def _lead_progress(self, lead: int, start: float, goal: float) -> float:
+        """Return the lead stepper's measured progress toward goal, 0..1.
+
+        Reads 1.0 once the lead joint is within tolerance of its goal, or
+        when no stepper has meaningful travel, so the J4 servo always ends
+        exactly on its goal.
+        """
+        travel = abs(goal - start)
+        if travel <= self._tolerance:
+            return 1.0
+        with self._joints_lock:
+            current = self._joints.get(MOTION_JOINT_NAMES[lead])
+        if current is None:
+            return 0.0
+        if abs(current - goal) <= self._tolerance:
+            return 1.0
+        return min(1.0, max(0.0, abs(current - start) / travel))
+
+    def _soft_stop(self) -> None:
+        """Re-target every arm joint at its measured position."""
+        with self._joints_lock:
+            current = [self._joints.get(n) for n in MOTION_JOINT_NAMES]
+        if any(c is None for c in current):
+            return
+        self._publish_command(MOTION_JOINT_NAMES, current)
 
     def _within_tolerance(self, goal_q) -> bool:
         """Return True when every arm joint is within tolerance of goal_q."""

@@ -179,6 +179,15 @@ zero == "homed"). J4 and gripper are servo pulse widths in microseconds.
 | 14     | 2    | `gripper_us`   | uint16, 1000..2000                    |
 | 16     | 2    | `flags`        | bit0=clamp_to_limits, others reserved |
 
+A frame whose J1..J3 targets differ from the current targets starts one
+coordinated move: the firmware loads all three targets into the stepper
+group and begins a single acceleration-profiled move, restarting any move
+already in progress. A frame that repeats the current J1..J3 targets leaves
+the steppers alone and only updates the J4 and gripper servos, so the host
+can refresh the servos while a move is in flight without disturbing it.
+Only frames that change the stepper targets count toward the EEPROM
+checkpoint interval (section 6).
+
 ### 3.5 `CMD_SET_JOINT_VELOCITIES` (0x11)
 
 Velocity limits used until the next `CMD_SET_JOINT_TARGETS`. Each value is

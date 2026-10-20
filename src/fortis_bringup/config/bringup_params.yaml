@@ -179,8 +179,9 @@ teensy_bridge:
 arm_motion:
   ros__parameters:
     # IK/MoveToPose execution. LIVE: arm_motion declares each of these.
-    # Joint-space interpolation speed (rad/s) and waypoint stream rate (Hz).
-    joint_speed_rad_s: 0.3
+    # J1..J3 move as one coordinated firmware move from a single target;
+    # this is the rate (Hz) at which the node eases the J4 servo along the
+    # lead stepper's progress and publishes action feedback.
     command_rate_hz: 20.0
     # A move succeeds once /joint_states settles within this tolerance
     # (rad); it aborts after move_timeout_s.

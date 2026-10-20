@@ -596,28 +596,39 @@ static void handleSetJointTargets(uint8_t seq, const uint8_t *p, uint8_t len) {
         return;
     }
 
-    g_state.j1_target_steps = j1;
-    g_state.j2_target_steps = j2;
-    g_state.j3_target_steps = j3;
+    // A new J1..J3 target starts one coordinated move: the stepper group
+    // runs its own acceleration profile from a single target, so the host
+    // sends the goal once. Re-sending the same J1..J3 target leaves the
+    // move alone and only refreshes the servos.
+    const bool steppers_changed =
+        j1 != g_state.j1_target_steps ||
+        j2 != g_state.j2_target_steps ||
+        j3 != g_state.j3_target_steps;
+
+    if (steppers_changed) {
+        g_state.j1_target_steps = j1;
+        g_state.j2_target_steps = j2;
+        g_state.j3_target_steps = j3;
 
 #if MOCK_MODE
-    Serial.print(F("[MOCK] targets j1=")); Serial.print(j1);
-    Serial.print(F(" j2=")); Serial.print(j2);
-    Serial.print(F(" j3=")); Serial.println(j3);
+        Serial.print(F("[MOCK] targets j1=")); Serial.print(j1);
+        Serial.print(F(" j2=")); Serial.print(j2);
+        Serial.print(F(" j3=")); Serial.println(j3);
 #else
-    g_j1.setTargetAbs(j1);
-    g_j2.setTargetAbs(j2);
-    g_j3.setTargetAbs(j3);
-    if (motionRunning()) g_motion.stopAsync();
-    g_motion.startMove();
+        g_j1.setTargetAbs(j1);
+        g_j2.setTargetAbs(j2);
+        g_j3.setTargetAbs(j3);
+        if (motionRunning()) g_motion.stopAsync();
+        g_motion.startMove();
 #endif
-    g_state.state_flags |= STATE_MOVING;
-    writeServos(j4, gr);
+        g_state.state_flags |= STATE_MOVING;
 
-    g_state.target_updates_since_eeprom++;
-    if (g_state.target_updates_since_eeprom >= kEepromCheckpointEveryN) {
-        checkpointEeprom();
+        g_state.target_updates_since_eeprom++;
+        if (g_state.target_updates_since_eeprom >= kEepromCheckpointEveryN) {
+            checkpointEeprom();
+        }
     }
+    writeServos(j4, gr);
 
     sendAck(seq, CMD_SET_JOINT_TARGETS);
 }
