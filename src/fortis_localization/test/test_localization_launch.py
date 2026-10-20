@@ -17,6 +17,8 @@ import yaml
 PKG_ROOT = Path(__file__).resolve().parents[1]
 EKF_YAML = PKG_ROOT / "config" / "ekf.yaml"
 EKF_VIO_YAML = PKG_ROOT / "config" / "ekf_vio.yaml"
+EKF_IMU1_YAML = PKG_ROOT / "config" / "ekf_imu1.yaml"
+EKF_IMU1_OFF_YAML = PKG_ROOT / "config" / "ekf_imu1_off.yaml"
 LAUNCH_FILE = PKG_ROOT / "launch" / "localization.launch.py"
 
 
@@ -71,3 +73,35 @@ def test_launch_file_compiles_and_declares_vio():
     assert '"vio"' in source
     assert "ekf_vio.yaml" in source
     assert "ekf.yaml" in source
+
+
+def test_imu1_overlay_fuses_only_imu1_yaw_rate():
+    """Add imu1 as a yaw-rate-only input and touch nothing else."""
+    params = _params(EKF_IMU1_YAML)
+    assert params["imu1"] == "/imu1"
+    config = params["imu1_config"]
+    assert len(config) == 15
+    assert config[11] is True  # vyaw
+    assert sum(bool(flag) for flag in config) == 1
+    assert params["imu1_queue_size"] == 10
+    assert params["imu1_differential"] is False
+    assert params["imu1_relative"] is False
+    # An overlay must not restate base inputs, or it could drift from them.
+    assert not any(key.startswith(("odom0", "imu0", "odom1")) for key in params)
+
+
+def test_imu1_off_overlay_is_a_no_op():
+    """Keep the default overlay to a value the base file already sets."""
+    params = _params(EKF_IMU1_OFF_YAML)
+    base = _params(EKF_YAML)
+    assert params == {"two_d_mode": base["two_d_mode"]}
+
+
+def test_launch_file_declares_second_imu():
+    """Declare second_imu with its topic and frame args and both overlays."""
+    source = LAUNCH_FILE.read_text()
+    assert '"second_imu"' in source
+    assert '"imu1_topic"' in source
+    assert '"imu1_frame"' in source
+    assert "ekf_imu1.yaml" in source
+    assert "ekf_imu1_off.yaml" in source

@@ -27,6 +27,9 @@ Launch arguments:
 | `publish_imu_tf` | `true` | Publish an identity static imu_frame->base_link transform so localization works standalone (the FORTIS URDF does not model the camera's internal IMU frame). Set `false` when the camera launch already supplies the full chain, to avoid a duplicate TF. |
 | `debias_imu` | `true` | Insert `imu_gyro_debias_node` between the raw IMU and the EKF (EKF reads `/imu/debiased`). `false` = EKF reads `imu_topic` directly, byte-for-byte the pre-debias behaviour. |
 | `vio` | `false` | `true` selects `config/ekf_vio.yaml`, which additionally fuses the RGBD visual-odometry body twist `/fortis/vo` (vx, vy only; yaw stays IMU-owned) from `fortis_perception`'s `rgbd_vo_node` — start that node separately. |
+| `second_imu` | `false` | `true` layers `config/ekf_imu1.yaml` over the base params, fusing a second camera IMU (`imu1_topic`) for its gyro yaw rate only, and runs a second debias node for it when `debias_imu` is on. The default loads the no-op `config/ekf_imu1_off.yaml`, so the single-IMU configuration is byte-for-byte the base file. Hardware testing used one IMU. |
+| `imu1_topic` | `/oak_chassis_left/imu/data` | Source topic of the second IMU, remapped to the EKF's `/imu1` (through `/imu1/debiased` when `debias_imu` is on). Only used with `second_imu:=true`. |
+| `imu1_frame` | `oak_chassis_left_imu_frame` | frame_id of the second IMU. The `base_link -> imu1_frame` transform, including the side camera's mounting rotation, must already exist in TF (camera launch or URDF); this launch does not publish one. Only used with `second_imu:=true`. |
 
 ## Topics
 

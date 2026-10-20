@@ -1,0 +1,9 @@
+# No-op overlay for localization.launch.py second_imu:=false (the default).
+#
+# The EKF nodes always load [base params, overlay]; a launch parameter list
+# cannot itself be conditional, so the default case loads this file, which
+# restates one value the base file already sets and adds nothing. The
+# single-IMU configuration is therefore byte-for-byte the base file.
+ekf_filter_node:
+  ros__parameters:
+    two_d_mode: true
