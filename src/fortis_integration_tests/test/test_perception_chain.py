@@ -1,7 +1,7 @@
 """
 launch_testing acceptance test for the FORTIS perception chain.
 
-Brings up the WS-I demo composition -- the synthetic OAK replayer plus
+Brings up the demo composition -- the synthetic OAK replayer plus
 the real perception nodes and the mission FSM -- in one process and
 exercises the sprint's acceptance sequence end to end:
 

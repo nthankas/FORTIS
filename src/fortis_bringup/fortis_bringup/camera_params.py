@@ -13,9 +13,8 @@ depthai-ros v3 keys a params FILE by the node name -- the file is silently
 ignored if the top-level key does not match. Rather than tie the shared config
 to one node name, we load it here and return a NODE-AGNOSTIC param dict, which
 launch_ros applies under whatever node name the launch gives it. That is the
-path the multi-cam launch has always used and that was verified live on all
-four cameras (2026-06-05); routing the single-cam launch through it too removes
-the last node-name coupling. The yaml's top-level key is therefore a positional
+path the multi-cam launch has always used; routing the single-cam launch
+through it too removes the last node-name coupling. The yaml's top-level key is therefore a positional
 placeholder (read by position, name ignored) -- see the yaml header.
 """
 

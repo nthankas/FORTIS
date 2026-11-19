@@ -10,7 +10,7 @@ are developed and tested against synthetic sources and only verified live on
 the Jetson. `fortis_bringup/launch/perception.launch.py` composes the whole
 chain against either source with one command.
 
-## Topic registry (single source of truth for this sprint)
+## Topic registry
 
 | Topic | Type | Publisher |
 |---|---|---|

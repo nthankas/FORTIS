@@ -4,7 +4,7 @@ Hi Cesar — this is your patch. The skeleton, protocol spec, and a desktop mock
 in place but **nothing has been compiled or run on hardware yet**. Below is the
 current state, what's safe to change vs. what needs coordination, and what's left.
 
-Nikhil + Claude handle the rest of the stack (ROS 2 nodes, Jetson side, sim,
+Nikhil handles the rest of the stack (ROS 2 nodes, Jetson side, sim,
 URDF). You own the firmware, the protocol document, and the mock.
 
 ---
@@ -20,7 +20,7 @@ URDF). You own the firmware, the protocol document, and the mock.
 
 ## 2. What's NOT yours (don't edit)
 
-- `src/**` — ROS 2 packages (Nikhil + Claude)
+- `src/**` — ROS 2 packages (Nikhil)
 - `sim/**` — Gazebo / Mujoco models
 - `src/fortis_description/**` — robot description (URDF lives here now, was top-level `urdf/` before)
 - The future Jetson-side serial bridge node (will live under `src/`) — not yet written
@@ -157,7 +157,7 @@ reason.
 8. **EEPROM round-trip:** command motion, kill power mid-move, power back on, verify `RSP_STATUS` reports the last-checkpointed positions (not zero, not garbage). Test the ping-pong slot logic by interrupting writes with a quick power-cycle during a checkpoint.
 9. **E-stop loop:** verify the active-low input on pin 21 raises `FAULT_E_STOP`, latches motors disabled, and clears via `CMD_CLEAR_FAULTS` only after the input goes high again.
 10. **Heartbeat watchdog:** stop sending heartbeats from the host, verify motors disable within ~250 ms and the fault is reported.
-11. **Integration with the Jetson-side bridge** (Nikhil + Claude will write this once 1–10 are green). Plan: a `serial_bridge` ROS 2 node that exposes the protocol as joint-state + joint-trajectory topics. We'll coordinate the API at that point.
+11. **Integration with the Jetson-side bridge** (Nikhil will write this once 1–10 are green). Plan: a `serial_bridge` ROS 2 node that exposes the protocol as joint-state + joint-trajectory topics. We'll coordinate the API at that point.
 
 ## 11. Working locally
 
@@ -168,5 +168,5 @@ reason.
 ## 12. Quick contact points
 
 - Protocol questions / extending message types → ping Nikhil; he'll mirror on the host side.
-- ROS 2 / Jetson-side concerns → Nikhil + Claude.
+- ROS 2 / Jetson-side concerns → Nikhil.
 - Hardware wiring questions (driver settings, shifter polarity, servo specs) → that's your call but flag anything that diverges from §3 in PROTOCOL.md.
