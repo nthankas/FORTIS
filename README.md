@@ -85,7 +85,7 @@ Code: [`src/fortis_arm`](src/fortis_arm/README.md), [`firmware/teensy`](firmware
 - [`arm_ik.py`](src/fortis_arm/fortis_arm/arm_ik.py): forward and inverse kinematics for the 4-DOF arm (base yaw, shoulder, elbow, wrist). Returns elbow-up and elbow-down solutions that respect the URDF joint limits.
 - [`arm_motion_node.py`](src/fortis_arm/fortis_arm/arm_motion_node.py): `MoveToPose` action server. It solves IK for the goal, picks the solution nearest the current joint state, rejects unreachable targets, and stops the arm on cancel or timeout. Goals are accepted only in mission states that allow arm motion.
 - [`teensy_bridge_node.py`](src/fortis_arm/fortis_arm/teensy_bridge_node.py): serial bridge to the Teensy 4.1. Before each move it scales the three stepper speeds so all joints finish together, with the slowest joint setting the move time. The firmware then runs one coordinated move with a trapezoidal velocity profile on the stepper group.
-- Planning is joint-space only. There is no collision-aware path planner in this repo.
+- [`arm_planner.py`](src/fortis_arm/fortis_arm/arm_planner.py): joint-space planner. It checks the arm links against the chassis, the floor and each other along the move, drops IK solutions that collide, and routes through a raised pose when the direct move is blocked. The checks model the chassis as a box and do not include the vessel walls.
 
 ## Perception
 

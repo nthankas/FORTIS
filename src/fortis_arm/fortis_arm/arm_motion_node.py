@@ -32,7 +32,8 @@ Action
 ------
     move_to_pose    fortis_msgs/action/MoveToPose
         IK the goal pose; abort with a message when unreachable or TF
-        fails; otherwise command the J1..J3 goal once (the firmware runs
+        fails or no collision-free path exists (fortis_arm.arm_planner);
+        otherwise command each J1..J3 waypoint once (the firmware runs
         the acceleration-profiled move itself), ease J4 behind the lead
         stepper, and report feedback progress 0..1, succeeding once
         /joint_states settles within joint_tolerance_rad (abort after
@@ -72,6 +73,7 @@ from fortis_comms.qos_profiles import latched_qos_profile
 from fortis_msgs.action import MoveToPose
 
 from fortis_arm.arm_ik import inverse_kinematics
+from fortis_arm.arm_planner import in_collision, plan_path
 
 NODE_NAME = "arm_motion"
 
@@ -255,44 +257,57 @@ class ArmMotionNode(Node):
             return self._abort(
                 goal_handle, result, "no /joint_states from the arm bridge")
 
-        goal_q = min(
-            solutions,
-            key=lambda s: sum(abs(a - b) for a, b in zip(s, start)))
+        # Nearest IK solution with a collision-free path. A start pose the
+        # model already flags (e.g. resting on a stow bracket) cannot be
+        # planned from, so it falls back to the direct move.
+        path = None
+        for goal_q in sorted(
+                solutions,
+                key=lambda s: sum(abs(a - b) for a, b in zip(s, start))):
+            path = [goal_q] if in_collision(start) else plan_path(start, goal_q)
+            if path:
+                break
+        if not path:
+            return self._abort(
+                goal_handle, result, "no collision-free path to target")
         period = 1.0 / max(self._command_rate, 1.0)
-
-        # J1..J3: one command. The firmware's stepper group runs a single
-        # coordinated move with its own acceleration profile from this
-        # target, so there is nothing for the Jetson to interpolate. J4 is a
-        # servo with no profile of its own, so it is held at its start here
-        # and eased along the lead stepper's measured progress below.
-        start_j4 = start[_J4_INDEX]
-        goal_j4 = goal_q[_J4_INDEX]
-        self._publish_command(
-            MOTION_JOINT_NAMES,
-            [goal_q[0], goal_q[1], goal_q[2], start_j4])
-
-        travel = [abs(goal_q[i] - start[i]) for i in _STEPPER_INDICES]
-        lead = max(_STEPPER_INDICES, key=lambda i: travel[i])
 
         feedback = MoveToPose.Feedback()
         deadline = time.monotonic() + self._move_timeout
-        while not self._within_tolerance(goal_q):
-            if goal_handle.is_cancel_requested:
-                self._soft_stop()
-                return self._cancel(goal_handle, result)
-            if time.monotonic() > deadline:
-                self._soft_stop()
-                return self._abort(
-                    goal_handle, result,
-                    f"arm did not settle within {self._move_timeout:.0f}s")
-            frac = self._lead_progress(lead, start[lead], goal_q[lead])
+        for leg, goal_q in enumerate(path):
+            # J1..J3: one command per waypoint. The firmware's stepper group
+            # runs a single coordinated move with its own acceleration
+            # profile from this target, so there is nothing for the Jetson
+            # to interpolate. J4 is a servo with no profile of its own, so
+            # it is held at its start here and eased along the lead
+            # stepper's measured progress below.
+            start_j4 = start[_J4_INDEX]
+            goal_j4 = goal_q[_J4_INDEX]
             self._publish_command(
-                (MOTION_JOINT_NAMES[_J4_INDEX],),
-                [start_j4 + frac * (goal_j4 - start_j4)])
-            # Reserve the last 10% of progress for physical convergence.
-            feedback.progress = 0.9 * frac
-            goal_handle.publish_feedback(feedback)
-            time.sleep(period)
+                MOTION_JOINT_NAMES,
+                [goal_q[0], goal_q[1], goal_q[2], start_j4])
+
+            travel = [abs(goal_q[i] - start[i]) for i in _STEPPER_INDICES]
+            lead = max(_STEPPER_INDICES, key=lambda i: travel[i])
+
+            while not self._within_tolerance(goal_q):
+                if goal_handle.is_cancel_requested:
+                    self._soft_stop()
+                    return self._cancel(goal_handle, result)
+                if time.monotonic() > deadline:
+                    self._soft_stop()
+                    return self._abort(
+                        goal_handle, result,
+                        f"arm did not settle within {self._move_timeout:.0f}s")
+                frac = self._lead_progress(lead, start[lead], goal_q[lead])
+                self._publish_command(
+                    (MOTION_JOINT_NAMES[_J4_INDEX],),
+                    [start_j4 + frac * (goal_j4 - start_j4)])
+                # Reserve the last 10% of progress for physical convergence.
+                feedback.progress = (leg + 0.9 * frac) / len(path)
+                goal_handle.publish_feedback(feedback)
+                time.sleep(period)
+            start = list(goal_q)
 
         feedback.progress = 1.0
         goal_handle.publish_feedback(feedback)

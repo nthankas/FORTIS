@@ -6,7 +6,7 @@ ROS 2 stack for the FORTIS 4-DOF arm: kinematics, pose moves, the serial bridge 
 
 | Executable | What it does |
 |---|---|
-| `arm_motion` | Solves IK (`arm_ik.py`) for every `/fortis/target_pose` and publishes the latched `/fortis/context/ik_ok` flag. Serves the `move_to_pose` action (`fortis_msgs/action/MoveToPose`): picks the IK solution nearest the current joints, commands the move, reports progress, and soft-stops on cancel or timeout. Goals are accepted in `TARGETING`, `ARM_AT_VIEW`, `INSPECT` and `PICK`. |
+| `arm_motion` | Solves IK (`arm_ik.py`) for every `/fortis/target_pose` and publishes the latched `/fortis/context/ik_ok` flag. Serves the `move_to_pose` action (`fortis_msgs/action/MoveToPose`): picks the nearest IK solution with a collision-free path (`arm_planner.py`: chassis, floor and self-collision checks, with a raised via pose when the direct move is blocked), commands the move, reports progress, and soft-stops on cancel or timeout. Goals are accepted in `TARGETING`, `ARM_AT_VIEW`, `INSPECT` and `PICK`. |
 | `teensy_bridge` | Owns the USB serial link to the firmware (`firmware/teensy/PROTOCOL.md`). Publishes `ArmStatus`, `/joint_states` and diagnostics, translates `/fortis/arm/command` into joint targets, and exposes enable / disable / home / clear_faults services. Before each stepper move it scales the J1..J3 speed limits so all three joints finish together; the firmware runs the move with a trapezoidal profile. |
 | `arm_controller` | `open_gripper` / `close_gripper` services (`std_srvs/Trigger`), accepted in `ARM_AT_VIEW`, `INSPECT`, `PICK`, `HOLDING` and `RETURN_HOME`. |
 
@@ -50,6 +50,7 @@ colcon test-result --verbose
 
 Tests:
 - `test/test_arm_ik.py` -- FK/IK round trip, both elbow branches, unreachable targets, joint limits.
+- `test/test_arm_planner.py` -- collision checks, direct and via-pose paths.
 - `test/test_arm_motion.py` -- `ik_ok` flag, a full `MoveToPose` against a simulated arm, goal rejection outside allowed states.
 - `test/test_teensy_bridge.py`, `test/test_teensy_protocol.py` -- bridge against the firmware mock, frame encode/decode.
 - `test/test_state_gating.py`, `test/test_bringup.py` -- gripper service gating per mission state.
