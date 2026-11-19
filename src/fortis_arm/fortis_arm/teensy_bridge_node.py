@@ -73,9 +73,9 @@ ARM_JOINT_NAMES = (
     "gripper_right_joint",
 )
 
-DEFAULT_STEPS_PER_RAD_J1 = 12732.4
+DEFAULT_STEPS_PER_RAD_J1 = 6366.2
 DEFAULT_STEPS_PER_RAD_J2 = 12732.4
-DEFAULT_STEPS_PER_RAD_J3 = 6875.5
+DEFAULT_STEPS_PER_RAD_J3 = 6366.2
 
 #: CMD_SET_JOINT_TARGETS flag bit0 = clamp_to_limits (PROTOCOL.md 3.4).
 _FLAG_CLAMP_TO_LIMITS = 0x01
@@ -455,7 +455,22 @@ class TeensyBridgeNode(Node):
         tgt = dataclasses.replace(
             base, flags=_FLAG_CLAMP_TO_LIMITS, **updates)
         self._last_targets = tgt
+        steps = (tgt.j1_steps, tgt.j2_steps, tgt.j3_steps)
+        if steps != (base.j1_steps, base.j2_steps, base.j3_steps):
+            self._request(
+                int(MsgType.CMD_SET_JOINT_VELOCITIES),
+                struct.pack("<iii", *self._synced_speeds(steps)))
         self._request(int(MsgType.CMD_SET_JOINT_TARGETS), tgt.pack())
+
+    def _synced_speeds(self, steps) -> "list[int]":
+        """Scale stepper speeds so all joints finish with the slowest one."""
+        st = self._last_status
+        cur = (st.j1_steps, st.j2_steps, st.j3_steps) if st else steps
+        travel = [abs(t - c) for t, c in zip(steps, cur)]
+        duration = max(d / v for d, v in zip(travel, self._max_sps))
+        if duration <= 0.0:
+            return [int(v) for v in self._max_sps]
+        return [max(1, int(d / duration)) for d in travel]
 
     # --- services ---------------------------------------------------------
 

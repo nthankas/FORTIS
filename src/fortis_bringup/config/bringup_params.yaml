@@ -157,9 +157,9 @@ teensy_bridge:
     status_rate_hz: 20.0
     heartbeat_rate_hz: 20.0
     # Stepper scale, steps per joint radian (microstepping x gearing).
-    steps_per_rad_j1: 12732.4
+    steps_per_rad_j1: 6366.2
     steps_per_rad_j2: 12732.4
-    steps_per_rad_j3: 6875.5
+    steps_per_rad_j3: 6366.2
     # J4 (wrist servo) pulse-width map: us at zero rad, us per rad, and
     # the clamp range.
     j4_us_center: 1400.0

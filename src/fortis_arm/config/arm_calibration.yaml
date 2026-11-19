@@ -6,12 +6,12 @@ teensy_bridge:
   ros__parameters:
     # steps_per_rad = motor_steps_per_rev * gear_ratio / (2 * pi)
     # Assumption: 200 full-step NEMA-23 x 8 microsteps = 1600 steps/rev.
-    #   J1, J2: 50:1 planetary -> 1600 * 50 / (2*pi) = 12732.4
-    #   J3    : 27:1 planetary -> 1600 * 27 / (2*pi) =  6875.5
+    #   J1, J3: 25:1 cycloidal -> 1600 * 25 / (2*pi) =  6366.2
+    #   J2    : 50:1 planetary -> 1600 * 50 / (2*pi) = 12732.4
     # PLACEHOLDER - bench-calibrate on hardware.
-    steps_per_rad_j1: 12732.4
+    steps_per_rad_j1: 6366.2
     steps_per_rad_j2: 12732.4
-    steps_per_rad_j3: 6875.5
+    steps_per_rad_j3: 6366.2
 
     # J4 = Hitec D845WP servo. Bench pulse range 800..2000 us mapped across
     # the URDF joint_j4 limit of -pi/2..+pi/2 rad, centered at the mid pulse.
