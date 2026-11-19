@@ -51,13 +51,8 @@ Refer to the OnShape model and BOM for ground-truth dimensions, not these script
 ## Reactor environment
 
 - USD: `xdrive/assets/diiid_reactor.usd` (OnShape import, triangle mesh collision applied manually in the GUI - **do not regenerate**)
-- Ground-truth mesh (not in git): `E:/Capstone/assets/halfReactor.stl`
 - Key radii (in `xdrive/lib/sim_config.py`): inner floor 45.8-54.8", step at 55.5", outer floor 56.2-70.3", step height 4.5", central column r ~ 38"
 - Z heights: outer floor -49.3", inner floor -53.8"
-
-## Why x-drive (not skid-steer)
-
-The robot straddles a 4.5" step between the inner and outer reactor floor. Skid-steer point turns while straddling this step were tested in 60 configurations - only 3 completed (5%), all with dangerous tilt and drift.
 
 ## Running
 

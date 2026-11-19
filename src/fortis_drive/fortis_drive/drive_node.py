@@ -121,7 +121,7 @@ REJECT_LOG_THROTTLE_S: float = 1.0
 #: spins them backward; these signs invert them so "+ = roll forward" holds
 #: for every wheel. This is a physical *mounting* correction applied at the
 #: hardware boundary -- it lives here and NOT in the kinematics (the H matrix
-#: stays "ideal"). Verified by single-wheel bench test 2026-05-31. Signs the
+#: stays "ideal"). Verified by single-wheel bench test. Signs the
 #: COMMAND only; encoder feedback keeps each motor's native sign.
 WHEEL_DIRECTION: tuple[float, float, float, float] = (1.0, -1.0, 1.0, -1.0)
 

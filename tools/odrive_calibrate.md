@@ -204,7 +204,7 @@ odrv0.axis0.config.load_encoder = EncoderId.ONBOARD_ENCODER0
 odrv0.axis0.config.commutation_encoder = EncoderId.ONBOARD_ENCODER0
 
 # Motor thermistor (M8325s integrated NTC, soldered to S1 TEMP/GND)
-# gpio_pin = 4 confirmed on FL S1 (board rev as of 2026-05-27 batch).
+# gpio_pin = 4 confirmed on FL S1.
 # If a future S1 board rev returns garbage temperatures at idle, drop back to
 # the discovery sweep at step 9b to re-identify the TEMP GPIO mapping.
 odrv0.axis0.motor.motor_thermistor.config.gpio_pin = 4

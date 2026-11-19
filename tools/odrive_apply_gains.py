@@ -37,7 +37,7 @@ a fresh skeleton). Native ODrive units are rev/s (turn/s), NOT rad/s.
 WHEEL_BY_NODE = {0: "FL", 1: "FR", 2: "RR", 3: "RL"}
 
 # vel_gain / vel_integrator_gain MEASURED in the live tuning session
-# (tools/odrive_vel_tune.md). Tuned on FL 2026-06-05 and applied to all four:
+# (tools/odrive_vel_tune.md). Tuned on FL and applied to all four:
 # identical M8325s + omniwheels -> identical gains -> simultaneous breakaway.
 GAINS = {
     0: {"vel_gain": 0.925, "vel_integrator_gain": 1.0},  # FL

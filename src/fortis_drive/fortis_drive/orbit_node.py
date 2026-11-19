@@ -74,7 +74,7 @@ DEFAULT_ORBIT_SPEED: float = 0.1
 DEFAULT_ORBIT_RADIUS: float = 1.0
 
 #: Boundary sign correction for the yaw direction (see module docstring).
-#: Bench-verified 2026-06-11: -1.0 makes the FRONT (cameras) face the orbit
+#: Bench-verified: -1.0 makes the FRONT (cameras) face the orbit
 #: center; +1.0 orbited facing outward (back toward the center post).
 DEFAULT_OMEGA_SIGN: float = -1.0
 

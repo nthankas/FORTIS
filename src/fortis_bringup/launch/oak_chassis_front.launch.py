@@ -15,7 +15,7 @@ The Driver publishes the camera-internal frames from factory calibration
 ``oak_chassis_front`` (= driver.i_tf_base_frame) -- NOT attached to the robot.
 ``driver.i_tf_parent_frame`` is a xacro arg consumed by the OAK's RSP, which we
 skip, so it does nothing here and the camera frames are left a disconnected TF
-tree (confirmed live with ``tf2_echo``: "not part of the same tree"). We bridge
+tree. We bridge
 the gap with a static transform ``front_camera_link -> oak_chassis_front``
 (identity; the URDF owns the mount pose). Full chain: ``base_link -> (FORTIS
 URDF) -> front_camera_link -> (static) -> oak_chassis_front -> (calibration) ->

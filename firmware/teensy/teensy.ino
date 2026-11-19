@@ -85,7 +85,7 @@ static const StepperCfg kJ1Cfg = { 200, 8, 8000, 20000 };
 static const StepperCfg kJ2Cfg = { 200, 8, 8000, 20000 };
 static const StepperCfg kJ3Cfg = { 200, 8, 8000, 20000 };
 
-// D845WP safe operating range, calibrated on the physical unit on 2026-05-20:
+// D845WP safe operating range, calibrated on the physical unit:
 // observed stall (current spikes) below ~700 us and above ~2000 us. 100 us
 // margin pulled in on the low end, 0 us on the high. Hitec spec is 500-2500
 // but the individual servo's mechanical endstops are tighter; commanding past

@@ -24,7 +24,6 @@ desktop.ini
 # IDE / local tooling
 .vscode/
 .idea/
-.claude/
 
 # Temporary simulation output
 *.tmp
@@ -52,7 +51,6 @@ log/
 CONTRIBUTING.md
 isim.bat
 SUMMARY.md
-CLAUDE.md
 
 # Local stack CLI environment (real values; template lives in tools/stack/.env.example)
 .env

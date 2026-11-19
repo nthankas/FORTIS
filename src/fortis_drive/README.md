@@ -107,7 +107,7 @@ matches the constant.
 |---|---|---|
 | `orbit_speed` | 0.1 | Tangential speed, m/s. Deliberately slow: open-loop omni motion drifts. |
 | `orbit_radius` | 1.0 | Orbit radius, m (must be > 0). Smaller R = faster yaw (omega = v / R). |
-| `omega_sign` | -1.0 | Boundary sign so the FRONT (cameras) faces the orbit center. Bench-verified 2026-06-11: +1.0 orbited facing outward. |
+| `omega_sign` | -1.0 | Boundary sign so the FRONT (cameras) faces the orbit center. Bench-verified: +1.0 orbited facing outward. |
 | `cmd_timeout_s` | 0.3 | Held-command dead-man; shorter than drive_node's 0.5 s watchdog. |
 | `publish_rate_hz` | 20.0 | `/cmd_vel` stream rate while orbiting. |
 

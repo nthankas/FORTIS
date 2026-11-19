@@ -92,7 +92,7 @@ orbit_node:
     orbit_speed: 0.1
     # Orbit radius (m). Arbitrary for now; smaller R => faster yaw (omega = v/R).
     orbit_radius: 1.0
-    # Yaw-direction boundary correction. Bench-verified 2026-06-11: -1.0 makes
+    # Yaw-direction boundary correction. Bench-verified: -1.0 makes
     # the FRONT (cameras) face the orbit center; +1.0 orbited facing OUTWARD
     # (back toward the center post). Flip only if the mounting/convention changes.
     omega_sign: -1.0

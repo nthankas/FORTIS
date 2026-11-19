@@ -101,7 +101,7 @@ ID. Send me a Slack msg or open a PR comment so I can mirror it on the host side
 
 ## 8. Known blockers
 
-### 8.1 [RESOLVED 2026-05-20] TeensyStep didn't compile against the modern Teensy core
+### 8.1 [RESOLVED] TeensyStep didn't compile against the modern Teensy core
 
 **Status:** Resolved by swapping to TeensyStep4 (see commits on
 `feat/teensy-protocol`). Kept here as a historical note so the next person
@@ -122,7 +122,7 @@ at upstream commit `42e1f69`. Adapted the firmware to its API:
 Stepper declarations in `#if !MOCK_MODE` so desktop mock builds don't
 need the library.
 
-### 8.2 [RESOLVED 2026-05-20] Mock watchdog used to arm at startup
+### 8.2 [RESOLVED] Mock watchdog used to arm at startup
 
 **Status:** Fixed on `fix/teensy-level-shifter`. `MockState.last_heartbeat`
 is now `Optional[float]`, initialized to `None`. The first inbound CMD

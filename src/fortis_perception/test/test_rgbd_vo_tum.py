@@ -13,7 +13,7 @@ Skips unless the dataset is present under <repo>/.scratch/tum/ (see the
 skipif reason for the download command), so CI without the dataset
 stays green.
 
-Measured 2026-08-02 (all 792 associated pairs, ~15 s): ATE RMSE
+Measured (all 792 associated pairs, ~15 s): ATE RMSE
 0.052 m over an 8.01 m ground-truth path (0.7% of path length), zero
 tracking losses.
 """

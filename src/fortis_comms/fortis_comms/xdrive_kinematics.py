@@ -4,7 +4,7 @@ Geometry source of truth: src/fortis_description/urdf/fortis_constants.xacro,
 specifically wheel_x_offset, wheel_y_offset, and wheel_radius. The
 omni_wheel macro in fortis_chassis.urdf.xacro applies these at the four
 sign combinations (+/-, +/-) about base_link. Values below mirror that
-URDF; offsets measured 2026-06-07, radius still from CAD.
+URDF; offsets measured, radius still from CAD.
 
 A drift regression in test/test_kinematics_urdf_sync.py enforces that
 LEN_X, LEN_Y, and WHEEL_RADIUS continue to match the URDF; that test

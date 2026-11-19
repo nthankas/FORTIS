@@ -22,7 +22,7 @@ MODEL_URL = ("https://huggingface.co/SpotLab/YOLOv8Detection/resolve/"
              "3005c6751fb19cdeb6b10c066185908faf66a097/yolov8n.onnx")
 MODEL_FILENAME = "yolov8n.onnx"
 
-#: Verified 2026-07-08 against the revision-pinned URL above; enforced on
+#: Verified against the revision-pinned URL above; enforced on
 #: every download. Inference requires OpenCV >= 4.7 (see detectors.py).
 EXPECTED_SHA256 = "dd48a79dd7fec8ca25fde4eca742ff7bca23b27e2e903eb23bc1d9f83a459bd2"
 
