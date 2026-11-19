@@ -1,32 +1,24 @@
 # fortis_arm
 
-Arm controller seam for FORTIS, gated by mission state. Provides gripper services and the contract surface for arm motion; targeting, grasp, and operator-UI work depend on this contract.
+ROS 2 stack for the FORTIS 4-DOF arm: kinematics, pose moves, the serial bridge to the Teensy 4.1 firmware, and gripper services. All motion is gated by mission state.
 
-## What ships here
+## Nodes
 
-| Endpoint | Type | Purpose |
-|---|---|---|
-| `open_gripper` | service, `std_srvs/srv/Trigger` | Rejects on disallowed state with `success=False` + reason; returns `success=False, message="gripper actuation not implemented"` on allowed state. |
-| `close_gripper` | service, `std_srvs/srv/Trigger` | Same shape as `open_gripper`. |
-| `/fortis/mission_state` | subscription, `std_msgs/String` | Latched (TRANSIENT_LOCAL + RELIABLE, depth=1). Same topic and QoS as `fortis_drive`. |
+| Executable | What it does |
+|---|---|
+| `arm_motion` | Solves IK (`arm_ik.py`) for every `/fortis/target_pose` and publishes the latched `/fortis/context/ik_ok` flag. Serves the `move_to_pose` action (`fortis_msgs/action/MoveToPose`): picks the IK solution nearest the current joints, commands the move, reports progress, and soft-stops on cancel or timeout. Goals are accepted in `TARGETING`, `ARM_AT_VIEW`, `INSPECT` and `PICK`. |
+| `teensy_bridge` | Owns the USB serial link to the firmware (`firmware/teensy/PROTOCOL.md`). Publishes `ArmStatus`, `/joint_states` and diagnostics, translates `/fortis/arm/command` into joint targets, and exposes enable / disable / home / clear_faults services. Before each stepper move it scales the J1..J3 speed limits so all three joints finish together; the firmware runs the move with a trapezoidal profile. |
+| `arm_controller` | `open_gripper` / `close_gripper` services (`std_srvs/Trigger`), accepted in `ARM_AT_VIEW`, `INSPECT`, `PICK`, `HOLDING` and `RETURN_HOME`. |
 
-A MoveIt 2 wrapper for arm motion is planned, using the `fortis_msgs/action/MoveToPose` contract.
-
-### Allowed mission states for arm motion
-
-`ARM_AT_VIEW`, `INSPECT`, `PICK`, `HOLDING`, `RETURN_HOME`. Any other state -- including "no `/fortis/mission_state` has been received yet" -- causes the gripper services to return `success=False`. The planned `MoveToPose` action will apply the same gate.
-
-### Why `std_srvs/Trigger` for the gripper
-
-Open and close are binary commands from the operator with no payload. `Trigger` (empty request, `bool success` + `string message` response) matches that contract exactly. A custom service in `fortis_msgs` would add a build dependency for no behavioural gain. If a future requirement needs (for example) a target jaw position, swap to a custom service then.
+`config/arm_calibration.yaml` holds the step and servo scaling; the values still need a bench calibration pass. `tools/mock_teensy.py` stands in for the firmware in tests.
 
 ## Hardware reference
 
-Captured here so the future Teensy / kinematics pass starts from a known wiring + mechanical setup, not from rediscovery. Source of truth is `FORTIS_FINAL_BOM`.
+Source of truth is `FORTIS_FINAL_BOM`.
 
 ### Motion controller
 
-- **Teensy 4.1** (600 MHz Cortex-M7) acts as the arm motion controller. Connected to the Jetson on **USB Port 4** over USB serial. Replaces the earlier Pololu Tics + PCA9685 plan.
+- **Teensy 4.1** (600 MHz Cortex-M7) acts as the arm motion controller. Connected to the Jetson on **USB Port 4** over USB serial.
 - **TeensyStep** generates step / direction signals for J1, J2, J3 driving **StepperOnline CL57T-V41** closed-loop stepper drivers (0-8 A, 18-50 VDC, reads 1000 PPR encoder, hardware closed-loop pos / vel / current). Powered from the 48 V drive bus (min 18 V).
 - An **8-channel bi-directional bus transceiver (DIP-20)** shifts the Teensy's 3.3 V step / dir lines up to the 5 V the CL57T optocouplers expect.
 - **Hitec D845WP** waterproof servo on J4 driven directly off a Teensy hardware PWM pin (180 oz-in @ 7.4 V; no level shift required for the servo signal).
@@ -42,19 +34,7 @@ Captured here so the future Teensy / kinematics pass starts from a known wiring 
 | J3 (elbow pitch) | NEMA 17 closed-loop stepper (17HS24-2104-ME1K, same part as J1) | Cricket Drive MK II 25:1 cycloidal gearbox; CL57T closed-loop |
 | J4 (wrist) | Hitec D845WP servo (180 oz-in @ 7.4 V, waterproof) | Internal servo feedback; commanded via Teensy hardware PWM |
 
-Arm structural tubing: Clearwater Composites 1" ID x 1 1/8" OD pultruded square carbon fiber. Link lengths are TBD pending mechanical confirmation from the user and do not yet appear cleanly in the BOM.
-
-### Position recovery
-
-Closed-loop feedback is provided by the CL57T's own encoder per joint -- there are no separate absolute encoders on the arm. On reboot the controller reads the **last-known position from a position file** rather than running a homing routine. Cycloidal gearboxes are near self-locking under the arm's payload, so position drift while powered down is small enough that file-based recovery is acceptable.
-
-When IK lands, the Teensy node will need to reconcile the file-recovered position against the CL57T's reported position at startup and refuse to act if they disagree by more than a configurable tolerance.
-
-## Why this design
-
-- **State gating is the same shape as `fortis_drive`.** Same topic, same QoS, same throttled rejection log pattern. Reading one node tells you how the other works. Diverging the QoS would silently break DDS matching and is not worth the flexibility.
-- **The contract exists before the kinematics.** Targeting and the operator UI need a stable thing to call so they can be developed in parallel. The gripper services ship today (returning a deterministic "not implemented" inside allowed states); the `MoveToPose` action type is reserved in `fortis_msgs` for the MoveIt 2 wrapper. A deterministic stub beats a hung goal or a missing endpoint.
-- **The gripper is two services rather than one with an "open" boolean.** Two endpoints map directly to two operator buttons and to two distinct mission events (`OPEN_GRIPPER`, `CLOSE_GRIPPER`) when those land in `fortis_safety`. Single-service-with-flag would force every caller to know the convention.
+Arm structural tubing: Clearwater Composites 1" ID x 1 1/8" OD pultruded square carbon fiber. Link lengths are in `fortis_description/urdf/fortis_constants.xacro`.
 
 ## Testing
 
@@ -69,18 +49,7 @@ colcon test-result --verbose
 ```
 
 Tests:
-- `test/test_state_gating.py` -- parametrised over every state in `MissionStateMachine.State`. The gripper services (`open_gripper`, `close_gripper`) are accepted inside `ALLOWED_ARM_STATES` (and return the "gripper actuation not implemented" response) and rejected at the gate elsewhere.
-- `test/test_bringup.py` -- if `/fortis/mission_state` has not yet been published when a request arrives, the gate must reject. Mirrors the same race covered in `fortis_drive/test/test_drive_node.test_no_state_received_rejects_cmd_vel`.
-
-Lint (flake8, pep257) is no longer part of `colcon test`. It runs via pre-commit hooks and the `pre-commit` job in `.github/workflows/ci.yml`. See the root README "Pre-commit hooks" section.
-
-## What is intentionally not in here
-
-- IK or FK for the 4-joint arm.
-- Trajectory generation or motion smoothing.
-- Teensy serial protocol.
-- Position-file read / write.
-- CL57T encoder reconciliation against the recovered position.
-- Any actual gripper open / close command.
-
-These all land in the next pass over this package once the Teensy firmware contract is locked.
+- `test/test_arm_ik.py` -- FK/IK round trip, both elbow branches, unreachable targets, joint limits.
+- `test/test_arm_motion.py` -- `ik_ok` flag, a full `MoveToPose` against a simulated arm, goal rejection outside allowed states.
+- `test/test_teensy_bridge.py`, `test/test_teensy_protocol.py` -- bridge against the firmware mock, frame encode/decode.
+- `test/test_state_gating.py`, `test/test_bringup.py` -- gripper service gating per mission state.

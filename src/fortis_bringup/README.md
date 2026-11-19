@@ -54,6 +54,7 @@ Live OAK streaming is intended for the Jetson over native USB; on Windows/WSL2 d
 | `synthetic` | `true` | `true`: one `oak_replayer` (orbit trajectory, TF on) stands in for the front camera. `false`: includes `oak_chassis_cameras.launch.py` (real OAKs). |
 | `scene` | `baseline` | Synthetic scene variant: `baseline` \| `modified` (one box added, one removed). |
 | `cameras` | `oak_chassis_front` | Comma list: one `depth_to_cloud` per name and the `cloud_fusion` input set. The first name is the detection / VO / replayer camera. |
+| `arm_camera_id` | `""` | Serial of the arm OAK-D Pro (`synthetic:=false` only). Starts it as `oak_arm` with its own cloud for click targeting; not fused. Not yet run on hardware. |
 | `detector` | `blob` | `blob` (HSV, no weights — the synthetic/CI backend) \| `yolo` (needs `ros2 run fortis_perception download_models`). |
 | `vio` | `true` | Run `rgbd_vo` (`/fortis/vo`). The EKF that fuses it is owned by `bringup.launch.py` (`localization:=true vio:=true` selects `ekf_vio.yaml`). |
 | `reference_map` | `""` | Path to a saved `.npz` voxel map; non-empty starts `map_diff` against it. |
@@ -84,7 +85,6 @@ ros2 launch fortis_bringup perception.launch.py scene:=modified reference_map:=/
 
 - ~~Add the arm controller include (`fortis_arm/arm_controller_node`) to `bringup.launch.py`.~~ Done: `arm:=true` launches `teensy_bridge` + `arm_controller` (and `perception.launch.py` carries its own `arm` arg for standalone runs).
 - Add MoveIt 2 launch include once `fortis_moveit_config` exists.
-- All four chassis OAK-D Lites already come up (serial-pinned) via `oak_chassis_cameras.launch.py`. Per the BOM they are 4x OAK-D Lite (Active Focus) A00483 (front + rear + left + right); the remaining 1x OAK-D Pro (Active Stereo IR, Active Focus, Standard FOV) A00546 on the arm L4 midpoint is added once `fortis_perception` exists.
 - ~~Add `robot_localization` ekf_node once `fortis_localization` exists.~~ Done: `fortis_localization` provides `wheel_odometry_node` + the EKF via `localization.launch.py`, included by `bringup.launch.py` behind the `localization:=true` arg (default off).
 - Add namespace + `use_sim_time` arguments to `sim.launch.py`.
 - Add the upstream-to-FORTIS ODrive health bridge (translates `/odrive_status` into `fortis_msgs/OdriveHealth` for `odrive_health_monitor_node` to consume) once `ros_odrive` is vcs-imported.

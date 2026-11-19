@@ -1,204 +1,203 @@
 # FORTIS
 
-Remotely operated inspection robot for the DIII-D tokamak fusion reactor at General Atomics. ECE 129 senior design at UCSC, target ship date mid-June 2026.
+FORTIS is a remotely operated inspection robot for the DIII-D tokamak at General Atomics, built as a sponsored senior design project at UC Santa Cruz. It enters the vessel through a 15.75 inch square access tunnel, drives on the reactor floor on four omni wheels, and carries a 4-DOF arm for camera inspection. The team had real hardware for only the last two weeks of the project, so nearly everything in this repo was developed and tested in simulation first. Two weeks after the hardware arrived, the robot drove the sponsor's full tunnel mockup with zero tipping events.
 
-The robot enters the reactor through a 15.75" square access tunnel, descends via tether through the R0 port (22" x 35.5"), and drives on the reactor floor on four omni wheels. It carries a 4-DOF arm for camera inspection of plasma-facing components and for thermocouple application.
+## My role
 
-## Hardware
+Nikhil Thankasala, Team Lead and Software Lead on a five-person team. I wrote the ROS 2 stack under `src/`, the Isaac Sim studies under `sim/`, and the host side of the arm firmware protocol.
 
-OnShape model and `FORTIS_FINAL_BOM` are the source of truth; this table is a snapshot.
+## System architecture
 
-| Subsystem | Selection |
-|---|---|
-| Chassis | `13.082" x 8.54" x 6"` octagonal prism w/ 3" chamfered face diagonals at the four 45-degree corners; ~45 lb total robot (chassis + arm + wheels per the v4 sim mass budget) |
-| Chassis endoskeleton | 6061-T6 aluminum 0.5" square tube (McMaster 6546K49) |
-| Chassis heavy mounting | 6061 aluminum 0.25" square sheet, 6"x48" (McMaster 9246K424) |
-| Chassis skin panels | 6061-T6 aluminum 0.040" sheet, 12"x24" (McMaster 89015K22); Plastidip rubber coating |
-| Drive | X-drive: 4 omni wheels at the chamfered corners |
-| Wheels | 4x AndyMark 8" Dualie Plastic Omni (am-0463), no bearings, 80A durometer, 120 lb load cap each |
-| Drive motors | 4x ODrive M8325s 100KV outrunner brushless, **direct drive** (no gearbox), 48V direct |
-| Motor controllers | 4x ODrive S1 FOC controllers (KIT-S1-M8325s-01 from ODrive Robotics) |
-| Drive bus | CAN, daisy-chained; ODrive USB-CAN Adapter at Jetson USB Port 2; built-in 120 ohm termination |
-| Arm | 4-DOF parallel-link, 30" carbon fiber (Clearwater Composites 1" ID x 1 1/8" OD pultruded square tube), always 3 lb payload. Link lengths TBD — confirm with user. |
-| Arm J1 (base yaw) | NEMA 17 closed-loop stepper 65 Ncm (17HS24-2104-ME1K, 2.1 A, 1000 PPR magnetic encoder, 3ch differential) + Cricket Drive MK II 25:1 cycloidal |
-| Arm J2 (shoulder pitch) | NEMA 23 stepper + 50:1 high-precision planetary (CN-23HS22-2804-HG50-ME1K, StepperOnline) with 1000 PPR (4000 CPR) magnetic encoder + Ruland FHD-MCL-14-F shaft collar |
-| Arm J3 (elbow pitch) | NEMA 17 closed-loop stepper (17HS24-2104-ME1K) + Cricket Drive MK II 25:1 cycloidal (same as J1) |
-| Arm J4 (wrist) | Hitec D845WP servo (180 oz-in @ 7.4V, waterproof), PWM from Teensy |
-| Gripper | ServoCity 3219-0001-0002 servo-driven parallel gripper kit (75 oz-in @ 6V, steel gears), PWM from Teensy |
-| Arm stepper drivers | 3x StepperOnline CL57T-V41 closed-loop (0-8 A, 18-50 VDC, reads 1000 PPR encoder, HW closed-loop pos/vel/current). Powered from 48V bus. |
-| Arm step/dir logic | 8-ch bi-directional bus transceiver (DIP-20) lifts Teensy 3.3V step/dir to 5V for CL57T optocouplers |
-| Arm motion controller | Teensy 4.1 (600 MHz Cortex-M7), TeensyStep for 3-axis coordinated motion (J1/J2/J3), HW PWM for J4 + gripper, HW quadrature for encoder verify. USB serial to Jetson Port 4. Replaces the earlier Pololu Tics + PCA9685 plan. |
-| Compute | Jetson Orin Nano Super Dev Kit (945-13766-0000-000), 8GB LPDDR5, 67 TOPS, 4x USB 3.2, GbE, 40-pin GPIO |
-| Storage | Crucial T500 1TB NVMe (M.2 2280, PCIe Gen 4 x4) + 64GB Verbatim Premium MicroSDXC Class 10 / UHS-1 boot card |
-| Cameras (5x) | 4x Luxonis OAK-D Lite (Active Focus) A00483 — left/right toroidal depth (primary + secondary VIO with redundant BMI270 6-axis IMUs and bilateral depth), rear depth (outward, extraction obstacle), front depth (angled 30-45 deg up at center column). 1x Luxonis OAK-D Pro (Active Stereo IR, Active Focus, Standard FOV) A00546 on arm L4 midpoint, BNO085 9-axis IMU, IP66, includes Y-adapter + USB cable. All 4 TOPS each. |
-| Jetson USB assignment | Port 1: OAK-D Pro; Port 2: USB-CAN (drive); Port 3: Coolgear hub (4x OAK-D Lites); Port 4: Teensy 4.1 (arm) |
-| Power | Tether-supplied, no onboard battery. Power BOM is a separate sheet. |
-| Idler hardware | 20x idler rollers + 20x shoulder screws (McMaster) |
+ROS 2 Humble on a Jetson Orin Nano. The mission state machine gates every motion-producing node.
+
+```mermaid
+flowchart LR
+  subgraph Sensors
+    CAMS[4x chassis OAK-D Lite]
+    ARMCAM[arm OAK-D Pro]
+    IMU[camera IMU]
+    ENC[wheel joint states]
+  end
+
+  subgraph Perception [fortis_perception]
+    D2C[depth_to_cloud x4]
+    FUSE[cloud_fusion]
+    MAP[voxel_map]
+    DIFF[map_diff]
+    VO[rgbd_vo]
+    DET[detection]
+    ARMCLOUD[depth_to_cloud oak_arm]
+    TGT[target_selector]
+  end
+
+  subgraph Estimation [fortis_localization]
+    WODOM[wheel_odometry]
+    DEBIAS[imu_gyro_debias]
+    EKF[robot_localization EKF]
+  end
+
+  subgraph Drive [fortis_drive + fortis_control]
+    HH[heading_hold]
+    DRV[drive_node]
+    ODRV[ros2_control / ODrive S1 x4]
+  end
+
+  subgraph Arm [fortis_arm]
+    AM[arm_motion]
+    TB[teensy_bridge]
+    FW[Teensy 4.1 firmware]
+  end
+
+  FSM[mission_state_node]
+
+  CAMS --> D2C --> FUSE --> MAP --> DIFF
+  CAMS -->|front| VO
+  CAMS -->|front| DET
+  ARMCAM --> ARMCLOUD
+  FUSE -->|operator click| TGT
+  ARMCLOUD -->|operator click| TGT
+  ENC --> WODOM --> EKF
+  IMU --> DEBIAS --> EKF
+  VO -->|/fortis/vo| EKF
+  EKF -->|/odometry/filtered| HH --> DRV --> ODRV
+  TGT -->|/fortis/target_pose| AM --> TB --> FW
+  TGT --> FSM
+  DET --> FSM
+  AM --> FSM
+  FSM -->|/fortis/mission_state| DRV
+  FSM -->|/fortis/mission_state| AM
+```
+
+## Simulation
+
+Code: [`sim/`](sim/README.md), NVIDIA Isaac Sim 5.1.
+
+- [`xdrive_realwheel.py`](sim/isaac/xdrive/canonical/xdrive_realwheel.py) models the chassis with every omni-wheel roller as its own rigid body on a free-spinning revolute joint: 10 rollers on each of 4 wheels, 40 roller joints, 44 DOF in total. It can load the DIII-D vessel geometry so the robot straddles the 4.5 inch floor step.
+- [`arm_mc_sweep_v4.py`](sim/isaac/xdrive/tools/arm_mc_sweep_v4.py) is a 5,000-pose Monte Carlo sweep over the four arm joints. Each pose records joint torques and whether the chassis tips, with the chassis set to its lightest plausible mass as the worst case. [`arm_mc_filter_v4.py`](sim/isaac/xdrive/tools/arm_mc_filter_v4.py) then removes poses that collide with the chassis, the floor, the arm itself, or the vessel envelope.
+- The sweep sized the arm actuators. Results and raw data are in [`results/arm_mc_sweep/`](sim/isaac/xdrive/results/arm_mc_sweep/RESULTS.md).
+
+![Reachable arm poses over the DIII-D cross-section, colored by tipping margin](sim/isaac/xdrive/results/arm_mc_sweep/poloidal_v4.png)
+
+## Manipulation
+
+Code: [`src/fortis_arm`](src/fortis_arm/README.md), [`firmware/teensy`](firmware/teensy/PROTOCOL.md).
+
+- [`arm_ik.py`](src/fortis_arm/fortis_arm/arm_ik.py): forward and inverse kinematics for the 4-DOF arm (base yaw, shoulder, elbow, wrist). Returns elbow-up and elbow-down solutions that respect the URDF joint limits.
+- [`arm_motion_node.py`](src/fortis_arm/fortis_arm/arm_motion_node.py): `MoveToPose` action server. It solves IK for the goal, picks the solution nearest the current joint state, rejects unreachable targets, and stops the arm on cancel or timeout. Goals are accepted only in mission states that allow arm motion.
+- [`teensy_bridge_node.py`](src/fortis_arm/fortis_arm/teensy_bridge_node.py): serial bridge to the Teensy 4.1. Before each move it scales the three stepper speeds so all joints finish together, with the slowest joint setting the move time. The firmware then runs one coordinated move with a trapezoidal velocity profile on the stepper group.
+- Planning is joint-space only. There is no collision-aware path planner in this repo.
+
+## Perception
+
+Code: [`src/fortis_perception`](src/fortis_perception/README.md). Runs on CPU on the Jetson Orin Nano.
+
+- Four chassis depth cameras (front, rear, left, right) are back-projected to point clouds and fused into one cloud in the robot frame ([`cloud_fusion_node.py`](src/fortis_perception/fortis_perception/cloud_fusion_node.py)).
+- The fused cloud is integrated into a persistent voxel grid ([`voxel_grid.py`](src/fortis_perception/fortis_perception/voxel_grid.py)). A saved grid from one run is the reference for change detection in the next ([`map_diff_node.py`](src/fortis_perception/fortis_perception/map_diff_node.py)), which reports added and removed voxels.
+- The fifth camera, on the arm, is kept out of the fused map. `arm_camera_id:=<serial>` gives it its own cloud for click targeting. This path has not been run on hardware.
+- [`target_selector_node.py`](src/fortis_perception/fortis_perception/target_selector_node.py) turns an operator click on a point cloud in Foxglove into the arm target pose.
+- [`detectors.py`](src/fortis_perception/fortis_perception/detectors.py): YOLOv8 object detection from an ONNX export (`detector:=yolo`), with an HSV blob detector as the default for tests. Detections are lifted to 3D through the depth image.
+- [`rgbd_vo.py`](src/fortis_perception/fortis_perception/rgbd_vo.py): RGB-D visual odometry (ORB features, PnP with RANSAC) on the front camera, published for the EKF.
+
+## Motion control
+
+Code: [`src/fortis_drive`](src/fortis_drive/README.md), [`src/fortis_comms`](src/fortis_comms/README.md), [`src/fortis_control`](src/fortis_control/README.md).
+
+- [`xdrive_kinematics.py`](src/fortis_comms/fortis_comms/xdrive_kinematics.py): forward and inverse kinematics for the omni-wheel X-drive.
+- [`drive_node.py`](src/fortis_drive/fortis_drive/drive_node.py): converts velocity commands to wheel speeds, gated by mission state, with a command watchdog.
+- [`heading_hold_node.py`](src/fortis_drive/fortis_drive/heading_hold_node.py): heading-hold PID on the EKF yaw, with anti-windup. The operator's turn command passes through, and the controller holds the heading at release.
+- `fortis_control` wires the four ODrive S1 controllers through `ros2_control` over CAN.
+
+## Estimation
+
+Code: [`src/fortis_localization`](src/fortis_localization/README.md).
+
+- A `robot_localization` EKF fuses wheel odometry, the camera IMU, and visual odometry ([`ekf_vio.yaml`](src/fortis_localization/config/ekf_vio.yaml), enabled with `vio:=true`).
+- The gyro is the only yaw input. Wheel odometry and visual odometry contribute planar velocity only, so wheel slip cannot corrupt heading.
+- [`imu_gyro_debias_node.py`](src/fortis_localization/fortis_localization/imu_gyro_debias_node.py) estimates gyro bias while the drive is disarmed.
+- [`wheel_odometry_node.py`](src/fortis_localization/fortis_localization/wheel_odometry_node.py) also publishes a wheel-slip residual for diagnostics.
+
+## Mission and testing
+
+Code: [`src/fortis_safety`](src/fortis_safety/README.md), [`src/fortis_integration_tests`](src/fortis_integration_tests/README.md), [`src/fortis_sim_support`](src/fortis_sim_support/README.md).
+
+- [`mission_state_machine.py`](src/fortis_safety/fortis_safety/mission_state_machine.py): table-driven state machine with nine states (IDLE, ORBIT, TARGETING, ARM_AT_VIEW, INSPECT, PICK, HOLDING, RETURN_HOME, FAULT) and guarded transitions.
+- [`test_full_mission.py`](src/fortis_integration_tests/test/test_full_mission.py): software-in-the-loop test of the whole mission. It runs the real nodes against a synthetic camera rig ([`fortis_sim_support`](src/fortis_sim_support/README.md)) and a firmware mock ([`tools/mock_teensy.py`](tools/mock_teensy.py)), and drives the state machine from IDLE through a pick and back.
+- [`test_multicam_fusion.py`](src/fortis_integration_tests/test/test_multicam_fusion.py) and [`test_perception_chain.py`](src/fortis_integration_tests/test/test_perception_chain.py) cover four-camera fusion and the perception chain.
+- CI ([`ci.yml`](.github/workflows/ci.yml)) builds the workspace and runs the tests on every pull request.
+
+## Results
+
+- Hardware: the robot drove the sponsor's full tunnel mockup with zero tipping events, two weeks after hardware arrived. The arm and the chassis were tested separately; the arm was not mounted on the chassis for the final demo.
+- Arm sweep: of 5,000 sampled poses, 2,014 are reachable and collision-free, and 1,989 of those (98.8%) stay upright with the worst-case chassis mass. Peak torque on every joint is below 60% of its continuous rating.
+- Visual odometry: 0.7% trajectory error on the TUM RGB-D `freiburg1_xyz` sequence ([`test_rgbd_vo_tum.py`](src/fortis_perception/test/test_rgbd_vo_tum.py)).
 
 ## Repo layout
 
 ```
-.devcontainer/      VSCode dev container
-.gitattributes      Force LF on text files (cross-machine hygiene)
-docker/             Dockerfile.dev + docker-compose.yml (ROS 2 Humble desktop); GPU variant in progress
-firmware/teensy/    Teensy 4.1 arm-motion firmware (teensy.ino, PROTOCOL.md, HANDOFF.md)
-foxglove/           Foxglove Studio layouts (teleop, chassis cams, perception, arm)
-src/                ROS 2 packages (colcon workspace)
-  fortis_safety/    Mission state machine + ROS node + REPL console
-  fortis_msgs/      Custom message + action types
-  fortis_comms/     X-drive kinematics library (+ interim test helpers)
-  fortis_drive/     X-drive ROS node, gated by mission state
-  fortis_arm/       Teensy 4.1 serial bridge + gripper services (state gated)
-  fortis_bringup/   Top-level launch composition (bringup / perception / sim / teleop)
-  fortis_description/  URDF / xacro + meshes + RViz config
-  fortis_control/   ros2_control wiring for the X-drive (odrive_ros2_control)
-  fortis_perception/   RGBD clouds, fusion, voxel map + diff, VO, detection, targeting, health
-  fortis_localization/ Wheel odometry + IMU debias + robot_localization EKF launch
-  fortis_sim_support/  Synthetic OAK replayer + procedural RGBD scene (hardware-free)
-  fortis_integration_tests/   Cross-package launch_testing
-sim/                Isaac Sim 5.1 work (Windows host, outside the container)
-  isaac/xdrive/     Canonical chassis + arm sims, tools, results
-  analysis/         Drivetrain and arm analysis writeups
+src/                ROS 2 packages (colcon workspace), one README each
+  fortis_arm/           arm IK, MoveToPose, Teensy bridge
+  fortis_perception/    clouds, fusion, voxel map, change detection, VO, detection
+  fortis_localization/  wheel odometry, gyro debias, EKF config
+  fortis_drive/         X-drive command pipeline, heading hold, orbit
+  fortis_control/       ros2_control wiring for the ODrive S1s
+  fortis_comms/         X-drive kinematics, shared QoS profiles
+  fortis_safety/        mission state machine, drive health monitor
+  fortis_bringup/       launch files and parameters
+  fortis_description/   URDF / xacro
+  fortis_msgs/          messages, services, actions
+  fortis_sim_support/   synthetic camera rig
+  fortis_integration_tests/  cross-package launch tests
+firmware/teensy/    Teensy 4.1 arm firmware and serial protocol
+sim/                Isaac Sim scripts, analysis, results
+docker/             dev containers (CPU and GPU)
+foxglove/           operator layouts
+tools/              firmware mock, ODrive calibration and tuning
 ```
 
-## Dev environment
+## Build and run
 
-The dev environment ships as two container variants. Pick by machine, not by personal preference -- the CPU variant is the default for every teammate.
-
-| Variant | Base image | Use when |
-|---|---|---|
-| `fortis-dev` | ROS 2 Humble desktop (CPU only, universal) | Default for all teammates regardless of whether a GPU is present. Runs on both x86_64 and aarch64 Docker hosts. |
-| `fortis-dev-gpu` | Isaac ROS Common (NVIDIA, opt-in) | Requires an NVIDIA GPU and `nvidia-container-toolkit`. Used on the FORTIS PC, the IdeaPad (RTX 5050 Laptop), and the Jetson Orin Nano Super. |
-
-Both images carry ROS 2 Humble desktop with MoveIt 2, ros2_control, robot_localization, foxglove_bridge, and xacro pre-installed. First build is ~10 min.
-
-VSCode "Dev Containers: Reopen in Container" is the supported workflow for the CPU variant.
-
-Outside VSCode:
+The dev container is ROS 2 Humble. See [`docker/README.md`](docker/README.md) for the GPU variant.
 
 ```bash
 docker compose -f docker/docker-compose.yml up -d
+```
+
+```bash
 docker exec -it fortis-dev bash
 ```
 
-The repo mounts at `/workspace` inside the container.
-
-### `./stack` (preferred entry point)
-
-`./stack` at the repo root is a small bash wrapper around `git` + `docker
-compose` that turns the workflows above into one-line commands. It is the
-preferred way to bring the dev environment up; the raw `docker compose`
-calls still work and are the documented fallback.
+Inside the container (the repo is mounted at `/workspace`):
 
 ```bash
-cp tools/stack/.env.example .env
-./stack up
-./stack exec
-./stack status
-./stack switch feat/foo
-./stack down
+cd /workspace && ./tools/vendor_import.sh
 ```
-
-See [`tools/stack/README.md`](tools/stack/README.md) for the full command
-reference and Jetson workflow.
-
-### Pre-commit hooks
-
-Lint (flake8 + pydocstyle + standard hygiene hooks) runs on every
-commit via pre-commit. After cloning, install once on the host:
 
 ```bash
-pip install pre-commit
-pre-commit install
+source /opt/ros/humble/setup.bash && colcon build --symlink-install
 ```
-
-Run on the whole repo any time with `pre-commit run --all-files`.
-Config is `.pre-commit-config.yaml`; flake8 reads workspace `.flake8`.
-
-### CI
-
-GitHub Actions runs `colcon build` + `colcon test` on every PR to
-`main` (and every push to `main`). Lint runs in CI via
-`pre-commit/action`, so the same checks that fire locally also gate
-the PR. ROS 2 Humble + `ROS_DOMAIN_ID=42` (matches docker-compose).
-Workflow lives in `.github/workflows/ci.yml`.
-
-### Isaac ROS integrations (staged in `fortis-dev-gpu`, not yet wired into nodes)
-
-The GPU image preloads these packages so they are available the moment a node consumes them. They are NOT currently invoked from any package under `src/`:
-
-- `isaac_ros_visual_slam` -- cuVSLAM for the OAK-D Pro VIO front-end.
-- `isaac_ros_nvblox` -- 3D scene reconstruction; output feeds the Nav2 costmap.
-- `isaac_ros_cumotion` + `isaac_ros_cumotion_moveit` -- GPU motion planner with the MoveIt 2 adapter.
-- `isaac_ros_image_proc` -- GPU-accelerated rectify / debayer / resize for the OAK-D streams.
-
-The CPU perception stack in `fortis_perception` (clouds, fusion, voxel
-map, VO, detection) is the deployable default and needs no GPU; Isaac
-ROS remains staged for GPU enablement, pending NGC login on the Jetson.
-
-## Workspace test pass
-
-Inside the container. The first time (or after `tools/vendor_repos.yaml`
-changes), pull in vendored upstream packages:
 
 ```bash
-cd /workspace
-./tools/vendor_import.sh
+source install/setup.bash && colcon test --executor sequential && colcon test-result --verbose
 ```
 
-Then:
+Perception demo with no hardware, four synthetic cameras, viewable in Foxglove on port 8765:
 
 ```bash
-source /opt/ros/humble/setup.bash
-colcon build --symlink-install --packages-select \
-    fortis_msgs fortis_comms fortis_safety fortis_drive fortis_arm \
-    fortis_bringup fortis_description fortis_control \
-    fortis_integration_tests
-source install/setup.bash
-colcon test --packages-select \
-    fortis_msgs fortis_comms fortis_safety fortis_drive fortis_arm \
-    fortis_bringup fortis_description fortis_control \
-    fortis_integration_tests
-colcon test-result --verbose
+ros2 launch fortis_bringup perception.launch.py cameras:=oak_chassis_front,oak_chassis_rear,oak_chassis_left,oak_chassis_right
 ```
 
-`fortis_control` does not currently ship any tests; it is included in
-the build set so the YAML + launch file install paths are exercised on
-every workspace build.
+Full mission test on its own:
 
-`colcon test` now runs functional pytest / launch_testing only; lint
-(flake8, pep257, copyright, xmllint) moved to pre-commit + the
-`pre-commit` job in `.github/workflows/ci.yml`. Current baseline on
-`main`: **68 tests, 0 failures, 6 skipped** (down from 126/0/8 prior
-to the lint-out refactor). Per-package run / test instructions live
-in `src/<pkg>/README.md`.
-The cross-package seam between safety and drive is exercised by
-`launch_test src/fortis_integration_tests/test/test_safety_drive_integration.py`.
+```bash
+launch_test src/fortis_integration_tests/test/test_full_mission.py
+```
 
-## Status
+Isaac Sim scripts run on a host with Isaac Sim 5.1; commands are in [`sim/README.md`](sim/README.md).
 
-| Subsystem | State |
-|---|---|
-| Dev environment | working; CPU `fortis-dev` is the default, opt-in `fortis-dev-gpu` (Isaac ROS Common base) staged for FORTIS PC / IdeaPad / Jetson |
-| `fortis_safety` | working; mission FSM + REPL console; end-to-end ROS round trip verified |
-| `fortis_msgs` | working; 4 messages + 1 action |
-| `fortis_comms` | X-drive kinematics, packaged as an ament_python library consumed by `fortis_drive`. `robot_localization` integration still pending. |
-| `fortis_drive` | working; gated by mission state; also publishes `/wheel_velocity_controller/commands` for `fortis_control` |
-| `fortis_control` | `<ros2_control>` xacro + controller_manager YAMLs + bench-one-motor and full-chassis launch files for the X-drive via `odrive_ros2_control`. Calibration runbook at `tools/odrive_calibrate.md`. |
-| `fortis_arm` | working; `teensy_bridge` owns the USB-CDC link to the Teensy 4.1 firmware (heartbeat, status as `ArmStatus`/JointState/diagnostics, joint targets, enable/disable/home/clear_faults services; `tools/mock_teensy.py` for hardware-free runs) and `arm_controller` gates the gripper services (`open_gripper`, `close_gripper`) by mission state -- gripper verified live on hardware. `arm_motion` adds analytic 4-DOF IK (the latched `ik_ok` context flag) and the `MoveToPose` action server. Firmware lives under `firmware/teensy/`. |
-| `fortis_bringup` | `bringup.launch.py` composes `mission_state_node` + `drive_node` + `drive_enable_node` + `odrive_health_monitor_node` (optional `orbit_node` / `heading_hold` / `localization`); `oak_chassis_cameras.launch.py` brings up all connected OAK-D Lites (depthai-ros v3: MJPEG RGB + 16UC1 depth + IMU, no cloud) with `oak_chassis_front.launch.py` as the single-cam debug variant; `chassis_orbit.launch.py` is the one-command orbit demo (cameras + drive stack + orbit + bridge); `sim.launch.py` / `teleop.launch.py` for URDF+bridge and keyboard teleop. `perception.launch.py` composes the perception chain against synthetic or real cameras (`arm:=true` adds `teensy_bridge` + `arm_controller` + `arm_motion`). |
-| `fortis_description` | scaffold; first OnShape URDF export landed but requires cleanup before integration (95 links / 94 joints, naming + topology issues; Adrian + Carlos have the fix list). URDF authoring planned as a dual track: chassis from OnShape cleanup, arm hand-authored xacro |
-| `fortis_integration_tests` | safety-drive seam verified end-to-end |
-| Isaac Sim | chassis (`xdrive_realwheel.py`) + v3 arm canonical script + v4 Monte Carlo sweep tooling -- see `sim/README.md` |
-| Isaac Sim — R0 port entry | not started |
-| `fortis_perception` | working, hardware-free tested against the synthetic rig: per-camera RGBD point clouds (`depth_to_cloud`), multi-camera fusion (`cloud_fusion`), voxel map with save + cross-run diff (`voxel_map` / `map_diff`), RGBD visual odometry (`rgbd_vo`), object detection (HSV blob default, opt-in YOLO), click-to-target (`target_selector`), and system health. `perception.launch.py` is the one-command composition. |
-| `fortis_localization` | wheel odometry + IMU gyro debias nodes + `robot_localization` EKF launch |
-| `fortis_sim_support` | new; procedural RGBD scene + raycaster + `oak_replayer` publishing the exact depthai v3 topic contract (MJPEG RGB, aligned depth, IMU, ground truth) for one to four chassis mounts -- the hardware-free camera source behind the perception tests and `perception.launch.py synthetic:=true` |
+## Team
 
-## Documentation
+Five-person team, sponsored by General Atomics.
 
-- `tools/odrive_calibrate.md` -- per-S1 `odrivetool` calibration runbook; required before `fortis_control` will spin a motor
-- `foxglove/` -- Foxglove Studio layouts: `fortis_xdrive_teleop.json`, `fortis_chassis_cams.json`, `fortis_perception.json`, `fortis_arm.json` (open in Foxglove on the PC, bridge on :8765)
-- `sim/README.md` and `sim/isaac/xdrive/CHANGELOG.md` -- simulation state and history
-- `sim/analysis/` -- drivetrain rationale (x-drive vs skid-steer, orbit, torque, pivot)
-- `src/<pkg>/README.md` -- per-package contracts (topics, services, actions, gating rules)
+- Nikhil Thankasala: Team Lead and Software Lead
+- Cesar Cuevas: arm firmware bring-up on the Teensy 4.1
+- Adrian and Carlos: CAD export for the robot URDF
