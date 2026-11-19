@@ -86,8 +86,11 @@ def _camera_source(context, cameras):
     return nodes
 
 
-def _cloud_chain(cameras):
-    """Build the per-camera cloud nodes plus fusion and the voxel map."""
+def _cloud_chain(cameras, arm_camera):
+    """Build the per-camera cloud nodes plus fusion and the voxel map.
+
+    The arm camera gets a cloud for click targeting but is not fused.
+    """
     actions = [
         Node(
             package="fortis_perception",
@@ -96,7 +99,7 @@ def _cloud_chain(cameras):
             output="screen",
             parameters=[{"camera_name": camera}],
         )
-        for camera in cameras
+        for camera in cameras + arm_camera
     ]
     actions.append(Node(
         package="fortis_perception",
@@ -238,9 +241,11 @@ def _compose(context):
     ]
     if not cameras:
         raise RuntimeError("cameras must name at least one camera")
+    arm_id = LaunchConfiguration("arm_camera_id").perform(context)
+    arm_camera = ["oak_arm"] if arm_id and not _truthy(context, "synthetic") else []
     return (
         _camera_source(context, cameras)
-        + _cloud_chain(cameras)
+        + _cloud_chain(cameras, arm_camera)
         + _map_diff(context)
         + _detection_and_targeting(context, cameras)
         + _vio(context, cameras)
@@ -276,6 +281,15 @@ def generate_launch_description():
                 "detection / VO camera. With synthetic:=true each name "
                 "must be oak_chassis_<mount> (front|rear|left|right) and "
                 "gets its own replayer."
+            ),
+        ),
+        DeclareLaunchArgument(
+            "arm_camera_id",
+            default_value="",
+            description=(
+                "Serial of the arm OAK-D Pro (synthetic:=false only). Adds "
+                "the oak_arm camera and its point cloud for click "
+                "targeting; it is kept out of cloud_fusion."
             ),
         ),
         DeclareLaunchArgument(

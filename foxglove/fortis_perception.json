@@ -20,6 +20,7 @@
         "/tf": { "visible": true },
         "/tf_static": { "visible": true },
         "/fortis/perception/points_fused": { "visible": true },
+        "/fortis/perception/oak_arm/points": { "visible": true },
         "/fortis/perception/map/cloud": { "visible": true },
         "/fortis/perception/map_diff/markers": { "visible": true },
         "/fortis/perception/detection_markers": { "visible": true }

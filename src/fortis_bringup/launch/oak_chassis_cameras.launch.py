@@ -24,7 +24,8 @@ one camera per tab -> only the active camera streams).
 """
 
 from launch import LaunchDescription
-from launch.actions import LogInfo, OpaqueFunction
+from launch.actions import DeclareLaunchArgument, LogInfo, OpaqueFunction
+from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import ComposableNodeContainer, Node
 from launch_ros.descriptions import ComposableNode
 
@@ -86,7 +87,8 @@ def build_mount_tf(camera_name):
     link follows from the roster name (oak_chassis_<pos> -> <pos>_camera_link);
     identity because the URDF owns the mount pose.
     """
-    parent_frame = camera_name.removeprefix("oak_chassis_") + "_camera_link"
+    mount = camera_name.removeprefix("oak_chassis_").removeprefix("oak_")
+    parent_frame = mount + "_camera_link"
     return Node(
         package="tf2_ros",
         executable="static_transform_publisher",
@@ -96,8 +98,7 @@ def build_mount_tf(camera_name):
     )
 
 
-# Physical OAK serial -> chassis position. Confirmed live 2026-06-05 by bringing
-# all four up and identifying each stream in Foxglove. Discovery only spawns the
+# Physical OAK serial -> chassis position. Discovery only spawns the
 # cameras that are actually connected; a serial not in this map gets a generic
 # name so it still comes up (and is obvious in the logs) rather than being dropped.
 CAMERA_ROSTER = {
@@ -114,13 +115,19 @@ def _spawn_cameras(context):
     if not device_ids:
         return [LogInfo(msg="[oak_chassis_cameras] no OAK devices found -- nothing to start.")]
 
+    # The arm OAK-D Pro is pinned by launch arg, not the chassis roster.
+    roster = dict(CAMERA_ROSTER)
+    arm_id = LaunchConfiguration("arm_camera_id").perform(context)
+    if arm_id:
+        roster[arm_id] = "oak_arm"
+
     actions = [LogInfo(msg=f"[oak_chassis_cameras] starting {len(device_ids)} camera(s):")]
     for device_id in device_ids:
-        camera_name = CAMERA_ROSTER.get(device_id, f"oak_chassis_unknown_{device_id[:6]}")
+        camera_name = roster.get(device_id, f"oak_chassis_unknown_{device_id[:6]}")
         actions.append(LogInfo(msg=f"   {camera_name} -> {device_id}"))
         actions.append(build_camera_node(camera_name, device_id, camera_params))
         # Only roster cameras have a URDF mount link to attach to.
-        if device_id in CAMERA_ROSTER:
+        if device_id in roster:
             actions.append(build_mount_tf(camera_name))
     return actions
 
@@ -128,4 +135,11 @@ def _spawn_cameras(context):
 def generate_launch_description():
     # Discovery has to run at launch time (when the cameras are attached, i.e. on
     # the Jetson), so the node list is built inside an OpaqueFunction.
-    return LaunchDescription([OpaqueFunction(function=_spawn_cameras)])
+    return LaunchDescription([
+        DeclareLaunchArgument(
+            "arm_camera_id",
+            default_value="",
+            description="Serial of the arm OAK-D Pro; started as oak_arm.",
+        ),
+        OpaqueFunction(function=_spawn_cameras),
+    ])
